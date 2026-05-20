@@ -1,13 +1,13 @@
 # WinForms GUI Portfolio
 
-C# Windows Forms로 만든 GUI 연습 프로젝트입니다.
+C# Windows Forms GUI practice project.
 
 ## Screens
 
-- Text / Login Demo
-- Number Guessing Game
-- Calculator
-- Todo List
+- Text / Login Demo (`TextLoginForm`)
+- Number Guessing Game (`NumberGuessingForm`)
+- Calculator (`CalculatorForm`)
+- Todo List (`TodoListForm`)
 
 ## Environment
 

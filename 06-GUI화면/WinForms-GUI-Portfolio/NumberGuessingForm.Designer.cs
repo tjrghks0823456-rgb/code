@@ -1,6 +1,6 @@
-﻿namespace GUI1
+namespace GUI1
 {
-    partial class Form2
+    partial class NumberGuessingForm
     {
         /// <summary>
         /// Required designer variable.
@@ -86,7 +86,7 @@
             this.button1.UseVisualStyleBackColor = false;
             this.button1.Click += new System.EventHandler(this.button1_Click);
             // 
-            // Form2
+            // NumberGuessingForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -95,8 +95,8 @@
             this.Controls.Add(this.label1);
             this.Controls.Add(this.textBox1);
             this.Controls.Add(this.button1);
-            this.Name = "Form2";
-            this.Text = "Form2";
+            this.Name = "NumberGuessingForm";
+            this.Text = "Number Guessing Game";
             this.ResumeLayout(false);
             this.PerformLayout();
 

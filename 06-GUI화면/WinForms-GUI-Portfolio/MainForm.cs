@@ -35,10 +35,10 @@ namespace GUI1
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
 
-            panel.Controls.Add(CreateButton("Text / Login Demo", () => new Form1().ShowDialog()), 0, 0);
-            panel.Controls.Add(CreateButton("Number Guessing Game", () => new Form2().ShowDialog()), 0, 1);
-            panel.Controls.Add(CreateButton("Calculator", () => new Form3().ShowDialog()), 0, 2);
-            panel.Controls.Add(CreateButton("Todo List", () => new Form4().ShowDialog()), 0, 3);
+            panel.Controls.Add(CreateButton("Text / Login Demo", () => new TextLoginForm().ShowDialog()), 0, 0);
+            panel.Controls.Add(CreateButton("Number Guessing Game", () => new NumberGuessingForm().ShowDialog()), 0, 1);
+            panel.Controls.Add(CreateButton("Calculator", () => new CalculatorForm().ShowDialog()), 0, 2);
+            panel.Controls.Add(CreateButton("Todo List", () => new TodoListForm().ShowDialog()), 0, 3);
 
             Controls.Add(panel);
             Controls.Add(title);

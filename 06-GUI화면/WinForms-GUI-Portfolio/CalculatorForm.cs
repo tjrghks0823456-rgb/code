@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -10,13 +10,13 @@ using System.Windows.Forms;
 
 namespace GUI1
 {
-    public partial class Form3 : Form
+    public partial class CalculatorForm : Form
     {
         double firstNum = 0;
         double secondNum = 0;
         string op = "";
 
-        public Form3()
+        public CalculatorForm()
         {
             InitializeComponent();
         }

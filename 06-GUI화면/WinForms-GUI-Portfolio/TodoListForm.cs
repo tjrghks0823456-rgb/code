@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -11,9 +11,9 @@ using System.Windows.Forms;
 
 namespace GUI1
 {
-    public partial class Form4 : Form
+    public partial class TodoListForm : Form
     {
-        public Form4()
+        public TodoListForm()
         {
             InitializeComponent();
         }

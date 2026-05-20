@@ -1,6 +1,6 @@
-﻿namespace GUI1
+namespace GUI1
 {
-    partial class Form3
+    partial class CalculatorForm
     {
         /// <summary>
         /// Required designer variable.
@@ -284,7 +284,7 @@
             this.ButtonResult.UseVisualStyleBackColor = false;
             this.ButtonResult.Click += new System.EventHandler(this.ButtonResult_Click);
             // 
-            // Form3
+            // CalculatorForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -292,8 +292,8 @@
             this.Controls.Add(this.ButtonResult);
             this.Controls.Add(this.tableLayoutPanel1);
             this.Controls.Add(this.Display);
-            this.Name = "Form3";
-            this.Text = "계산기";
+            this.Name = "CalculatorForm";
+            this.Text = "Calculator";
             this.tableLayoutPanel1.ResumeLayout(false);
             this.ResumeLayout(false);
 

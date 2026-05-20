@@ -1,6 +1,6 @@
-﻿namespace GUI1
+namespace GUI1
 {
-    partial class Form1
+    partial class TextLoginForm
     {
         /// <summary>
         /// 필수 디자이너 변수입니다.
@@ -165,7 +165,7 @@
             this.button3.UseVisualStyleBackColor = false;
             this.button3.Click += new System.EventHandler(this.button3_Click);
             // 
-            // Form1
+            // TextLoginForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -181,8 +181,8 @@
             this.Controls.Add(this.richTextBox1);
             this.Controls.Add(this.textBox1);
             this.Controls.Add(this.button1);
-            this.Name = "Form1";
-            this.Text = "Form1";
+            this.Name = "TextLoginForm";
+            this.Text = "Text / Login Demo";
             this.ResumeLayout(false);
             this.PerformLayout();
 

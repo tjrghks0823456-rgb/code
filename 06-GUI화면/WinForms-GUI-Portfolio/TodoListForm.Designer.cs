@@ -1,6 +1,6 @@
-﻿namespace GUI1
+namespace GUI1
 {
-    partial class Form4
+    partial class TodoListForm
     {
         /// <summary>
         /// Required designer variable.
@@ -105,7 +105,7 @@
             this.button4.UseVisualStyleBackColor = false;
             this.button4.Click += new System.EventHandler(this.button4_Click);
             // 
-            // Form4
+            // TodoListForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -116,8 +116,8 @@
             this.Controls.Add(this.button1);
             this.Controls.Add(this.listToDo);
             this.Controls.Add(this.inputArea);
-            this.Name = "Form4";
-            this.Text = "toDOList";
+            this.Name = "TodoListForm";
+            this.Text = "Todo List";
             this.ResumeLayout(false);
             this.PerformLayout();
 

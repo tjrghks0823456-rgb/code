@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -10,14 +10,14 @@ using System.Windows.Forms;
 
 namespace GUI1
 {
-    public partial class Form2 : Form
+    public partial class NumberGuessingForm : Form
     {
 
         private int num = 0;     // 생성된 숫자
         private int chance = 0;  // 시도횟수 제한
 
 
-        public Form2()
+        public NumberGuessingForm()
         {
             InitializeComponent();
             textBox1.Enabled = false;
