@@ -4,12 +4,12 @@ using System.Windows.Forms;
 
 namespace SemiToolHMI.Controls
 {
-    public class FoupDetailForm : UserControl
+    public class FoupDetailPanel : UserControl
     {
         private Label lblTitle;
         private Label lblCount;
 
-        public FoupDetailForm(string title)
+        public FoupDetailPanel(string title)
         {
             this.Name = $"uc_{title.Replace(" ", "_")}";
             this.BackColor = Color.FromArgb(52, 73, 94); // Dark Gray Matches User Theme

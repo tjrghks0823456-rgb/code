@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using SemiToolHMI.Logic;
@@ -8,7 +8,7 @@ namespace SemiToolHMI
     /// <summary>
     /// FOUP/Chamber/FOUP B 웨이퍼 위치 + TM Job 모니터링 창
     /// </summary>
-    public class TransferMonitorForm : Form
+    public class TransferMonitorLegacyForm : Form
     {
         private readonly WaferPipelineSimulator _simulator;
 
@@ -16,7 +16,7 @@ namespace SemiToolHMI
         private Label _lblRobotJob;
         private Timer _timer;
 
-        public TransferMonitorForm(WaferPipelineSimulator simulator)
+        public TransferMonitorLegacyForm(WaferPipelineSimulator simulator)
         {
             _simulator = simulator ?? throw new ArgumentNullException(nameof(simulator));
 
