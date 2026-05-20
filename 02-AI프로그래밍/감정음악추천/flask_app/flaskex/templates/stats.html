@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>오늘의 감정 게이지</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --glass-bg: rgba(10, 15, 25, 0.75);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --text-main: #ffffff;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-main);
+      font-family: 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+
+      /* 분위기에 따라 배경 그라데이션 변경 */
+      {% if mood == 'positive' %}
+      background: radial-gradient(circle at 10% 20%, #f8ffae 0%, #43c6ac 40%, #191654 100%);
+      {% elif mood == 'negative' %}
+      background: radial-gradient(circle at 10% 20%, #000000 0%, #4b79a1 40%, #283e51 100%);
+      {% else %}
+      background: radial-gradient(circle at 10% 20%, #bdc3c7 0%, #2c3e50 70%);
+      {% endif %}
+    }
+
+    /* 배경에 살짝 보케 느낌 주기 */
+    .bg-orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(40px);
+      opacity: 0.4;
+      z-index: 0;
+    }
+    .bg-orb.orb-1 {
+      width: 260px;
+      height: 260px;
+      top: -60px;
+      left: -40px;
+      background: #ff9a9e;
+    }
+    .bg-orb.orb-2 {
+      width: 320px;
+      height: 320px;
+      bottom: -80px;
+      right: -60px;
+      background: #a18cd1;
+    }
+
+    .stats-card {
+      position: relative;
+      z-index: 1;
+      width: min(640px, 90vw);
+      padding: 32px 32px 40px;
+      border-radius: 32px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow:
+          0 24px 60px rgba(0, 0, 0, 0.6),
+          0 0 0 1px rgba(255, 255, 255, 0.02);
+      backdrop-filter: blur(18px);
+    }
+
+    .title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      opacity: 0.8;
+      margin-bottom: 24px;
+    }
+
+    .mood-pill {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      margin-top: 4px;
+    }
+
+    {% if mood == 'positive' %}
+    .mood-pill {
+      background: rgba(46, 213, 115, 0.2);
+      color: #2ed573;
+      border: 1px solid rgba(46, 213, 115, 0.6);
+    }
+    {% elif mood == 'negative' %}
+    .mood-pill {
+      background: rgba(255, 99, 132, 0.18);
+      color: #ff6b81;
+      border: 1px solid rgba(255, 99, 132, 0.7);
+    }
+    {% else %}
+    .mood-pill {
+      background: rgba(255, 206, 86, 0.18);
+      color: #ffce56;
+      border: 1px solid rgba(255, 206, 86, 0.7);
+    }
+    {% endif %}
+
+    .gauge-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto 18px;
+    }
+
+    #gaugeChart {
+      width: 100% !important;
+      height: auto !important;
+    }
+
+    /* 바늘 */
+    .needle {
+      position: absolute;
+      left: 50%;
+      bottom: 20%;
+      width: 4px;
+      height: 45%;
+      background: #f1f2f6;
+      border-radius: 999px;
+      transform-origin: bottom center;
+      transform: rotate(-90deg);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
+      transition: transform 1.1s cubic-bezier(0.19, 1, 0.22, 1);
+    }
+
+    .gauge-center {
+      position: absolute;
+      left: 50%;
+      bottom: 20%;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      transform: translateX(-50%);
+      background: radial-gradient(circle at 30% 20%, #ffffff, #adb5bd);
+      box-shadow:
+          0 4px 8px rgba(0, 0, 0, 0.7),
+          0 0 0 4px rgba(0, 0, 0, 0.4);
+    }
+
+    .score-box {
+      margin-top: 12px;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .score-box span {
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: #1b3cff;
+      box-shadow: 0 8px 18px rgba(27, 60, 255, 0.5);
+    }
+
+    .detail-row {
+      margin-top: 10px;
+      font-size: 0.86rem;
+      opacity: 0.9;
+    }
+
+    .back-link {
+      margin-top: 18px;
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+    .back-link a {
+      color: #f1f2f6;
+      text-decoration: none;
+      border-bottom: 1px dashed rgba(241, 242, 246, 0.6);
+    }
+    .back-link a:hover {
+      opacity: 0.8;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="bg-orb orb-1"></div>
+<div class="bg-orb orb-2"></div>
+
+<div class="stats-card">
+  <div class="title">오늘의 감정 요약</div>
+  <div class="subtitle">
+    오늘 분석된 감정 데이터를 기반으로 한 감정 게이지입니다.
+  </div>
+
+  {% if mood == 'positive' %}
+    <div class="mood-pill">오늘은 전반적으로 ⭐ 긍정적인 하루네요!</div>
+  {% elif mood == 'negative' %}
+    <div class="mood-pill">오늘은 조금 무거운 하루… 💭 스스로를 잘 챙겨주세요.</div>
+  {% else %}
+    <div class="mood-pill">감정이 크게 치우치지 않은, 차분한 하루입니다.</div>
+  {% endif %}
+
+  <div class="gauge-wrapper">
+    <canvas id="gaugeChart"></canvas>
+    <div class="needle" id="gaugeNeedle"></div>
+    <div class="gauge-center"></div>
+  </div>
+
+  <div class="score-box">
+    <span>현재 감정 점수: {{ gauge }} / 100</span>
+  </div>
+
+  <div class="detail-row">
+    긍정: {{ positive_count }} · 부정: {{ negative_count }} · 중립: {{ neutral_count }} (총 {{ total_count }}건)
+  </div>
+
+  <div class="back-link">
+    <a href="/">← 음악 추천 화면으로 돌아가기</a>
+  </div>
+</div>
+
+<script>
+  const gaugeValue = {{ gauge | int }};
+  const mood = "{{ mood }}";
+
+  const ctx = document.getElementById("gaugeChart").getContext("2d");
+
+  const gaugeChart = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: ["감정 점수", "남은 영역"],
+      datasets: [{
+        data: [gaugeValue, 100 - gaugeValue],
+        backgroundColor: [
+          mood === "positive"
+            ? "rgba(46, 213, 115, 0.95)"
+            : mood === "negative"
+              ? "rgba(255, 99, 132, 0.95)"
+              : "rgba(255, 206, 86, 0.95)",
+          "rgba(255, 255, 255, 0.05)"
+        ],
+        borderWidth: 0,
+        circumference: 180,
+        rotation: 270  // 위쪽이 아니라 좌→우 반원
+      }]
+    },
+    options: {
+      cutout: "70%",
+      plugins: { legend: { display: false } },
+      animation: {
+        animateRotate: true,
+        duration: 1100
+      }
+    }
+  });
+
+  // 바늘 각도 계산 : 0점 = -90도, 100점 = +90도
+  const needle = document.getElementById("gaugeNeedle");
+  const angle = (gaugeValue / 100) * 180 - 90;
+  // 살짝 딜레이를 줘서 차트 애니메이션 끝나고 바늘 움직이게
+  setTimeout(() => {
+    needle.style.transform = `rotate(${angle}deg)`;
+  }, 400);
+</script>
+
+</body>
+</html>

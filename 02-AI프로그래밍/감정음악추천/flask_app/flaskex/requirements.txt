@@ -1,0 +1,7 @@
+Flask
+openai
+pymysql
+python-dotenv
+spotipy
+transformers
+torch
