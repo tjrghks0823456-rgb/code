@@ -1,0 +1,212 @@
+{% extends "layout_user.html" %}
+{% block content %}
+
+<h2 style="margin-bottom: 20px;">🏠 내 창고 현황</h2>
+
+<!-- 창고 카드 그리드 -->
+<div
+    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 40px;">
+
+    <!-- 냉동창고 -->
+    <div class="card"
+        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; font-size: 1.5rem;">❄ 냉동창고</h3>
+            <span style="font-size: 2rem;">☃️</span>
+        </div>
+
+        <div
+            style="background: rgba(255,255,255,0.2); border-radius: 10px; padding: 15px; margin-bottom: 15px; min-height: 100px;">
+            <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; opacity: 0.8;">보관 중인 물품</h4>
+            <ul id="list-freezer" style="list-style: none; padding: 0; margin: 0; font-size: 1.1rem; font-weight: 600;">
+                <!-- JS로 채움 -->
+                <li style="opacity: 0.7; font-weight: 400;">없음</li>
+            </ul>
+        </div>
+
+        <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px;">
+                <span>창고 용량</span>
+                <span id="cap-freezer">0%</span>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); height: 10px; border-radius: 5px; overflow: hidden;">
+                <div id="bar-freezer" style="width: 0%; height: 100%; background: #4ade80; transition: width 0.5s;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 냉장창고 -->
+    <div class="card"
+        style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; font-size: 1.5rem;">🥶 냉장창고</h3>
+            <span style="font-size: 2rem;">💧</span>
+        </div>
+
+        <div
+            style="background: rgba(255,255,255,0.2); border-radius: 10px; padding: 15px; margin-bottom: 15px; min-height: 100px;">
+            <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; opacity: 0.8;">보관 중인 물품</h4>
+            <ul id="list-fridge" style="list-style: none; padding: 0; margin: 0; font-size: 1.1rem; font-weight: 600;">
+                <li style="opacity: 0.7; font-weight: 400;">없음</li>
+            </ul>
+        </div>
+
+        <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px;">
+                <span>창고 용량</span>
+                <span id="cap-fridge">0%</span>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); height: 10px; border-radius: 5px; overflow: hidden;">
+                <div id="bar-fridge" style="width: 0%; height: 100%; background: #4ade80; transition: width 0.5s;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 일반창고 -->
+    <div class="card"
+        style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; font-size: 1.5rem;">📦 일반창고</h3>
+            <span style="font-size: 2rem;">🏠</span>
+        </div>
+
+        <div
+            style="background: rgba(255,255,255,0.2); border-radius: 10px; padding: 15px; margin-bottom: 15px; min-height: 100px;">
+            <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; opacity: 0.8;">보관 중인 물품</h4>
+            <ul id="list-normal" style="list-style: none; padding: 0; margin: 0; font-size: 1.1rem; font-weight: 600;">
+                <li style="opacity: 0.7; font-weight: 400;">없음</li>
+            </ul>
+        </div>
+
+        <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px;">
+                <span>창고 용량</span>
+                <span id="cap-normal">0%</span>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); height: 10px; border-radius: 5px; overflow: hidden;">
+                <div id="bar-normal" style="width: 0%; height: 100%; background: #4ade80; transition: width 0.5s;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<h2>📜 요청 기록</h2>
+<div id="request-history"
+    style="max-height: 300px; overflow-y: auto; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+    <!-- JS로 채움 -->
+    <p style="text-align: center; color: #888;">로딩 중...</p>
+</div>
+
+<script>
+    const typeMap = {
+        '냉동': 'freezer',
+        '냉장': 'fridge',
+        '일반': 'normal'
+    };
+
+    async function fetchStatus() {
+        try {
+            const res = await fetch("/api/user_status");
+            const data = await res.json();
+
+            // 1. 창고 카드 업데이트
+            // 초기화
+            ['freezer', 'fridge', 'normal'].forEach(t => {
+                document.getElementById(`list-${t}`).innerHTML = '<li style="opacity: 0.7; font-weight: 400;">없음</li>';
+                document.getElementById(`cap-${t}`).innerText = '0%';
+                document.getElementById(`bar-${t}`).style.width = '0%';
+            });
+
+            // 데이터 채우기
+            data.warehouses.forEach(w => {
+                const typeKey = typeMap[w.type] || 'normal';
+
+                // 용량 바 업데이트
+                const percent = w.percent || 0;
+                document.getElementById(`cap-${typeKey}`).innerText = `${percent}%`;
+                document.getElementById(`bar-${typeKey}`).style.width = `${percent}%`;
+
+                // 색상 변경
+                if (percent >= 90) document.getElementById(`bar-${typeKey}`).style.background = '#ef4444';
+                else if (percent >= 70) document.getElementById(`bar-${typeKey}`).style.background = '#facc15';
+                else document.getElementById(`bar-${typeKey}`).style.background = '#4ade80';
+
+                // 내 물품 리스트 필터링
+                const myItemsInWarehouse = data.my_items.filter(i => i.warehouse_name === w.name);
+                const listEl = document.getElementById(`list-${typeKey}`);
+
+                if (myItemsInWarehouse.length > 0) {
+                    listEl.innerHTML = '';
+                    myItemsInWarehouse.forEach(i => {
+                        const li = document.createElement('li');
+
+                        let dayText = '';
+                        if (i.remaining_days !== null && i.remaining_days !== undefined) {
+                            if (i.remaining_days <= 3) {
+                                dayText = ` <span style="color: #ef4444; font-size: 0.85em;">(D-${i.remaining_days})</span>`;
+                            } else {
+                                dayText = ` <span style="color: #3b82f6; font-size: 0.85em;">(${i.remaining_days}일 남음)</span>`;
+                            }
+                        }
+
+                        li.innerHTML = `${i.name}${dayText}`;
+                        listEl.appendChild(li);
+                    });
+                }
+            });
+
+            // 2. 요청 기록 업데이트
+            const historyDiv = document.getElementById("request-history");
+            historyDiv.innerHTML = "";
+            if (data.logs && data.logs.length > 0) {
+                data.logs.forEach(log => {
+                    let typeText = log.type === 'reservation' ? '📝 예약' : '📤 반출';
+                    let statusHtml = '';
+                    let borderColor = '#ccc';
+
+                    if (log.status === 'pending') {
+                        statusHtml = '<span style="color: orange; font-weight: bold;">대기 중</span>';
+                        borderColor = 'orange';
+                    } else if (log.status === 'approved') {
+                        statusHtml = '<span style="color: green; font-weight: bold;">승인됨</span>';
+                        borderColor = 'green';
+                    } else if (log.status === 'rejected') {
+                        statusHtml = '<span style="color: red; font-weight: bold;">거부됨</span>';
+                        borderColor = 'red';
+                    }
+
+                    const div = document.createElement('div');
+                    div.style.padding = '10px';
+                    div.style.marginBottom = '8px';
+                    div.style.background = 'white';
+                    div.style.borderRadius = '6px';
+                    div.style.borderLeft = `4px solid ${borderColor}`;
+                    div.style.display = 'flex';
+                    div.style.justifyContent = 'space-between';
+                    div.style.alignItems = 'center';
+
+                    div.innerHTML = `
+                    <div>
+                        <span style="font-weight: bold; margin-right: 8px;">${typeText}</span>
+                        <span>${log.item_name}</span>
+                    </div>
+                    <div>${statusHtml}</div>
+                `;
+                    historyDiv.appendChild(div);
+                });
+            } else {
+                historyDiv.innerHTML = '<p style="text-align: center; color: #888;">요청 기록이 없습니다.</p>';
+            }
+
+        } catch (err) { console.error(err); }
+    }
+
+    setInterval(fetchStatus, 3000);
+    fetchStatus();
+</script>
+
+{% endblock %}

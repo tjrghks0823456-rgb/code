@@ -1,0 +1,64 @@
+{% extends "layout_admin.html" %}
+{% block content %}
+<h2>📅 예약 / 꺼내기 관리</h2>
+
+<table border="1" cellpadding="10">
+    <tr>
+        <th>종류</th>
+        <th>물품 (창고)</th>
+        <th>기간 (시작 ~ 종료)</th>
+        <th>사용자</th>
+        <th>상태</th>
+        <th>동작</th>
+    </tr>
+
+    {% for r in requests %}
+    <tr id="row-{{ r.id }}">
+        <td>{{ "예약" if r.type == "reservation" else "꺼내기" }}</td>
+        <td>{{ r.item_name }} ({{ r.warehouse_type }})</td>
+        <td>
+            {% if r.start_time and r.start_time != "-" %}
+            {{ r.start_time.replace("T", " ") }} <br>~ {{ r.end_time.replace("T", " ") }}
+            {% else %}
+            -
+            {% endif %}
+        </td>
+        <td>{{ r.user }}</td>
+        <td id="status-{{ r.id }}">{{ r.status }}</td>
+        <td>
+            {% if r.status=="pending" %}
+            <button onclick="updateStatus({{ r.id }}, '{{ r.type }}', 'approved')">승인</button>
+            <button onclick="updateStatus({{ r.id }}, '{{ r.type }}', 'rejected')">거부</button>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<script>
+    function updateStatus(id, type, status) {
+        // 통합 API 사용
+        let url = "/api/requests/" + id;
+
+        fetch(url, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ "status": status, "type": type })
+        })
+            .then(res => {
+                if (!res.ok) throw new Error("서버 오류");
+                return res.json();
+            })
+            .then(data => {
+                const statusElem = document.getElementById("status-" + id);
+                if (statusElem) statusElem.innerText = data.status;
+                const row = document.getElementById("row-" + id);
+                if (row) row.querySelectorAll("button").forEach(btn => btn.style.display = "none");
+                alert("처리 완료: " + data.status);
+            })
+            .catch(err => alert("처리 실패: " + err.message));
+    }
+
+</script>
+
+{% endblock %}

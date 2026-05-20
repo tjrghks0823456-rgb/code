@@ -1,0 +1,82 @@
+{% extends "layout_admin.html" %}
+{% block content %}
+
+<h2 style="margin-bottom: 20px;">🏭 창고 관리 현황</h2>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
+
+    {% for w in warehouses %}
+    <!-- 창고 카드 스타일 결정 -->
+    {% set bg_style = "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)" %}
+    {% set icon = "🏠" %}
+    {% if w.type == '냉동' %}
+    {% set bg_style = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" %}
+    {% set icon = "❄️" %}
+    {% elif w.type == '냉장' %}
+    {% set bg_style = "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" %}
+    {% set icon = "🥶" %}
+    {% endif %}
+
+    <div class="card"
+        style="background: {{ bg_style }}; color: white; border: none; position: relative; overflow: hidden;">
+
+        <!-- 헤더 -->
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2;">
+            <div>
+                <h3 style="margin: 0; font-size: 1.8rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">{{ w.name }}</h3>
+                <span style="font-size: 0.9rem; opacity: 0.9;">Capacity: {{ w.capacity }}</span>
+            </div>
+            <div style="font-size: 3rem; opacity: 0.8; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">{{ icon }}</div>
+        </div>
+
+        <!-- 물품 리스트 영역 -->
+        <div
+            style="background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(5px); border-radius: 12px; padding: 15px; margin-bottom: 20px; min-height: 150px; border: 1px solid rgba(255,255,255,0.2);">
+            <h4
+                style="margin: 0 0 12px 0; font-size: 0.95rem; opacity: 0.9; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
+                📦 보관 물품 ({{ w.items_list|length }})
+            </h4>
+
+            <ul style="list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto;">
+                {% if w.items_list %}
+                {% for item in w.items_list %}
+                <li
+                    style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 0.95rem;">
+                    <span style="font-weight: 600;">{{ item.name }}</span>
+                    <span style="opacity: 0.8; font-size: 0.85rem;">👤 {{ item.owner_name }}</span>
+                </li>
+                {% endfor %}
+                {% else %}
+                <li style="text-align: center; padding: 20px 0; opacity: 0.6;">보관된 물품이 없습니다.</li>
+                {% endif %}
+            </ul>
+        </div>
+
+        <!-- 용량 게이지 -->
+        <div style="position: relative; z-index: 2;">
+            <div
+                style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; font-weight: 600;">
+                <span>점유율</span>
+                <span>{{ w.percent }}%</span>
+            </div>
+            <div
+                style="background: rgba(0,0,0,0.25); height: 12px; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);">
+                {% set bar_color = "#4ade80" %}
+                {% if w.percent >= 90 %}
+                {% set bar_color = "#ef4444" %}
+                {% elif w.percent >= 70 %}
+                {% set bar_color = "#facc15" %}
+                {% endif %}
+                <div
+                    style="width: {{ w.percent }}%; height: 100%; background: {{ bar_color }}; transition: width 0.5s ease-out; box-shadow: 0 0 10px {{ bar_color }};">
+                </div>
+            </div>
+        </div>
+
+    </div>
+    {% endfor %}
+
+</div>
+
+{% endblock %}

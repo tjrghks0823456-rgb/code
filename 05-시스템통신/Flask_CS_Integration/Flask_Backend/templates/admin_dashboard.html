@@ -1,0 +1,1143 @@
+{% extends "layout_admin.html" %}
+{% block content %}
+
+<div style="margin-bottom: 30px;">
+    <h1 style="font-size: 2rem; font-weight: 700; color: var(--text-main); margin-bottom: 10px;">
+        관리자 대시보드
+    </h1>
+    <p style="color: var(--text-muted); font-size: 1.1rem;">
+        전체 창고 상태를 모니터링하고 PLC 설비를 제어합니다.
+    </p>
+</div>
+
+<!-- 탭 네비게이션 -->
+<div style="margin-bottom: 24px; display: flex; gap: 10px; flex-wrap: wrap;">
+    <button onclick="showTab('monitor')" id="btn-monitor"
+        style="padding: 10px 20px; border-radius: 20px; font-weight: 600; transition: all 0.3s; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
+        📊 모니터링
+    </button>
+    <button onclick="showTab('event')" id="btn-event"
+        style="padding: 10px 20px; border-radius: 20px; font-weight: 600; transition: all 0.3s; background: white; color: var(--text-muted); border: 2px solid #e2e8f0;">
+        ⚡ 이벤트 시뮬레이션
+    </button>
+</div>
+
+<!-- 모니터링 탭 -->
+<div id="tab-monitor">
+
+    <!-- 비상 전원 & 스프링클러 & 방화벽 제어 (모니터링 탭 상단) -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+        <!-- 비상 전원 제어 -->
+        <div
+            style="background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h2 style="font-size: 1.1rem; margin: 0; display: flex; align-items: center; gap: 8px; color: #334155;">
+                    <span style="font-size: 1.4rem;">🔋</span> 비상 전원
+                </h2>
+                <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #64748b;">비상 전원 가동</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span id="emergency-text" style="font-weight: 600; color: #64748b; font-size: 0.9rem;">정상</span>
+                <div id="emergency-light" class="status-light status-green"></div>
+            </div>
+        </div>
+
+        <!-- 스프링클러 제어 -->
+        <div
+            style="background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h2 style="font-size: 1.1rem; margin: 0; display: flex; align-items: center; gap: 8px; color: #334155;">
+                    <span style="font-size: 1.4rem;">💦</span> 스프링클러
+                </h2>
+                <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #64748b;">화재 진압 및 정상화</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span id="sprinkler-text" style="font-weight: 600; color: #64748b; font-size: 0.9rem;">정상</span>
+                <div id="sprinkler-light" class="status-light status-green"></div>
+            </div>
+        </div>
+
+        <!-- 방화벽 상태 -->
+        <div
+            style="background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h2 style="font-size: 1.1rem; margin: 0; display: flex; align-items: center; gap: 8px; color: #334155;">
+                    <span style="font-size: 1.4rem;">🛡️</span> 방화벽
+                </h2>
+                <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #64748b;">시스템 보호 및 차단</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span id="firewall-text" style="font-weight: 600; color: #64748b; font-size: 0.9rem;">비활성</span>
+                <div id="firewall-light" class="status-light status-gray"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 창고 상태 그리드 -->
+    <div
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 30px;">
+
+        <!-- 냉동창고 -->
+        <div class="warehouse-card"
+            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 24px; color: white; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3); transition: transform 0.3s;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                <div>
+                    <div style="font-size: 2.5rem; margin-bottom: 8px;">❄️</div>
+                    <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">냉동창고</h2>
+                    <span style="font-size: 0.9rem; opacity: 0.9;">목표 온도: -10℃</span>
+                </div>
+                <button onclick="normalizeTemp('freezer')"
+                    style="padding: 8px 16px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-weight: 600; backdrop-filter: blur(10px); transition: all 0.3s;">
+                    정상화
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center;">
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">온도</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="freezer-temp">-10.0</span>℃</div>
+                </div>
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">습도</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="freezer-hum">40.0</span>%</div>
+                </div>
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">적재율</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="freezer-load">50</span>%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 냉장창고 -->
+        <div class="warehouse-card"
+            style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 16px; padding: 24px; color: white; box-shadow: 0 8px 32px rgba(245, 87, 108, 0.3); transition: transform 0.3s;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                <div>
+                    <div style="font-size: 2.5rem; margin-bottom: 8px;">🥶</div>
+                    <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">냉장창고</h2>
+                    <span style="font-size: 0.9rem; opacity: 0.9;">목표 온도: 0℃</span>
+                </div>
+                <button onclick="normalizeTemp('fridge')"
+                    style="padding: 8px 16px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-weight: 600; backdrop-filter: blur(10px); transition: all 0.3s;">
+                    정상화
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center;">
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">온도</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="fridge-temp">0.0</span>℃</div>
+                </div>
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">습도</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="fridge-hum">45.0</span>%</div>
+                </div>
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">적재율</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="fridge-load">40</span>%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 일반창고 -->
+        <div class="warehouse-card"
+            style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 16px; padding: 24px; color: white; box-shadow: 0 8px 32px rgba(79, 172, 254, 0.3); transition: transform 0.3s;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                <div>
+                    <div style="font-size: 2.5rem; margin-bottom: 8px;">📦</div>
+                    <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">일반창고</h2>
+                    <span style="font-size: 0.9rem; opacity: 0.9;">목표 온도: 20℃</span>
+                </div>
+                <button onclick="normalizeTemp('normal')"
+                    style="padding: 8px 16px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-weight: 600; backdrop-filter: blur(10px); transition: all 0.3s;">
+                    정상화
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center;">
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">온도</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="normal-temp">20.0</span>℃</div>
+                </div>
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">습도</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="normal-hum">50.0</span>%</div>
+                </div>
+                <div
+                    style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 4px;">적재율</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;"><span id="normal-load">30</span>%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;">
+        <!-- 대기 중인 요청 섹션 -->
+        <div>
+            <h2
+                style="font-size: 1.5rem; margin-bottom: 16px; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.8rem;">⏳</span> 대기 중인 요청
+            </h2>
+            <div id="pending-requests"
+                style="min-height: 200px; max-height: 400px; overflow-y: auto; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <p style="color: var(--text-muted); text-align: center; margin-top: 20px;">대기 중인 요청이 없습니다.</p>
+            </div>
+        </div>
+
+        <!-- 알림 로그 섹션 -->
+        <div>
+            <h2
+                style="font-size: 1.5rem; margin-bottom: 16px; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.8rem;">🔔</span> 알림 로그
+            </h2>
+            <div id="activity-logs"
+                style="min-height: 200px; max-height: 400px; overflow-y: auto; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <p style="color: var(--text-muted); text-align: center; margin-top: 20px;">기록된 알림이 없습니다.</p>
+            </div>
+        </div>
+
+        <!-- 이벤트 발생 로그 섹션 (New) -->
+        <div>
+            <h2
+                style="font-size: 1.5rem; margin-bottom: 16px; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.8rem;">⚠️</span> 이벤트 발생 로그
+            </h2>
+            <div id="event-logs"
+                style="min-height: 200px; max-height: 400px; overflow-y: auto; background: #fff7ed; padding: 15px; border-radius: 12px; border: 1px solid #fed7aa;">
+                <p style="color: var(--text-muted); text-align: center; margin-top: 20px;">발생한 이벤트가 없습니다.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 이벤트 시뮬레이션 탭 -->
+<div id="tab-event" style="display:none;">
+    <div style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);">
+        <h2 style="font-size: 1.5rem; margin-bottom: 24px; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 2rem;">⚡</span> 이벤트 시뮬레이션
+        </h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+            <div
+                style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: #334155;">🔥 화재 발생</span>
+                <label class="switch">
+                    <input type="checkbox" id="chk-fire" onchange="toggleEvent('fire_event', this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <div
+                style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: #334155;">📳 진동 감지</span>
+                <label class="switch">
+                    <input type="checkbox" id="chk-vib" onchange="toggleEvent('vib_event', this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <div
+                style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: #334155;">🌑 정전 발생</span>
+                <label class="switch">
+                    <input type="checkbox" id="chk-blackout" onchange="toggleEvent('blackout_event', this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </div>
+
+        <h2 style="font-size: 1.5rem; margin: 30px 0 24px 0; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 2rem;">🚪</span> 문 열림 제어
+        </h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+            <div
+                style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: #334155;">📦 일반창고 문</span>
+                <label class="switch">
+                    <input type="checkbox" id="chk-door-normal" onchange="toggleDoor('normal', this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <div
+                style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: #334155;">🥶 냉장창고 문</span>
+                <label class="switch">
+                    <input type="checkbox" id="chk-door-cold" onchange="toggleDoor('cold', this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <div
+                style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: #334155;">❄️ 냉동창고 문</span>
+                <label class="switch">
+                    <input type="checkbox" id="chk-door-freeze" onchange="toggleDoor('freeze', this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ======================= 지진 경고 팝업 ======================= -->
+<div id="earthquake-warning-popup"
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:10000; background:rgba(50,0,0,0.9); flex-direction:column; justify-content:center; align-items:center;">
+
+    <div style="text-align:center; animation: shake 0.5s infinite;">
+        <img src="/static/earthquake.png"
+            style="width:300px; height:auto; border-radius:20px; box-shadow: 0 0 50px rgba(255,0,0,0.8); margin-bottom:30px;">
+        <h1 style="color:#ff4444; font-size:4rem; font-weight:900; text-shadow: 4px 4px 0px #000; margin:0;">
+            ⚠️ 긴급 지진 경보 ⚠️
+        </h1>
+        <p style="color:white; font-size:2rem; margin-top:20px; font-weight:bold;">
+            진동 수치 위험 레벨 도달! 즉시 대피하십시오!
+        </p>
+    </div>
+
+    <!-- 방화벽 가동 버튼 제거 (자동화됨) -->
+</div>
+
+<!-- ======================= 이벤트 해결 팝업 (정전/화재) ======================= -->
+<div id="event-resolution-popup"
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:10001; background:rgba(0,0,0,0.85); flex-direction:column; justify-content:center; align-items:center;">
+
+    <div
+        style="background:white; padding:40px; border-radius:20px; text-align:center; max-width:500px; width:90%; box-shadow: 0 20px 50px rgba(0,0,0,0.5); animation: popup-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+        <div id="popup-icon" style="font-size:4rem; margin-bottom:20px;">⚠️</div>
+        <h2 id="popup-title" style="color:#1e293b; font-size:2rem; font-weight:800; margin:0 0 10px 0;">이벤트 감지됨</h2>
+        <p id="popup-msg" style="color:#64748b; font-size:1.1rem; margin-bottom:30px; line-height:1.6;">
+            문제가 발생했습니다.
+        </p>
+
+        <div style="display:flex; gap:15px; justify-content:center;">
+            <button onclick="closeEventPopup()"
+                style="padding:15px 30px; font-size:1.1rem; font-weight:bold; background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color:white; border:none; border-radius:12px; cursor:pointer; box-shadow:0 4px 15px rgba(37, 99, 235, 0.4); transition:transform 0.2s;">
+                확인 (자동 해결됨)
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .warehouse-card:hover {
+        transform: translateY(-8px);
+    }
+
+    .power-btn:hover,
+    .mode-btn:hover,
+    button:hover {
+        transform: scale(1.05);
+    }
+
+    button {
+        cursor: pointer;
+    }
+
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 26px;
+    }
+
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+    }
+
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+    }
+
+    input:checked+.slider {
+        background-color: #2196F3;
+    }
+
+    input:focus+.slider {
+        box-shadow: 0 0 1px #2196F3;
+    }
+
+    input:checked+.slider:before {
+        transform: translateX(24px);
+    }
+
+    .slider.round {
+        border-radius: 34px;
+    }
+
+    .slider.round:before {
+        border-radius: 50%;
+    }
+
+    @keyframes shake {
+        0% {
+            transform: translate(1px, 1px) rotate(0deg);
+        }
+
+        10% {
+            transform: translate(-1px, -2px) rotate(-1deg);
+        }
+
+        20% {
+            transform: translate(-3px, 0px) rotate(1deg);
+        }
+
+        30% {
+            transform: translate(3px, 2px) rotate(0deg);
+        }
+
+        40% {
+            transform: translate(1px, -1px) rotate(1deg);
+        }
+
+        50% {
+            transform: translate(-1px, 2px) rotate(-1deg);
+        }
+
+        60% {
+            transform: translate(-3px, 1px) rotate(0deg);
+        }
+
+        70% {
+            transform: translate(3px, 1px) rotate(-1deg);
+        }
+
+        80% {
+            transform: translate(-1px, -1px) rotate(1deg);
+        }
+
+        90% {
+            transform: translate(1px, 2px) rotate(0deg);
+        }
+
+        100% {
+            transform: translate(1px, -2px) rotate(-1deg);
+        }
+    }
+
+    #earthquake-warning-popup button:hover {
+        transform: scale(1.1);
+        background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+    }
+
+    @keyframes popup-in {
+        0% {
+            transform: scale(0.8);
+            opacity: 0;
+        }
+
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    .status-light {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .status-green {
+        background-color: #22c55e;
+        box-shadow: 0 0 15px rgba(34, 197, 94, 0.6);
+    }
+
+    .status-red {
+        background-color: #ef4444;
+        box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+        animation: pulse-red 1s infinite;
+    }
+
+    .status-yellow {
+        background-color: #eab308;
+        box-shadow: 0 0 15px rgba(234, 179, 8, 0.6);
+    }
+
+    .status-gray {
+        background-color: #94a3b8;
+        box-shadow: none;
+    }
+</style>
+
+<script>
+    function showTab(tabName) {
+        ['monitor', 'event'].forEach(t => {
+            const tab = document.getElementById('tab-' + t);
+            const btn = document.getElementById('btn-' + t);
+
+            if (tab && btn) {
+                tab.style.display = (t === tabName) ? 'block' : 'none';
+                if (t === tabName) {
+                    btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                    btn.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.4)';
+                } else {
+                    btn.style.background = 'white';
+                    btn.style.color = 'var(--text-muted)';
+                    btn.style.border = '2px solid #e2e8f0';
+                    btn.style.boxShadow = 'none';
+                }
+            }
+        });
+    }
+
+    function normalizeTemp(type) {
+        fetch('/api/normalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ warehouse: type })
+        }).then(r => r.json()).then(data => {
+            // alert(data.message); // 자동화 시 알림 너무 많을 수 있어 주석 처리 또는 유지
+        });
+    }
+
+    function logRequest(msg, type = 'info') {
+        const box = document.getElementById('activity-logs');
+        if (box.querySelector('p')?.innerText === '기록된 알림이 없습니다.') {
+            box.innerHTML = '';
+        }
+        const div = document.createElement('div');
+        div.style.padding = '10px';
+        div.style.marginBottom = '8px';
+        div.style.borderRadius = '8px';
+        div.style.fontSize = '0.9rem';
+        div.style.borderLeft = '4px solid #cbd5e1';
+        div.style.background = '#f1f5f9';
+
+        if (type === 'success') {
+            div.style.borderLeftColor = '#22c55e';
+            div.style.background = '#f0fdf4';
+        } else if (type === 'alert') {
+            div.style.borderLeftColor = '#ef4444';
+            div.style.background = '#fef2f2';
+        }
+
+        const time = new Date().toLocaleTimeString();
+        div.innerHTML = `
+            <div style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">${time}</div>
+            <div style="color:#334155;">${msg}</div>
+        `;
+        box.prepend(div);
+    }
+
+    // ===== 이벤트 발생 로그 기록 함수 (New) =====
+    function logSystemEvent(msg) {
+        const box = document.getElementById('event-logs');
+        if (box.querySelector('p')?.innerText === '발생한 이벤트가 없습니다.') {
+            box.innerHTML = '';
+        }
+        const div = document.createElement('div');
+        div.style.padding = '10px';
+        div.style.marginBottom = '8px';
+        div.style.borderRadius = '8px';
+        div.style.fontSize = '0.9rem';
+        div.style.borderLeft = '4px solid #f59e0b'; // Amber for warning
+        div.style.background = '#fffbeb';
+
+        const time = new Date().toLocaleTimeString();
+        div.innerHTML = `
+            <div style="font-size:0.75rem; color:#92400e; margin-bottom:4px;">${time}</div>
+            <div style="color:#b45309; font-weight:600;">${msg}</div>
+        `;
+        box.prepend(div);
+    }
+
+    let warehouseState = {
+        'freezer': { load: 50 },
+        'fridge': { load: 40 },
+        'normal': { load: 30 }
+    };
+
+    async function updateWarehouseData() {
+        try {
+            const sensor = await fetch('/api/sensor_data').then(r => r.json());
+            const temp = sensor.temp;
+            const hum = sensor.hum;
+
+            ['freezer', 'fridge', 'normal'].forEach(type => {
+                if (document.getElementById(type + '-temp')) {
+                    let tVal = temp;
+                    let hVal = hum;
+
+                    if (type === 'freezer' && sensor.temp_freeze !== undefined) {
+                        tVal = sensor.temp_freeze;
+                        hVal = sensor.hum_freeze;
+                    } else if (type === 'fridge' && sensor.temp_cold !== undefined) {
+                        tVal = sensor.temp_cold;
+                        hVal = sensor.hum_cold;
+                    } else if (type === 'normal' && sensor.temp_normal !== undefined) {
+                        tVal = sensor.temp_normal;
+                        hVal = sensor.hum_normal;
+                    }
+
+                    document.getElementById(type + '-temp').innerText = tVal.toFixed(1);
+                    document.getElementById(type + '-hum').innerText = hVal.toFixed(1);
+
+                    // 적재율 업데이트 (서버에서 받아온 실제 데이터 사용)
+                    let loadVal = 0;
+                    if (type === 'freezer') loadVal = sensor.load_freezer;
+                    else if (type === 'fridge') loadVal = sensor.load_fridge;
+                    else if (type === 'normal') loadVal = sensor.load_normal;
+
+                    if (loadVal === undefined) loadVal = 0;
+
+                    document.getElementById(type + '-load').innerText = loadVal + '%';
+                }
+            });
+
+        } catch (e) {
+            console.error('창고 데이터 가져오기 실패:', e);
+        }
+    }
+
+    async function fetchRequests() {
+        try {
+            const res = await fetch('/api/requests');
+            const data = await res.json();
+
+            const currentIds = Array.from(document.querySelectorAll('[id^="req-"]')).map(el => el.id);
+            const pendingData = data.filter(r => r.status === 'pending');
+            const newIds = pendingData.map(r => `req-${r.type}-${r.id}`);
+
+            currentIds.forEach(id => {
+                if (!newIds.includes(id)) {
+                    const el = document.getElementById(id);
+                    if (el) el.remove();
+                }
+            });
+
+            const box = document.getElementById('pending-requests');
+            if (pendingData.length === 0) {
+                if (box.innerHTML.trim() === '' || !box.querySelector('p')) {
+                    box.innerHTML = '<p style="color: var(--text-muted); text-align: center; margin-top: 20px;">대기 중인 요청이 없습니다.</p>';
+                }
+                return;
+            } else {
+                const emptyMsg = box.querySelector('p');
+                if (emptyMsg && emptyMsg.innerText === '대기 중인 요청이 없습니다.') {
+                    emptyMsg.remove();
+                }
+            }
+
+            pendingData.forEach(r => {
+                const uniqueId = `req-${r.type}-${r.id}`;
+
+                if (!document.getElementById(uniqueId)) {
+                    const div = document.createElement('div');
+                    div.id = uniqueId;
+                    div.style.padding = '14px';
+                    div.style.marginBottom = '10px';
+                    div.style.borderRadius = '10px';
+                    div.style.background = 'white';
+                    div.style.border = '2px solid #e2e8f0';
+                    div.style.display = 'flex';
+                    div.style.alignItems = 'center';
+                    div.style.justifyContent = 'space-between';
+                    div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+
+                    let typeIcon = r.type === 'reservation' ? '📝' : '📤';
+                    let typeText = r.type === 'reservation' ? '예약' : '꺼내기';
+
+                    div.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="font-size:1.5rem;">${typeIcon}</span>
+                        <div>
+                            <div style="font-weight:600; color:var(--text-main);">${r.item_name || r.item}</div>
+                            <div style="font-size:0.85rem; color:var(--text-muted);">${r.user}님의 ${typeText} 요청</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button onclick="processRequest(${r.id},'${r.type}','approved')"
+                            style="padding:8px 16px; background:linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color:white; font-weight:600; font-size:0.85rem; border-radius:8px; border:none; box-shadow: 0 2px 8px rgba(56, 239, 125, 0.3); cursor:pointer;">승인</button>
+                        <button onclick="processRequest(${r.id},'${r.type}','rejected')"
+                            style="padding:8px 16px; background:linear-gradient(135deg, #ee0979 0%, #ff6a00 100%); color:white; font-weight:600; font-size:0.85rem; border-radius:8px; border:none; box-shadow: 0 2px 8px rgba(238, 9, 121, 0.3); cursor:pointer;">거부</button>
+                    </div>
+                    `;
+                    box.prepend(div);
+                }
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    async function processRequest(id, type, status) {
+        try {
+            const res = await fetch('/api/requests/' + id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status, type: type })
+            });
+            const r = await res.json();
+
+            const uniqueId = `req-${type}-${id}`;
+            const elem = document.getElementById(uniqueId);
+            if (elem) elem.remove();
+
+            let statusText = status === 'approved' ? '승인됨' : '거부됨';
+            let statusColor = status === 'approved' ? 'success' : 'alert';
+            logRequest(`✅ <b>${r.user}</b>님의 <b>${r.item_name || r.item}</b> 요청이 ${statusText}`, statusColor);
+
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadLogs() {
+        try {
+            const res = await fetch('/api/logs');
+            const logs = await res.json();
+            const box = document.getElementById('activity-logs');
+
+            if (logs.length > 0) {
+                if (box.querySelector('p')?.innerText === '기록된 알림이 없습니다.') {
+                    box.innerHTML = '';
+                }
+
+                logs.forEach(log => {
+                    const parts = log.match(/^\[(.*?)\] \[(.*?)\] (.*)$/);
+                    if (parts) {
+                        const timestamp = parts[1];
+                        const type = parts[2].toLowerCase();
+                        const msg = parts[3];
+
+                        const exists = Array.from(box.children).some(child => child.innerText.includes(msg) &&
+                            child.innerText.includes(timestamp));
+                        if (!exists) {
+                            const div = document.createElement('div');
+                            div.style.padding = '10px';
+                            div.style.marginBottom = '8px';
+                            div.style.borderRadius = '8px';
+                            div.style.fontSize = '0.9rem';
+                            div.style.borderLeft = '4px solid #cbd5e1';
+                            div.style.background = '#f1f5f9';
+
+                            if (type === 'success') {
+                                div.style.borderLeftColor = '#22c55e';
+                                div.style.background = '#f0fdf4';
+                            } else if (type === 'alert' || type === 'error') {
+                                div.style.borderLeftColor = '#ef4444';
+                                div.style.background = '#fef2f2';
+                            }
+
+                            div.innerHTML = `
+                            <div style="font-size:0.75rem; color:#64748b; margin-bottom:4px;">${timestamp}</div>
+                            <div style="color:#334155;">${msg}</div>
+                            `;
+                            box.appendChild(div);
+                        }
+                    }
+                });
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    function toggleEvent(eventName, isActive) {
+        fetch('/api/events/simulate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: eventName, active: isActive })
+        }).then(r => r.json()).then(data => {
+            if (data.status === 'ok') {
+                console.log(`${eventName} -> ${isActive} `);
+                // 이벤트 로그 기록
+                if (isActive) {
+                    let msg = "";
+                    if (eventName === 'fire_event') msg = "🔥 화재 이벤트 발생";
+                    else if (eventName === 'vib_event') msg = "📳 진동 이벤트 발생";
+                    else if (eventName === 'blackout_event') msg = "🌑 정전 이벤트 발생";
+                    logSystemEvent(msg);
+                }
+            }
+        });
+    }
+
+    function toggleDoor(type, isActive) {
+        let payload = {};
+        payload[type] = isActive;
+
+        fetch('/event/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(r => r.json()).then(data => {
+            console.log(`Door ${type} -> ${isActive} `);
+            if (isActive) {
+                let msg = "";
+                if (type === 'normal') msg = "📦 일반창고 문 열림";
+                else if (type === 'cold') msg = "🥶 냉장창고 문 열림";
+                else if (type === 'freeze') msg = "❄️ 냉동창고 문 열림";
+                logSystemEvent(msg);
+            }
+        });
+    }
+
+    function toggleEmergencyPower(isActive) {
+        fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emergency_power: isActive })
+        }).then(r => r.json()).then(data => {
+            console.log(`Emergency Power -> ${isActive} `);
+            updateControlUI();
+            if (isActive) logSystemEvent("🔋 비상 전원 가동");
+        });
+    }
+
+    function toggleSprinkler(isActive) {
+        fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sprinkler: isActive })
+        }).then(r => r.json()).then(data => {
+            console.log(`Sprinkler -> ${isActive} `);
+            updateControlUI();
+            if (isActive) logSystemEvent("💦 스프링클러 가동");
+        });
+    }
+
+    async function updateControlUI() {
+        try {
+            const control = await fetch('/api/control').then(r => r.json());
+            const events = await fetch('/api/events/status').then(r => r.json());
+
+            // 비상 전원 상태 로직
+            const emLight = document.getElementById('emergency-light');
+            const emText = document.getElementById('emergency-text');
+
+            if (control.emergency_power) {
+                // 해결 중 (노란색)
+                emLight.className = 'status-light status-yellow';
+                emText.innerText = "가동 중 (해결 중)";
+                emText.style.color = "#eab308";
+            } else if (events.blackout_event) {
+                // 위험 (빨간색)
+                emLight.className = 'status-light status-red';
+                emText.innerText = "정전 발생!";
+                emText.style.color = "#ef4444";
+            } else {
+                // 정상 (초록색)
+                emLight.className = 'status-light status-green';
+                emText.innerText = "정상";
+                emText.style.color = "#22c55e";
+            }
+
+            // 스프링클러 상태 로직
+            const spLight = document.getElementById('sprinkler-light');
+            const spText = document.getElementById('sprinkler-text');
+
+            if (control.sprinkler) {
+                // 해결 중 (노란색)
+                spLight.className = 'status-light status-yellow';
+                spText.innerText = "가동 중 (해결 중)";
+                spText.style.color = "#eab308";
+            } else if (events.fire_event) {
+                // 위험 (빨간색)
+                spLight.className = 'status-light status-red';
+                spText.innerText = "화재 발생!";
+                spText.style.color = "#ef4444";
+            } else {
+                // 정상 (초록색)
+                spLight.className = 'status-light status-green';
+                spText.innerText = "정상";
+                spText.style.color = "#22c55e";
+            }
+
+            // 방화벽 상태 로직
+            const fwLight = document.getElementById('firewall-light');
+            const fwText = document.getElementById('firewall-text');
+
+            if (events.firewall_active) {
+                fwLight.className = 'status-light status-green';
+                fwText.innerText = "활성";
+                fwText.style.color = "#22c55e";
+            } else {
+                fwLight.className = 'status-light status-gray';
+                fwText.innerText = "비활성";
+                fwText.style.color = "#94a3b8";
+            }
+
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateEventUI() {
+        try {
+            const res = await fetch('/api/events/status');
+            const events = await res.json();
+
+            document.getElementById('chk-fire').checked = events.fire_event;
+            document.getElementById('chk-vib').checked = events.vib_event;
+            document.getElementById('chk-blackout').checked = events.blackout_event;
+
+            const resDoor = await fetch('/event/get');
+            const doors = await resDoor.json();
+
+            if (document.getElementById('chk-door-normal')) document.getElementById('chk-door-normal').checked = doors.normal;
+            if (document.getElementById('chk-door-cold')) document.getElementById('chk-door-cold').checked = doors.cold;
+            if (document.getElementById('chk-door-freeze')) document.getElementById('chk-door-freeze').checked = doors.freeze;
+
+        } catch (e) { console.error(e); }
+    }
+
+    // ===== 지진 팝업 제어 =====
+    let popupTimeout = null;
+
+    function showEarthquakePopup() {
+        const popup = document.getElementById('earthquake-warning-popup');
+        if (popup && popup.style.display !== 'flex') {
+            popup.style.display = 'flex';
+
+            // 3초 후 자동 닫힘
+            if (popupTimeout) clearTimeout(popupTimeout);
+            popupTimeout = setTimeout(() => {
+                hideEarthquakePopup();
+            }, 3000);
+        }
+    }
+
+    function hideEarthquakePopup() {
+        const popup = document.getElementById('earthquake-warning-popup');
+        if (popup) {
+            popup.style.display = 'none';
+        }
+    }
+
+    function triggerFirewall() {
+        if (!confirm("방화벽을 가동하여 모든 시스템을 초기화하시겠습니까?")) return;
+
+        console.log("🛡️ Firewall Triggered: Resetting all events...");
+
+        // hideEarthquakePopup(); // 진동 수치가 떨어지면 자동으로 닫히도록 주석 처리
+
+        fetch('/api/firewall', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: true })
+        }).then(r => r.json()).then(data => {
+            console.log(data.message);
+
+            // UI 스위치 초기화
+            const switches = {
+                'chk-fire': false,
+                'chk-vib': false,
+                'chk-blackout': false,
+                'chk-door-normal': false,
+                'chk-door-cold': false,
+                'chk-door-freeze': false
+            };
+
+            for (const [id, state] of Object.entries(switches)) {
+                const el = document.getElementById(id);
+                if (el) el.checked = state;
+            }
+
+            alert("방화벽이 가동되었습니다.");
+            logSystemEvent("🛡️ 방화벽 가동 (모든 시스템 초기화)");
+        });
+    }
+
+    let earthquakeTimer = null;
+    let firewallTimer = null;
+
+    async function monitorEarthquakeRisk() {
+        try {
+            const data = await fetch('/api/sensor_data').then(r => r.json());
+            const events = await fetch('/api/events/status').then(r => r.json());
+
+            // 진동 0.5 이상 감지
+            let vibVal = parseFloat(data.vib);
+            console.log("Vibration Check:", data.vib, vibVal); // Debug
+
+            if (!isNaN(vibVal) && vibVal >= 0.5) {
+                // 1. 팝업 표시 (3초 후 자동 닫힘)
+                showEarthquakePopup();
+
+                // 2. 정전 이벤트 자동 발생 (이미 발생 안했으면)
+                if (!events.blackout_event && !events.firewall_active) {
+                    console.log("⚠️ Earthquake detected! Triggering Blackout...");
+                    toggleEvent('blackout_event', true);
+                    logSystemEvent("⚠️ 지진 감지! 정전 이벤트 자동 발생");
+                }
+
+                // 3. 10초 후 방화벽 자동 가동 예약
+                if (!firewallTimer && !events.firewall_active) {
+                    console.log("⏳ Scheduling Firewall activation in 10s...");
+                    firewallTimer = setTimeout(() => {
+                        console.log("🛡️ Auto-activating Firewall...");
+                        fetch('/api/firewall', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ active: true })
+                        });
+                        logSystemEvent("🛡️ 방화벽 자동 가동 (지진 대응)");
+                        firewallTimer = null;
+                    }, 10000);
+                }
+            } else {
+                // 진동이 0.5 미만으로 떨어짐
+                hideEarthquakePopup();
+
+                // 방화벽 예약 취소 (만약 10초 되기 전에 진동이 멈추면?)
+                if (firewallTimer) {
+                    clearTimeout(firewallTimer);
+                    firewallTimer = null;
+                }
+            }
+        } catch (e) {
+            console.error("Earthquake monitor error:", e);
+        }
+    }
+
+    async function monitorPowerRisk() {
+        try {
+            const data = await fetch('/api/sensor_data').then(r => r.json());
+            const events = await fetch('/api/events/status').then(r => r.json());
+
+            // 전력(압력) 300 이하 감지
+            let powerVal = parseFloat(data.pres);
+
+            if (!isNaN(powerVal) && powerVal <= 300) {
+                // 정전 이벤트 자동 발생 (이미 발생 안했으면)
+                if (!events.blackout_event && !events.firewall_active) {
+                    console.log("⚠️ Low Power detected! Triggering Blackout...");
+                    toggleEvent('blackout_event', true);
+                    logSystemEvent("⚡ 전력 저하 감지! 정전 이벤트 자동 발생");
+                }
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    // ===== 이벤트 감지 및 자동 해결 로직 =====
+    let isPopupOpen = false;
+    let pendingResolutions = {
+        'blackout': false,
+        'fire': false
+    };
+
+    async function monitorRisks() {
+        try {
+            const events = await fetch('/api/events/status').then(r => r.json());
+            const control = await fetch('/api/control').then(r => r.json());
+
+            // 1. 정전 발생 시 -> 비상전원이 꺼져있으면 10초 후 자동 해결
+            if (events.blackout_event && !control.emergency_power) {
+                if (!pendingResolutions.blackout) {
+                    pendingResolutions.blackout = true;
+                    console.log("⚠️ Blackout detected! Scheduling auto-resolution in 10s...");
+                    setTimeout(() => {
+                        autoResolve('blackout');
+                        pendingResolutions.blackout = false;
+                    }, 10000);
+                }
+            }
+
+            // 2. 화재 발생 시 -> 스프링클러가 꺼져있으면 10초 후 자동 해결
+            if (events.fire_event && !control.sprinkler) {
+                if (!pendingResolutions.fire) {
+                    pendingResolutions.fire = true;
+                    console.log("🔥 Fire detected! Scheduling auto-resolution in 10s...");
+                    setTimeout(() => {
+                        autoResolve('fire');
+                        pendingResolutions.fire = false;
+                    }, 10000);
+                }
+            }
+
+        } catch (e) { console.error(e); }
+    }
+
+    function autoResolve(type) {
+        if (type === 'blackout') {
+            // 비상 전원 가동
+            toggleEmergencyPower(true);
+            normalizeTemp('freezer');
+            normalizeTemp('fridge');
+            normalizeTemp('normal');
+            showEventPopup('blackout');
+            logSystemEvent("⚡ 정전 자동 해결 (비상 전원 가동)");
+        } else if (type === 'fire') {
+            // 스프링클러 가동
+            toggleSprinkler(true);
+            normalizeTemp('freezer');
+            normalizeTemp('fridge');
+            normalizeTemp('normal');
+            showEventPopup('fire');
+            logSystemEvent("💦 화재 자동 해결 (스프링클러 가동)");
+        }
+    }
+
+    function showEventPopup(type) {
+        if (isPopupOpen) return; // 이미 팝업이 떠있으면 무시
+
+        const popup = document.getElementById('event-resolution-popup');
+        const title = document.getElementById('popup-title');
+        const msg = document.getElementById('popup-msg');
+        const icon = document.getElementById('popup-icon');
+
+        isPopupOpen = true;
+
+        if (type === 'blackout') {
+            icon.innerText = "⚡";
+            title.innerText = "정전 자동 해결";
+            msg.innerHTML = "정전이 감지되어 <b>비상 전원</b>이<br>자동으로 가동되었습니다.";
+        } else if (type === 'fire') {
+            icon.innerText = "💦";
+            title.innerText = "화재 자동 해결";
+            msg.innerHTML = "화재가 감지되어 <b>스프링클러</b>가<br>자동으로 가동되었습니다.";
+        }
+
+        popup.style.display = 'flex';
+    }
+
+    function closeEventPopup() {
+        document.getElementById('event-resolution-popup').style.display = 'none';
+        isPopupOpen = false;
+    }
+
+    // ===== 주기적 업데이트 =====
+    setInterval(updateWarehouseData, 200);
+    setInterval(fetchRequests, 2000);
+    setInterval(updateControlUI, 200);
+    setInterval(updateEventUI, 200);
+    setInterval(monitorRisks, 2000);
+    setInterval(monitorRisks, 2000);
+    setInterval(monitorRisks, 2000);
+    setInterval(monitorEarthquakeRisk, 500);
+    setInterval(monitorPowerRisk, 500);
+    setInterval(monitorPowerRisk, 500);
+
+    updateControlUI();
+    updateWarehouseData();
+    loadLogs();
+    updateEventUI();
+    updateEventUI();
+    updateEventUI();
+    monitorEarthquakeRisk();
+    monitorPowerRisk();
+    monitorPowerRisk();
+
+</script>
+
+{% endblock %}

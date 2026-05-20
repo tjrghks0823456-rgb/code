@@ -1,0 +1,289 @@
+[
+    {
+        "id": 1,
+        "name": "fdadag",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 2,
+        "name": "wveew",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 3,
+        "name": "weawrba4",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 4,
+        "name": "wvvwawb",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 5,
+        "name": "vzadwv",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 6,
+        "name": "awbvw",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 7,
+        "name": "asdvXC",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 8,
+        "name": "aewvaewv",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 9,
+        "name": "webawe",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 10,
+        "name": "awbwerve",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 11,
+        "name": "yuf",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 12,
+        "name": "k67irf",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 13,
+        "name": "67k7696",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 14,
+        "name": "vacs",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 15,
+        "name": "321",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 16,
+        "name": "Zgfa3ewgVD",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 17,
+        "name": "3 ㅂㅂ34ㅁ",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 18,
+        "name": "3 ㅂㅂ34ㅁ",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 19,
+        "name": "3 ㅂㅂ34ㅁ",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 20,
+        "name": "3ㅛ4ㅅㅎ",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 21,
+        "name": "78-9798-",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 22,
+        "name": "789-78-",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 23,
+        "name": "798[7-9",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 24,
+        "name": "789070",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 25,
+        "name": "79807907",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 26,
+        "name": "7890790",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 27,
+        "name": "7890790",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 28,
+        "name": "79078907",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 29,
+        "name": "5876857",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 30,
+        "name": "657859",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true
+    },
+    {
+        "id": 31,
+        "name": "567957965",
+        "owner_id": 2,
+        "warehouse_type": "냉장",
+        "can_takeout": true
+    },
+    {
+        "id": 32,
+        "name": "김도겸",
+        "owner_id": 2,
+        "warehouse_type": "출고됨",
+        "can_takeout": false
+    },
+    {
+        "id": 33,
+        "name": "김도겸",
+        "owner_id": 2,
+        "warehouse_type": "냉동",
+        "can_takeout": true,
+        "start_time": "2025-12-04 13:00",
+        "end_time": "2025-12-09 13:00"
+    },
+    {
+        "id": 34,
+        "name": "이세정",
+        "owner_id": 2,
+        "warehouse_type": "냉장",
+        "can_takeout": true,
+        "start_time": "2025-12-04 14:00",
+        "end_time": "2025-12-25 13:30"
+    },
+    {
+        "id": 35,
+        "name": "장준영",
+        "owner_id": 2,
+        "warehouse_type": "냉장",
+        "can_takeout": true,
+        "start_time": "2025-12-04 14:00",
+        "end_time": "2025-12-20 13:31"
+    },
+    {
+        "id": 36,
+        "name": "김도겸1",
+        "owner_id": 2,
+        "warehouse_type": "일반",
+        "can_takeout": true,
+        "start_time": "2025-12-04 14:00",
+        "end_time": "2025-12-25 13:31"
+    },
+    {
+        "id": 37,
+        "name": "최현규",
+        "owner_id": 2,
+        "warehouse_type": "냉장",
+        "can_takeout": true,
+        "start_time": "2025-12-04 14:00",
+        "end_time": "2025-12-18 13:31"
+    },
+    {
+        "id": 38,
+        "name": "김경은",
+        "owner_id": 2,
+        "warehouse_type": "일반",
+        "can_takeout": true,
+        "start_time": "2025-12-04 14:00",
+        "end_time": "2025-12-17 13:31"
+    },
+    {
+        "id": 39,
+        "name": "이세종",
+        "owner_id": 2,
+        "warehouse_type": "냉장",
+        "can_takeout": true,
+        "start_time": "2025-12-04 14:00",
+        "end_time": "2025-12-18 13:32"
+    }
+]
