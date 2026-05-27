@@ -3,8 +3,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "언블리버블 (SH.SON_UNBELIEVABLE) - 디지털 편향 거울치료 디톡스",
-  description: "YouTube 시청 기록을 정량 분석하여 주관적 생각과 실제 소비 간의 인지 부조화를 진단하고 개인 맞춤형 디톡스 가이드라인을 제시합니다.",
+  title: "언블리버블 (SH.SON_UNBELIEVABLE) - 디지털 편향 진단 및 맞춤 디톡스",
+  description: "YouTube 시청 기록을 정량 분석하여 사전 자가진단 결과와 실제 소비 간의 메타인지 격차를 시각적으로 분석하고 개인 맞춤형 디톡스 가이드를 제시합니다.",
 };
 
 export default function RootLayout({

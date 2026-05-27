@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/analysis/run")
 async def run_analysis(
     file_id: str,
-    user_id: str = "test-user-id"
+    user_id: str = "00000000-0000-0000-0000-000000000001"
 ):
     """
     Triggers the quantitative and qualitative analysis pipelines.

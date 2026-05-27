@@ -18,9 +18,9 @@ class MockDatabaseStore:
         self.mission_logs = {}
         self.audit_logs = []
         
-        # Populate initial test user profile
-        self.profiles["test-user-id"] = {
-            "id": "test-user-id",
+        # Populate initial test user profile with standard UUID
+        self.profiles["00000000-0000-0000-0000-000000000001"] = {
+            "id": "00000000-0000-0000-0000-000000000001",
             "email": "seokhwan.son@gmail.com",
             "nickname": "손석환",
             "birth_year": 1999,
@@ -30,7 +30,7 @@ class MockDatabaseStore:
         }
 
     def insert(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info(f"[MockDB] Inserting into {table}: {list(data.keys())}")
+        logger.info(f"[MockDB] Inserting/Upserting into {table}: {list(data.keys())}")
         if table == "profiles":
             self.profiles[data["id"]] = data
         elif table == "raw_file":
@@ -55,7 +55,27 @@ class MockDatabaseStore:
 
     def select(self, table: str, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         logger.info(f"[MockDB] Selecting from {table} with filters {filters}")
-        store = getattr(self, f"{table}s" if not table.endswith("y") else f"{table[:-1]}ies", None)
+        
+        # Exact table stores mapping to resolve plurals / name mismatches
+        TABLE_STORES = {
+            "profiles": "profiles",
+            "raw_file": "raw_files",
+            "norm_event": "norm_events",
+            "session_text": "session_texts",
+            "nlp_result": "nlp_results",
+            "score_run": "score_runs",
+            "score_axis": "score_axes",
+            "detox_plan": "detox_plans",
+            "mission_log": "mission_logs",
+            "audit_log": "audit_logs",
+        }
+        
+        mapped_store_name = TABLE_STORES.get(table)
+        if mapped_store_name:
+            store = getattr(self, mapped_store_name, None)
+        else:
+            store = getattr(self, f"{table}s" if not table.endswith("y") else f"{table[:-1]}ies", None)
+            
         if store is None and table == "audit_log":
             store = self.audit_logs
             
@@ -87,17 +107,17 @@ class DatabaseClient:
                 self.is_mock = True
 
     def save_data(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Saves a row of data into Supabase or falls back to local MockDB."""
+        """Saves a row of data into Supabase (upsert) or falls back to local MockDB."""
         if self.is_mock or not self.client:
             return mock_db.insert(table, data)
         try:
-            res = self.client.table(table).insert(data).execute()
+            res = self.client.table(table).upsert(data).execute()
             # Supabase response object has data field
             if hasattr(res, "data") and res.data:
                 return res.data[0]
             return data
         except Exception as e:
-            logger.warning(f"Supabase write failed on {table}: {e}. Saving to local memory instead.")
+            logger.warning(f"Supabase write (upsert) failed on {table}: {e}. Saving to local memory instead.")
             return mock_db.insert(table, data)
 
     def fetch_data(self, table: str, query_filter: Dict[str, Any] = None) -> List[Dict[str, Any]]:

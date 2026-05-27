@@ -9,7 +9,7 @@ router = APIRouter()
 @router.post("/detox/generate")
 async def generate_detox_plan(
     run_id: str,
-    user_id: str = "test-user-id"
+    user_id: str = "00000000-0000-0000-0000-000000000001"
 ):
     """
     Triggers Gemini 2.5 Flash to generate custom Reverse Queries and Detox Missions.
@@ -68,7 +68,7 @@ async def generate_detox_plan(
         raise HTTPException(status_code=500, detail=f"Failed to generate detox plan: {str(e)}")
 
 @router.get("/detox/plan")
-async def get_active_plan(user_id: str = "test-user-id"):
+async def get_active_plan(user_id: str = "00000000-0000-0000-0000-000000000001"):
     """Fetches the latest detox plan and its logs for a user."""
     plans = db_client.fetch_data("detox_plan", {"user_id": user_id})
     if not plans:

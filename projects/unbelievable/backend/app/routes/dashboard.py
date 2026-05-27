@@ -9,7 +9,7 @@ router = APIRouter()
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
     run_id: str,
-    user_id: str = "test-user-id"
+    user_id: str = "00000000-0000-0000-0000-000000000001"
 ):
     """
     Returns dashboard overview details:
@@ -151,7 +151,7 @@ async def get_dashboard_summary(
                 "worst_axis_code": max_gap_axis,
                 "worst_axis_name": axis_names[max_gap_axis],
                 "worst_gap_value": round(meta_gap[max_gap_axis]["gap"], 1),
-                "message": f"주관적으로 인지하는 것보다 실제 데이터상으로 '{axis_names[max_gap_axis]}' 영역의 편향이 가장 큽니다. 거울 치료와 의도적 디톡스가 절실히 요구됩니다."
+                "message": f"스스로 사전 인지했던 점수 대비 실제 YouTube 소비 데이터상으로 '{axis_names[max_gap_axis]}' 영역의 차이가 가장 크게 집계되었습니다. 가벼운 일상 추천 루틴 수정을 통해 성향의 균형을 복원하시는 것을 추천합니다."
             }
         }
     except Exception as e:

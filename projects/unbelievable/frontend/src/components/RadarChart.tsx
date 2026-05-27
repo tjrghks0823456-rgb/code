@@ -14,7 +14,7 @@ import {
 
 interface RadarDataPoint {
   subject: string;
-  주관적_인식: number; // Survey score
+  자가진단_결과: number; // Survey score
   실제_분석값: number;  // Actual score
 }
 
@@ -27,7 +27,7 @@ export default function RadarChart({ data }: RadarChartProps) {
     <div className="w-full h-[360px] bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
       <div className="absolute top-4 left-6">
         <h3 className="text-lg font-bold text-white font-heading">메타인지 편향성 비교 차트</h3>
-        <p className="text-xs text-slate-400">주관적인 자가진단(가설)과 실제 분석 데이터의 갭 분석</p>
+        <p className="text-xs text-slate-400">사전 자가진단(예측)과 사후 실제 데이터 분석 결과 대조</p>
       </div>
       
       <div className="w-full h-full pt-8">
@@ -47,8 +47,8 @@ export default function RadarChart({ data }: RadarChartProps) {
             
             {/* Subjective Survey (Blue Glow) */}
             <Radar
-              name="주관적 자가진단 (사전)"
-              dataKey="주관적_인식"
+              name="자가진단 결과 (예측)"
+              dataKey="자가진단_결과"
               stroke="#3b82f6"
               fill="#3b82f6"
               fillOpacity={0.15}
@@ -56,7 +56,7 @@ export default function RadarChart({ data }: RadarChartProps) {
             
             {/* Objective Actual (Purple Glow) */}
             <Radar
-              name="실제 분석 데이터 (사후)"
+              name="실제 분석 결과 (사후)"
               dataKey="실제_분석값"
               stroke="#a855f7"
               fill="#a855f7"

@@ -20,6 +20,7 @@ export default function UploadPage() {
   });
   
   const [uploading, setUploading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleSurveyChange = (axis: string, value: number) => {
     setSurvey(prev => ({ ...prev, [axis]: value }));
@@ -30,13 +31,52 @@ export default function UploadPage() {
     if (!file) return;
     
     setUploading(true);
-    // In a real application, calls POST /api/v1/upload and POST /api/v1/analysis/run
-    // For this prototype, we simulate a 2-second processing state
-    setTimeout(() => {
+    setErrorMsg(null);
+    
+    try {
+      // 1. Upload File via FormData
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const uploadRes = await fetch("http://localhost:8000/api/v1/upload?user_id=00000000-0000-0000-0000-000000000001", {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!uploadRes.ok) {
+        throw new Error(`파일 업로드 실패 (HTTP 상태코드 ${uploadRes.status})`);
+      }
+      
+      const uploadData = await uploadRes.json();
+      const fileId = uploadData.file_id;
+      
+      if (!fileId) {
+        throw new Error("서버로부터 파일 ID를 전달받지 못했습니다.");
+      }
+      
+      // 2. Trigger Analysis Calculation
+      const analysisRes = await fetch(`http://localhost:8000/api/v1/analysis/run?file_id=${fileId}&user_id=00000000-0000-0000-0000-000000000001`, {
+        method: "POST",
+      });
+      
+      if (!analysisRes.ok) {
+        throw new Error(`정량 편향 분석 실행 실패 (HTTP 상태코드 ${analysisRes.status})`);
+      }
+      
+      const analysisData = await analysisRes.json();
+      const runId = analysisData.run_id;
+      
+      if (!runId) {
+        throw new Error("분석 실행 ID(run_id) 수신 실패");
+      }
+      
       setUploading(false);
-      // Navigate to dashboard with mock run_id
-      router.push("/dashboard?run_id=prototype-run-id");
-    }, 2000);
+      router.push(`/dashboard?run_id=${runId}`);
+    } catch (err: any) {
+      console.error("API connection failed:", err);
+      setErrorMsg(err.message || "서버 연결에 실패했습니다.");
+      setUploading(false);
+    }
   };
 
   return (
@@ -153,6 +193,16 @@ export default function UploadPage() {
                 </div>
               </div>
             </div>
+            
+            {errorMsg && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-center">
+                <p className="text-xs text-red-400 font-semibold leading-relaxed">
+                  ⚠️ 분석 중 오류가 발생했습니다.<br />
+                  백엔드 서버(FastAPI: Port 8000)가 정상 실행 중인지 확인해주세요.<br />
+                  <span className="text-[10px] text-red-400/80">상세 오류: {errorMsg}</span>
+                </p>
+              </div>
+            )}
             
             <div className="flex gap-4">
               <button type="button" onClick={() => setStep(2)} className="w-1/3 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl transition-all">

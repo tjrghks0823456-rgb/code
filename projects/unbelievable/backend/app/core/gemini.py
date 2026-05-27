@@ -40,9 +40,9 @@ class GeminiClient:
             - Dominant Topics Consumed: {json.dumps(dominant_topics)}
             
             Generate a JSON containing:
-            1. overall_summary: A 2-3 sentence warning/explanation.
-            2. reverse_queries: 3-5 alternative search query objects (query_text, expected_topic, why_this_helps).
-            3. missions: A 3-day or 7-day plan containing action items (title, action_steps, success_condition, blocked_surface).
+            1. overall_summary: A 2-3 sentence academic explanation.
+            2. reverse_queries: 3 alternative search query objects (query_text, expected_topic, why_this_helps).
+            3. missions: A 3-day plan containing action items (id, title, description, success_condition, effort_level, input_type, choices).
             """
             
             response = model.generate_content(
@@ -72,34 +72,79 @@ class GeminiClient:
         overall_summary = ""
         
         if lowest_axis == "TDS": # 주제다양성
-            overall_summary = f"소비 중인 콘텐츠 주제가 '{', '.join(dominant_topics[:2])}'에 과도하게 편중되어 있어 미디어 시야가 좁아진 상태입니다. 다양한 관심사를 수동적으로 알고리즘에 의존해 시청하기보다, 새로운 분야의 정보를 의도적으로 검색하여 뇌의 균형 잡힌 인지 자극을 유도해야 합니다."
+            overall_summary = f"소비 중인 콘텐츠 주제가 '{', '.join(dominant_topics[:2])}'에 다소 집중되어 있어 관심 영역의 편향 가능성이 있습니다. 수동 소비 흐름에서 벗어나 새로운 카테고리의 유익 정보를 가볍게 탐색하며 뇌의 균형 잡힌 자극을 유도하는 루틴을 제안합니다."
             reverse_queries = [
-                {"query_text": "인문학 기초 입문 강연", "expected_topic": "Humanities", "why_this_helps": "IT/엔터에 편향된 관심사에서 인문학적 교양으로 영역을 대폭 확장합니다."},
-                {"query_text": "미술사조 쉽게 이해하기", "expected_topic": "Arts", "why_this_helps": "새로운 시각적 자극과 예술적 뇌 영역을 활성화시킵니다."}
+                {"query_text": "역사 및 세계사 핵심 정리 다큐", "expected_topic": "History", "why_this_helps": "IT 및 정보 위주의 관심사에서 인문학 교양으로 영역을 다양하게 넓혀 줍니다."},
+                {"query_text": "현대 미술 쉽게 감상하는 법", "expected_topic": "Arts", "why_this_helps": "낯선 주제의 영상을 통해 시각적 자극을 다양화하고 폭넓은 미디어 관찰 능력을 돕습니다."}
             ]
             missions = [
-                {"id": "m1", "title": "낯선 카테고리 영상 시청", "action_steps": "평소 한 번도 보지 않았던 '역사' 혹은 '다큐멘터리' 채널 영상을 의도적으로 1개 시청합니다.", "success_condition": "영상 10분 이상 시청 완료", "blocked_surface": "shorts_feed"},
-                {"id": "m2", "title": "서점 또는 온라인 도서 주제 검색", "action_steps": "베스트셀러 인문/철학 섹션을 살펴보고 관심이 생기는 키워드를 1개 검색해 봅니다.", "success_condition": "관심 도서 정보 탐색 완료", "blocked_surface": "none"}
+                {
+                    "id": "m1",
+                    "title": "낯선 카테고리 하나 구경하기",
+                    "description": "평소 전혀 보지 않던 '교양/다큐' 섹션 영상을 하나 클릭하고 무엇에 관한 것인지 확인해 보세요.",
+                    "success_condition": "선택만 하면 완료",
+                    "effort_level": "low",
+                    "input_type": "choice",
+                    "choices": ["역사/문학", "예술/디자인", "우주/자연과학", "경제/비즈니스"]
+                },
+                {
+                    "id": "m2",
+                    "title": "관심 도서 가벼운 한 줄 메모",
+                    "description": "오늘 온라인 서점에서 가장 관심이 생기는 도서 제목 하나를 복사하거나 메모해 보세요.",
+                    "success_condition": "메모 작성 시 완료",
+                    "effort_level": "low",
+                    "input_type": "text"
+                }
             ]
         elif lowest_axis == "SBS": # 출처균형
-            overall_summary = "소수의 지배적인 유튜버/채널 영상만 집중적으로 청취하여 에코챔버(Echo Chamber) 현상에 갇힐 위험성이 높습니다. 정보원(Source)의 고착화는 인지적 동조 현상을 부추기므로, 다채로운 뉴스사나 공영 채널 등 출처의 균형을 복원하는 시도가 급선무입니다."
+            overall_summary = "소수 채널이나 유사 정보원의 영상만 지속 수용하여 편향적 확신이 생길 가능성이 관찰됩니다. 균형 잡힌 시각 형성을 돕기 위해 공영 언론사나 국제 외신 등의 신뢰도 높은 다른 정보원들을 가볍게 비교 분석해보는 루틴을 권장합니다."
             reverse_queries = [
-                {"query_text": "KBS 다큐 공감", "expected_topic": "News", "why_this_helps": "개인 크리에이터 위주의 출처에서 신뢰도 있는 공영 채널로 정보원을 넓힙니다."},
-                {"query_text": "BBC News 코리아", "expected_topic": "News", "why_this_helps": "외신 채널을 통해 국내 관점에서 벗어난 해외 시각을 경험합니다."}
+                {"query_text": "공영방송 대기획 다큐멘터리", "expected_topic": "News", "why_this_helps": "1인 미디어 편중에서 탈피해 고도의 팩트체크를 거친 공인 정보원으로 출처 균형을 도모합니다."},
+                {"query_text": "국제 시사 보도 및 시각 비교", "expected_topic": "Global News", "why_this_helps": "국내 크리에이터의 관점을 넘어 다각도의 균형 잡힌 세계적 안목을 돕습니다."}
             ]
             missions = [
-                {"id": "m1", "title": "공영/외신 뉴스 1회 시청", "action_steps": "개인 해설 방송 대신 공인된 뉴스 미디어가 직접 보도하는 뉴스를 1회 정독합니다.", "success_condition": "보도 영상 5분 이상 시청", "blocked_surface": "personal_stream"},
-                {"id": "m2", "title": "정보 출처 리스트 정리", "action_steps": "오늘 본 채널들을 분석하고 평소 시청하지 않던 채널명을 3개 적어 구독 목록에 추가해 봅니다.", "success_condition": "3개 채널 신규 추가 완료", "blocked_surface": "none"}
+                {
+                    "id": "m1",
+                    "title": "서로 다른 언론사 뉴스 헤드라인 체크",
+                    "description": "두 개의 서로 다른 언론사의 동일 이슈 관련 뉴스를 읽어본 뒤, 더 객관적이라고 느껴지는 논조를 골라보세요.",
+                    "success_condition": "체크 완료 시 인정",
+                    "effort_level": "low",
+                    "input_type": "choice",
+                    "choices": ["언론사 A가 객관적", "언론사 B가 객관적", "두 관점이 균형 잡힘"]
+                },
+                {
+                    "id": "m2",
+                    "title": "신뢰할 만한 대안 정보 채널 하나 추천받기",
+                    "description": "평소 보던 채널 외에 유용하다고 생각되는 학술적 채널 이름 하나만 적어보세요.",
+                    "success_condition": "입력 완료 시 자동 인정",
+                    "effort_level": "low",
+                    "input_type": "text"
+                }
             ]
-        else: # Default or safety/emotion/agency issues
-            overall_summary = "알고리즘이 주는 즉각적인 숏폼 도파민 피드와 검색 없이 흘러가는 피동적 소비가 축적되어 미디어 주도성이 많이 무너진 상태입니다. 화면 흑백 모드 가동 및 주체적인 목표 검색을 통해 자가 제어력을 회복하고 도파민 소비 회로를 깨끗이 씻어내야 합니다."
+        else: # Default (UAS/SMS/EBS/VOS 등 주도성 및 유해안전 관련)
+            overall_summary = "알고리즘 추천 영상 피드의 연속 노출 및 자동 시청의 영향으로 미디어 소비 주도성이 감소한 경향성이 발견되었습니다. 의도적인 단어 검색과 클릭 전 짧은 생각 루틴을 통해 수동적 흐름을 완화하고 미디어 조절 능력을 복원하는 데 도움을 드립니다."
             reverse_queries = [
-                {"query_text": "디지털 디톡스 실천 방안", "expected_topic": "Lifestyle", "why_this_helps": "스스로 미디어 중독 상태를 인지하고 실천적인 복원 팁을 검색합니다."},
-                {"query_text": "마음 챙김 명상 음악", "expected_topic": "Health", "why_this_helps": "빠른 자극적 화면 대신 소리 중심의 뇌 휴식을 경험합니다."}
+                {"query_text": "미디어 소비 조절과 디지털 웰빙", "expected_topic": "Lifestyle", "why_this_helps": "수동적 추천 노출에서 주체적인 사용 패턴 개선 방향을 직접 인지하도록 돕습니다."},
+                {"query_text": "자연의 소리 명상 유도", "expected_topic": "Health", "why_this_helps": "빠르고 자극적인 전개가 아닌 소리와 흐름에 집중하여 뇌의 휴식과 여유를 유도합니다."}
             ]
             missions = [
-                {"id": "m1", "title": "스마트폰 화면 흑백 모드 설정", "action_steps": "스마트폰의 접근성 설정에서 화면 색상을 '흑백'으로 전환하여 시각적 도파민 유도를 원천 차단합니다.", "success_condition": "흑백 모드로 하루 3시간 이상 사용", "blocked_surface": "youtube_shorts"},
-                {"id": "m2", "title": "알고리즘 피드 숨기기 실천", "action_steps": "유튜브 홈 화면에 진입하자마자 피드를 보지 않고, 오직 상단 '검색창'에 사전에 정해둔 검색어만 검색해 영상을 찾습니다.", "success_condition": "추천 피드 클릭 0회 달성", "blocked_surface": "home_feed"}
+                {
+                    "id": "m1",
+                    "title": "영상 재생 전 '클릭 의도' 멈춤 및 선택",
+                    "description": "영상을 클릭하여 시청하기 전, 내가 이 영상을 왜 누르는지 이유를 가볍게 골라보세요.",
+                    "success_condition": "선택 즉시 완료",
+                    "effort_level": "low",
+                    "input_type": "choice",
+                    "choices": ["정보 습득", "오락 및 기분전환", "무의식적 습관", "심심함"]
+                },
+                {
+                    "id": "m2",
+                    "title": "오늘 본 최선/최악의 제목 한 줄 남기기",
+                    "description": "오늘 본 콘텐츠 중 가장 가치 있었던 영상 제목이나 가장 호기심만 유도했던 낚시성 제목 하나를 적어보세요.",
+                    "success_condition": "한 줄 작성 시 완료",
+                    "effort_level": "low",
+                    "input_type": "text"
+                }
             ]
             
         return {

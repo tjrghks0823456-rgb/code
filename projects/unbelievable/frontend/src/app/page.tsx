@@ -30,7 +30,7 @@ export default function LandingPage() {
         
         {/* Glow badge */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/25 text-purple-300 text-xs font-semibold mb-8 animate-pulse shadow-neon-purple">
-          🧠 당신의 알고리즘 뇌를 위한 거울 치료
+          🧠 당신의 알고리즘 미디어 소비 진단
         </div>
 
         {/* Big Bold Headline */}
@@ -40,9 +40,9 @@ export default function LandingPage() {
         </h1>
 
         <p className="text-base md:text-lg text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed font-body">
-          우리는 평소 자신이 매우 균형 있고 유익한 콘텐츠를 소비하고 있다고 믿습니다.<br className="hidden sm:inline" />
-          귀하의 YouTube 실제 시청 데이터를 정량 분석하여 주관적 자기 인식과<br className="hidden sm:inline" />
-          실제 데이터 간의 <strong>'메타인지 착각 격차(Meta-gap)'</strong>를 시각화합니다.
+          우리는 평소 자신이 매우 균형 있고 유익한 콘텐츠를 소비하고 있다고 생각합니다.<br className="hidden sm:inline" />
+          귀하의 YouTube 실제 시청 데이터를 정량 분석하여 사전 자가진단 결과와<br className="hidden sm:inline" />
+          실제 데이터 간의 <strong>'메타인지 격차(Meta-gap)'</strong>를 시각화합니다.
         </p>
 
         {/* CTA Button */}
@@ -68,9 +68,9 @@ export default function LandingPage() {
             <div className="w-12 h-12 bg-purple-500/10 rounded-2xl flex items-center justify-center text-xl text-purple-400 mb-4 group-hover:scale-110 transition-all">
               ⚡
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">가짜 도파민 필터링</h3>
+            <h3 className="text-lg font-bold text-white mb-2">무의식 노출 필터링</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              5초 미만의 무의식적 쇼츠/썸네일 탭 행위를 걸러냅니다. 진정성 있는 관람 시간 위주로 당신의 진짜 정보 노출 상태를 필터링합니다.
+              5초 미만의 무의식적 쇼츠/썸네일 탭 행위를 제외합니다. 의미 있는 관람 시간 위주로 당신의 실제 정보 노출 상태를 필터링합니다.
             </p>
           </div>
 
@@ -80,7 +80,7 @@ export default function LandingPage() {
             </div>
             <h3 className="text-lg font-bold text-white mb-2">메타인지 갭 시각화</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              사전 자가진단(설문)과 실제 YouTube 소비 데이터(객관)의 6축 레이더 갭 오버레이 분석으로 당신의 알고리즘 인지 부조화를 폭로합니다.
+              사전 자가진단(예측)과 실제 YouTube 소비 데이터(사후)의 6축 레이더 갭 오버레이 분석으로 당신의 알고리즘 인지 격차를 시각적으로 분석합니다.
             </p>
           </div>
 
