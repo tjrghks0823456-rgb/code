@@ -1,116 +1,88 @@
 # 🧠 언블리버블 (SH.SON_UNBELIEVABLE)
 
-> **LLM 기반 디지털 콘텐츠 편향성 정량 진단 및 거울 치료형 디톡스 시스템**
+> **디지털 콘텐츠 소비 편향 진단 및 행동 교정용 맞춤형 디톡스 포털 (MVP)**
 >
-> 본 프로젝트는 사용자가 인지하지 못한 채 알고리즘에 수동 노출되어 발생한 미디어 소비 편향성을 교정하기 위한 융합형 웹 애플리케이션 프로토타입입니다. 
+> 본 프로젝트는 사용자가 인지하지 못한 채 알고리즘 추천 피드에 노출되어 발생한 미디어 소비 편향성을 시각화하고, 사전 인지 결과와의 비교 분석을 통해 메타인지 인식을 환기하며, 작은 행동 변화로 미디어 주도성을 회복하도록 돕는 웹 서비스입니다.
 
 ---
 
-## 🌟 핵심 컨셉 (Core Concept)
+## 🌟 핵심 기능 (Core Features)
 
-1. **가짜 도파민 필터링 (Fake Dopamine Filtering)**:
-   - 무의식적 스크롤(세로형 숏폼 등)로 인한 5초 미만의 초단기 무의식 관람 데이터를 과감하게 제거합니다.
-   - 이를 통해 정량 분석의 신뢰도를 극대화하여 진정한 정보 습득 시간 중심의 편향성을 포착합니다.
+1. **무의식 노출 필터링**:
+   - 무의식적 스크롤로 인한 5초 미만의 짧은 관람 데이터를 제외하여, 실제 의식적인 정보 소비 상태 중심의 정량 진단 결과를 산출합니다.
 
-2. **메타인지 갭 (Meta-cognitive Gap) & 거울 치료**:
-   - 파일 업로드 전 사용자가 직접 작성하는 **주관적 6축 진단 점수**와 실제 시청 데이터를 분석해 얻은 **객관적 6축 점수**를 동일한 레이더 차트에 오버레이합니다.
-   - 인지부조화 수준을 **'착각 지수(Misconception Index)'**로 정량 수치화하여 시각적 충격을 주는 거울 치료 요법을 구현합니다.
+2. **메타인지 격차 (Meta-gap) 대조**:
+   - 사용자가 사전 수행한 **자가진단 결과(예측)**와 실제 시청 데이터를 분석하여 도출된 **실제 데이터 분석 결과(사후)**를 6축 레이더 차트에 오버레이하여 두 지표 간의 격차(메타인지 갭)를 인지할 수 있도록 제공합니다.
 
-3. **정량-생성 결합형 보완 아키텍처**:
-   - **정량적 스코어링 엔진**: 통계 수식(Shannon Entropy, Herfindahl-Hirschman Index)을 적용하여 파이썬 코드가 점수와 16가지 미디어 MBTI 성향을 결정적(Deterministic)으로 산출합니다.
-   - **생성형 AI (Gemini 2.5 Flash)**: 산출된 점수 데이터와 부족한 관심 키워드를 기반으로, 자연어 디톡스 행동 지침 및 대안 검색어(Reverse Query) 후보를 안전하고 실용적인 JSON 스키마 구조로 생성하는 역할에만 특화시킵니다.
+3. **DSAO 16유형 캐릭터 매핑 및 도감**:
+   - 분석 결과(UAS, TDS, SMS 및 롱폼 비율)를 기준으로 16가지 고유 DSAO 유형(예: `PNSF` - 알고리즘 도파민 루프, `DNML` - 한우물 연구자)을 판정하고, 재미있으면서도 학술적인 설명 카드 형태로 보여줍니다.
+   - 전체 16가지 알고리즘 유형을 카드로 비교할 수 있는 **유형 성향 도감 (`/types`)**을 제공합니다.
 
----
-
-## 📁 디렉터리 및 모듈 아키텍처 (Architecture)
-
-프로토타입은 향후 확장 및 개별 컴포넌트 교체가 극히 용이하도록 철저하게 레이어를 나눈 클린 아키텍처(Clean Architecture) 구조로 설계되었습니다.
-
-```text
-projects/unbelievable/
-├── db/
-│   └── schema.sql         # Supabase PostgreSQL DDL 스키마 (RLS 정책 및 FK)
-├── backend/
-│   ├── app/
-│   │   ├── core/
-│   │   │   ├── config.py    # 환경 설정 및 API 키 관리 (Pydantic Settings)
-│   │   │   ├── database.py  # Supabase 통신 및 오프라인 데모 세션 스텁(Stub)
-│   │   │   ├── nlp.py       # Google Cloud Natural Language API 통신 및 모의 처리
-│   │   │   ├── scoring.py   # 6축 지표 수학적 채점 및 16유형 분류 코어 엔진
-│   │   │   ├── youtube.py   # YouTube Data API 채널 정보 탐색 및 캐싱
-│   │   │   └── gemini.py    # Gemini 2.5 Flash 연동 및 구조화된 JSON 디톡스 플랜 생성
-│   │   ├── routes/
-│   │   │   ├── upload.py    # Google Takeout 시청 및 검색기록 파일 전처리
-│   │   │   ├── analysis.py  # 자연어 파싱, 점수화 및 Supabase 테이블 적재 오케스트레이션
-│   │   │   ├── detox.py     # Gemini 연동 디톡스 생성 및 진척도 체크용 라우트
-│   │   │   └── dashboard.py # 메타인지 갭(자가진단 vs 실제분석) 편차 계산 라우트
-│   │   └── main.py          # FastAPI 진입점 및 CORS 초기화
-│   └── requirements.txt     # Python 의존성 정의
-└── frontend/
-    ├── src/
-    │   ├── app/
-    │   │   ├── layout.tsx   # Google Fonts 연동 및 전역 그라데이션 레이아웃
-    │   │   ├── page.tsx     # 다크 테마 및 유리모핑 카드 중심 웅장한 서비스 랜딩
-    │   │   ├── upload/      # 동의서 서명 -> 파일 드롭 -> 사전 자가진단 3단계 위저드
-    │   │   ├── dashboard/   # 5단계 위험 신호등, Recharts 레이더 오버레이, 착각지수 카드
-    │   │   └── mission/     # 카피 가능한 Reverse Query, 체크리스트, 미션 진척도 바
-    │   └── components/
-    │       └── RadarChart.tsx # Recharts 기반 6축 메타인지 갭 가시화 컴포넌트
-    ├── tailwind.config.js   # Tailwind 네온 섀도우 및 폰트 테마 설정
-    ├── postcss.config.js    # PostCSS 빌드 파이프라인
-    ├── tsconfig.json        # Next.js 전용 TypeScript 빌드 환경 구성
-    └── package.json         # React 18, Next.js 14, Recharts 등 프론트엔드 의존성
-```
+4. **가볍고 자율적인 디톡스 루틴**:
+   - 사용자에게 완료 증빙이나 차단 강제성을 부여하는 무거운 형태를 배제하고, '재생 전 질문에 응답하기', '한 줄 소감 남기기' 등 일상에서 바로 실천 가능한 저부하(Low-effort) 행동 미션을 설계하여 자율적인 참여를 권장합니다.
 
 ---
 
-## 📊 6대 인지 지표 및 산출 공식 (Scoring Engine)
+## 🔌 프론트엔드 - 백엔드 API 연결 구조 (API Architecture)
 
-- **주제 다양성 (TDS - Topic Diversity Score)**:
-  - 수집된 영상 카테고리의 갯수를 기반으로 Shannon Entropy 수식 적용: $H = -\sum P_i \ln P_i$
-  - 다양하게 볼수록 점수가 100점에 가깝게 전사됩니다.
-- **출처 균형 (SBS - Source Balance Score)**:
-  - 특정 채널 독점 편중성을 측정하기 위해 HHI(Herfindahl-Hirschman Index) 산출: $HHI = \sum S_i^2$
-  - 독점 채널 점유율이 높을수록 감점 처리됩니다.
-- **감정 균형 (EBS - Emotion Balance Score)**:
-  - 구글 NL API의 감정 점수(Sentiment Magnitude & Score)의 평균치를 구합니다.
-- **관점 개방성 (VOS - Viewpoint Openness Score)**:
-  - 시청 채널의 미디어 포지셔닝 스코어의 분산(Variance)과 고유성 강도를 연계합니다.
-- **유해/자극 안전 (SMS - Stimulus Media Safety)**:
-  - 구글 NL API의 유해성 카테고리 감지 빈도 및 자극적 어휘(썸네일 유도용 낚시 단어군)의 매칭 강도를 반영하여 계산합니다.
-- **사용자 주도성 (UAS - User Action Sovereignty)**:
-  - 유튜브 전체 시청 행동 로그 중 수동적인 알고리즘 피드 연속 재생 대비 능동적 통합 검색(Search) 시도의 비율을 계산합니다.
+FastAPI 백엔드는 `/api/v1` prefix 라우터 환경에서 동작하며, 프론트엔드는 다음 백엔드 API 세트와 유기적으로 통신합니다.
 
-### 🧬 16가지 미디어 소비 성향 유형 (Media MBTI)
-6축 지표의 이진(High/Low) 조합을 바탕으로 4비트 코드를 구성하여 **16가지 고유 성향**을 판정합니다. (예: `LLLH` - 자극만을 쫓는 **도파민 추적자**)
+* **업로드 및 분석 흐름**:
+  1. `POST http://localhost:8000/api/v1/upload` : 시청 기록 파일 업로드 ➡️ `file_id` 획득
+  2. `POST http://localhost:8000/api/v1/analysis/run?file_id={file_id}` : 정량 채점 파이프라인 가동 ➡️ `run_id` 획득
+  3. `GET http://localhost:8000/api/v1/dashboard/summary?run_id={run_id}` : 6축 데이터, 메타인지 격차 및 실제 DSAO 유형 획득 ➡️ 대시보드 시각화
+* **디톡스 및 미션 흐름**:
+  1. `POST http://localhost:8000/api/v1/detox/generate?run_id={run_id}` : 대시보드 진입 버튼 클릭 시 Gemini 또는 Mock 플랜 설계 ➡️ `plan_id` 획득
+  2. `GET http://localhost:8000/api/v1/detox/plan` : 현재 활성화된 대체 키워드 및 미션 목록 조회
+  3. `PATCH http://localhost:8000/api/v1/detox/mission/{log_id}` : 미션 자율 수행 상태 업데이트
 
 ---
 
-## 🛠️ 로컬 설치 및 실행 가이드 (Setup Guide)
+## 🛠️ 실행 및 사용 방법 (How to Run)
 
-### 1. Database 설정 (Supabase)
-1. Supabase 콘솔에서 새 프로젝트를 생성합니다.
-2. `db/schema.sql` 내용을 복사하여 SQL Editor에 넣고 실행합니다.
-3. RLS 정책 및 테이블 구조가 자동으로 활성화됩니다.
+프로젝트 루트에 위치한 배치 파일로 프론트엔드와 백엔드를 즉시 일괄 실행하거나, 개별 쉘에서 수동 가동할 수 있습니다.
 
-### 2. 백엔드 실행 (FastAPI)
-```bash
-cd backend
-python -m venv venv
-# Windows
-.\venv\Scripts\activate
+### 1. 원클릭 원격 가동 (추천)
+* 프로젝트 루트의 `start_unbelievable.bat` 파일을 더블클릭합니다.
+* 자동으로 Python 가상환경(`venv`) 활성화, uvicorn 포트 8000 실행, Next.js 프론트엔드 포트 3000 구동 후 브라우저가 자동 기동됩니다.
 
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-- API 서버는 `http://localhost:8000` 에서 구동됩니다.
-- 외부 API 키가 설정되지 않은 경우에도 동작하도록 지능적인 Mock Fallback 로직이 내장되어 있습니다.
+### 2. 수동 기동
+* **백엔드 (FastAPI)**:
+  ```bash
+  cd backend
+  # 가상환경 활성화 (Windows 기준)
+  .\venv\Scripts\activate
+  uvicorn app.main:app --reload --port 8000
+  ```
+* **프론트엔드 (Next.js)**:
+  ```bash
+  cd frontend
+  npm run dev
+  ```
 
-### 3. 프론트엔드 실행 (Next.js)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-- 브라우저에서 `http://localhost:3000` 에 접속하면 웅장한 다크 모드 디지털 디톡스 포털을 즉시 감상하실 수 있습니다.
-- 백엔드 서버가 구동 중이지 않은 상태에서도 끊김 없는 프로토타입 시연을 위한 **하이브리드 오프라인 스텁 세션**을 지원합니다.
+---
+
+## 📊 현재 MVP의 구현 상태 (Implementation Status)
+
+현재 프로토타입은 프론트엔드 화면 구성 중심의 단계에서 나아가, 실제 로직이 매끄럽게 연결되는 **MVP(최소 기능 제품)**로 고도화되었습니다.
+
+### ✅ 실제 구현된 것 (Live Implementation)
+* **프론트-백 실제 데이터 연동**: 업로드 버튼 비활성화, 실시간 업로드 ➡️ 분석 실행 ➡️ 분석 완료 ID 수신 후 대시보드 리다이렉트 흐름이 100% 실서버 요청 및 JSON 응답으로 구현되어 있습니다.
+* **Google Takeout JSON 파싱**: 업로드된 파일이 JSON 포맷일 경우, 실제 구글 테이크아웃 YouTube `watch-history.json` 배열을 직접 파싱하여 비디오 제목(Watched 제거), 검색어(Searched for 제거), 타임스탬프를 읽어와 DB 세션에 적재합니다. (CSV/TXT의 경우 줄 단위 읽기 자동 대응)
+* **결정적 6축 계산 엔진**: Shannon Entropy와 HHI 공식을 활용하여 실제 데이터셋에 비례하는 `TDS`, `SBS`, `SMS` 지표를 수학적으로 산출합니다.
+* **DSAO 유형 도감 및 캐릭터 카드**: `actual_dsao` 판정 결과에 매핑되는 학술적 성향 도감 및 실시간 대조 카드 렌더링이 구현되어 있습니다.
+* **자율형 미션 컴포넌트**: 완료 확인을 위해 미션 페이지 내부에서 객관식 문항(Choice)을 즉각 선택하거나 한 줄 소감(Text)을 기록하면 PATCH 요청이 전송되는 행동 유도가 완전히 동작합니다.
+* **Mock DB 안전 장치**: 로컬 MockDB의 Plumal 검색 매핑 버그 수정, upsert 구현을 통해 Supabase 연결 유무와 상관없이 로컬 인메모리에서 완벽한 무오류 세션 조회를 보장합니다.
+
+### ⚠️ 시연 및 Fallback용 모의(Mock) 영역
+* **Gemini & NL API 키 Fallback**: 환경변수 설정 파일(`app/core/config.py`)에 구글 인증 API 키가 바인딩되지 않은 경우, 서버가 중단되는 대신 실시간으로 채점 지표와 최저점 카테고리를 계산하여 **Gemini 및 NL 분석 응답 형식을 100% 준수한 고품질의 Mock 지침서와 미션 데이터셋**을 실시간 생성하여 반환합니다.
+* **사용 시간 추정**: 구글 테이크아웃 원천 파일에는 비디오 시청 지속 시간(Duration) 지표가 없으므로, 데이터 파싱 가동 시 dopamine 비율 및 롱폼 비중 판정을 테스트할 수 있도록 인덱스 분산 비율에 맞춰 모의 지속 시간이 가변 적재됩니다.
+* **사용자 계정 통합**: 현재 MVP 로컬 테스트를 위해 user_id는 Supabase PK 규격을 맞춘 전용 테스트 UUID(`00000000-0000-0000-0000-000000000001`)로 고정하여 임시 바인딩 처리되어 있습니다.
+
+---
+
+## 🚀 향후 개선 예정 (Future Roadmap)
+
+* **Supabase 실데이터 완전 저장소 이전**: 로컬 `localStorage`에 스텁으로 저장 중인 자가진단 정보를 Supabase `profiles.survey_scores` 컬럼 테이블에 원격 Insert/Fetch하는 API 연결
+* **실제 비디오 지속 시간 분석**: YouTube Data API와 직접 연동하여 채널 카테고리 정보 및 비디오의 실제 길이를 실시간 수집해 정교한 롱폼(L) 및 숏폼(F) 분류 정밀도 증대
+* **사용자 세션 관리**: 테스트 UUID 고정 구조에서 Supabase Auth 회원가입 및 로그인을 통한 개인별 영구 대시보드 이력 모니터링 활성화
