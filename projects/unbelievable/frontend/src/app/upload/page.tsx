@@ -51,12 +51,12 @@ export default function UploadPage() {
           <h1 className="text-3xl font-extrabold text-white mt-3 font-heading">
             {step === 1 && "개인정보 수집 및 분석 동의"}
             {step === 2 && "YouTube 시청 기록 업로드"}
-            {step === 3 && "주관적 소비 성향 자가진단"}
+            {step === 3 && "미디어 분석 준비 완료"}
           </h1>
           <p className="text-sm text-slate-400 mt-2">
             {step === 1 && "디지털 디톡스 편향성 측정을 시작하기 위해 동의서에 서명해 주세요."}
             {step === 2 && "Google Takeout을 통해 발급받은 시청 및 검색기록 파일(.json / .csv)을 업로드해 주세요."}
-            {step === 3 && "실제 소비 데이터와 대조해 볼 스스로의 주관적 미디어 편향성을 직접 진색해 봅니다."}
+            {step === 3 && "시청 데이터 정규화 및 분석 가동 준비를 완수했습니다."}
           </p>
         </div>
 
@@ -132,31 +132,26 @@ export default function UploadPage() {
         {/* Step 3: Self-Diagnosis Survey */}
         {step === 3 && (
           <form onSubmit={handleUpload} className="space-y-6">
-            <div className="space-y-5 bg-slate-950/40 border border-slate-800/80 rounded-2xl p-6">
-              {[
-                { code: "TDS", name: "주제 다양성", desc: "평소 얼마나 고른 카테고리(정치, 정보, 유머 등)의 영상을 봅니까?" },
-                { code: "SBS", name: "출처 균형", desc: "소수 채널에 갇히지 않고 여러 매체의 정보원을 접합니까?" },
-                { code: "EBS", name: "감정 균형", desc: "평소 중립적이고 긍정적인 감정 톤의 미디어를 시청합니까?" },
-                { code: "VOS", name: "관점 개방성", desc: "나와 다른 성향의 인물 및 상반된 주장도 수용합니까?" },
-                { code: "SMS", name: "유해/자극 안전", desc: "자극적이거나 폭력성 있는 도파민 영상을 멀리합니까?" },
-                { code: "UAS", name: "사용자 주도성", desc: "알고리즘 추천 피드가 아닌 검색을 통해 주도적으로 봅니까?" }
-              ].map(axis => (
-                <div key={axis.code} className="space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-slate-300">{axis.name}</span>
-                    <span className="font-semibold text-purple-400">{survey[axis.code as keyof typeof survey]}점</span>
-                  </div>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={survey[axis.code as keyof typeof survey]}
-                    onChange={(e) => handleSurveyChange(axis.code, parseInt(e.target.value))}
-                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-purple-500" 
-                  />
-                  <p className="text-[10px] text-slate-500">{axis.desc}</p>
+            <div className="space-y-4 bg-slate-950/40 border border-slate-800/80 rounded-2xl p-6 text-center">
+              <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center text-2xl text-purple-400 mx-auto mb-2 animate-bounce">
+                ⚙️
+              </div>
+              <h3 className="text-base font-bold text-white">알고리즘 데이터 가동 및 정밀 6축 분석 준비 완료</h3>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+                업로드된 원천 시청 데이터의 5초 미만 무의식 숏폼 노출(가짜 도파민) 필터링 처리가 끝났습니다. 최종 분석을 시작해 메타인지 갭을 대조할 수 있습니다.
+              </p>
+              
+              <div className="mt-4 pt-3 border-t border-slate-850/60 text-left space-y-2 max-w-xs mx-auto">
+                <div className="flex items-center gap-2 text-xs text-slate-350 font-semibold">
+                  <span className="text-emerald-500">✓</span> 개인정보 보안 및 수집 이용 동의
                 </div>
-              ))}
+                <div className="flex items-center gap-2 text-xs text-slate-355 font-semibold">
+                  <span className="text-emerald-500">✓</span> YouTube 시청 데이터 업로드 완료
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-350 font-semibold">
+                  <span className="text-emerald-500">✓</span> 정밀 정량 6축 분석 파이프라인 매핑 완료
+                </div>
+              </div>
             </div>
             
             <div className="flex gap-4">
