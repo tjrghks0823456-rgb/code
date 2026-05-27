@@ -78,6 +78,45 @@ async def get_dashboard_summary(
         key = tuple(mbti_code[i] for i in range(4)) if len(mbti_code) == 4 else ("H", "H", "H", "H")
         mbti_details = PERSONALITY_MAP.get(key, ("미지의 미디어 관찰자", ["#분석대기", "#신규성향"]))
         
+        # --- [NEW] Calculate Actual DSAO based on actual watch data ---
+        file_id = run["file_id"]
+        events = db_client.fetch_data("norm_event", {"file_id": file_id})
+        view_events = [e for e in events if e.get("action_type") == "view"]
+        long_views = [e for e in view_events if e.get("time_delta_sec") is not None and e.get("time_delta_sec") >= 180]
+        
+        long_ratio = (len(long_views) / len(view_events)) * 100.0 if view_events else 100.0
+        
+        uas_score = axis_scores.get("UAS", 50.0)
+        tds_score = axis_scores.get("TDS", 50.0)
+        sms_score = axis_scores.get("SMS", 50.0)
+        
+        actual_d_p = "D" if uas_score >= 50.0 else "P"
+        actual_w_n = "W" if tds_score >= 50.0 else "N"
+        actual_s_m = "M" if sms_score >= 50.0 else "S"
+        actual_f_l = "L" if long_ratio >= 50.0 else "F"
+        
+        actual_dsao_code = f"{actual_d_p}{actual_w_n}{actual_s_m}{actual_f_l}"
+        
+        DSAO_NAMES = {
+            "DWSF": "도파민 탐험가",
+            "DWSL": "마라맛 큐레이터",
+            "DWMF": "지식 스낵 탐색가",
+            "DWML": "지식 탐구형 선장",
+            "DNSF": "마라맛 쇼츠 광부",
+            "DNSL": "심연의 마라맛 광부",
+            "DNMF": "조용한 기술 덕후",
+            "DNML": "한우물 연구자",
+            "PWSF": "알고리즘 롤러코스터",
+            "PWSL": "자동재생 극장 관객",
+            "PWMF": "유튜브 유람선 탑승객",
+            "PWML": "편안한 자동재생러",
+            "PNSF": "알고리즘 도파민 루프",
+            "PNSL": "알고리즘 심연 정주행러",
+            "PNMF": "조용한 추천 루틴러",
+            "PNML": "자동재생 한우물러"
+        }
+        actual_dsao_name = DSAO_NAMES.get(actual_dsao_code, "미지의 미디어 탐험가")
+        
         return {
             "run_id": run_id,
             "user": {
@@ -90,6 +129,20 @@ async def get_dashboard_summary(
                 "code": mbti_code,
                 "name": mbti_details[0],
                 "tags": mbti_details[1]
+            },
+            "actual_dsao": {
+                "code": actual_dsao_code,
+                "name": actual_dsao_name,
+                "scores": {
+                    "D": round(uas_score, 1),
+                    "P": round(100.0 - uas_score, 1),
+                    "W": round(tds_score, 1),
+                    "N": round(100.0 - tds_score, 1),
+                    "S": round(100.0 - sms_score, 1),
+                    "M": round(sms_score, 1),
+                    "F": round(100.0 - long_ratio, 1),
+                    "L": round(long_ratio, 1)
+                }
             },
             "exception_codes": run.get("exception_codes", []),
             "meta_gap": meta_gap,

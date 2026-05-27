@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function MissionPage() {
+function MissionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planId = searchParams.get("plan_id") || "prototype-plan-id";
@@ -250,5 +250,18 @@ export default function MissionPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function MissionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-height-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <span className="animate-spin text-3xl mb-4">⏳</span>
+        <p className="text-slate-400 font-semibold">디톡스 처방 설계안 수집 중...</p>
+      </div>
+    }>
+      <MissionContent />
+    </Suspense>
   );
 }

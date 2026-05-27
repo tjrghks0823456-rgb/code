@@ -17,7 +17,7 @@ export default function LandingPage() {
             v1.0.0 Prototype
           </span>
           <Link
-            href="/upload"
+            href="/survey"
             className="px-4 py-2 text-xs font-bold bg-slate-900 border border-slate-800 rounded-full text-slate-300 hover:text-white hover:border-slate-700 transition-all"
           >
             시작하기
@@ -48,7 +48,7 @@ export default function LandingPage() {
         {/* CTA Button */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
           <Link
-            href="/upload"
+            href="/survey"
             className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl transition-all shadow-lg hover:shadow-purple-500/35 transform hover:-translate-y-0.5"
           >
             🚀 3분 만에 내 편향성 측정하기

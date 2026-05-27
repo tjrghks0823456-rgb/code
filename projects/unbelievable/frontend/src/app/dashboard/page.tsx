@@ -1,18 +1,24 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import RadarChart from "../../components/RadarChart";
+import { loadSelfSurveyResult, SelfSurveyResult } from "../../utils/surveyStorage";
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const runId = searchParams.get("run_id") || "prototype-run-id";
   
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
+  const [selfSurvey, setSelfSurvey] = useState<SelfSurveyResult | null>(null);
 
   useEffect(() => {
+    // Load local self-survey result
+    const survey = loadSelfSurveyResult();
+    setSelfSurvey(survey);
+
     // In a real application, fetches from GET /api/v1/dashboard/summary?run_id=runId
     // For this prototype, we simulate a mock fetch loading the parsed schema details
     setTimeout(() => {
@@ -23,6 +29,16 @@ export default function DashboardPage() {
           code: "LLLH",
           name: "도파민 추적자",
           tags: ["#자극", "#쇼츠", "#재미", "#알고리즘중독"]
+        },
+        actual_dsao: {
+          code: "PNSF",
+          name: "알고리즘 도파민 루프",
+          scores: {
+            D: 31.0, P: 69.0,
+            W: 35.0, N: 65.0,
+            S: 80.0, M: 20.0,
+            F: 75.0, L: 25.0
+          }
         },
         meta_gap: {
           TDS: { name: "주제 다양성", survey: 70.0, actual: 35.0, gap: 35.0 },
@@ -37,7 +53,7 @@ export default function DashboardPage() {
           worst_axis_code: "SMS",
           worst_axis_name: "유해/자극 안전",
           worst_gap_value: 60.0,
-          message: "주관적으로 매우 안전하다고 생각했으나, 실제 데이터상으로 '유해/자극 안전' 영역(쇼츠, 자극성 썸네일 노출)의 편향이 가장 큰 격차(60점)를 보였습니다. 뇌가 자극적인 도파민 루프에 강하게 오염되어 거울 치료가 필요합니다."
+          message: "주관적으로 생각했던 소비 양상과 실제 데이터 상의 '유해/자극 안전' 영역(쇼츠, 자극성 썸네일 노출) 사이에 큰 인지 편차가 감지되었습니다."
         }
       });
       setLoading(false);
@@ -79,7 +95,7 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center border-b border-slate-900 pb-6">
           <div>
             <h1 className="text-2xl font-extrabold text-white font-heading tracking-tight">SH.SON_UNBELIEVABLE</h1>
-            <p className="text-xs text-slate-400">데이터 기반 디지털 콘텐츠 거울치료 리포트</p>
+            <p className="text-xs text-slate-400">데이터 기반 디지털 콘텐츠 성향 모니터링 리포트</p>
           </div>
           <button 
             onClick={() => router.push("/mission?plan_id=prototype-plan-id")}
@@ -111,7 +127,7 @@ export default function DashboardPage() {
             {/* 16-Type MBTI Card */}
             <div className="bg-gradient-to-br from-purple-900/30 to-indigo-900/20 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl" />
-              <h3 className="text-xs uppercase tracking-wider text-purple-400 font-semibold mb-4">미디어 소비성향 유형</h3>
+              <h3 className="text-xs uppercase tracking-wider text-purple-400 font-semibold mb-4">미디어 소비성향 유형 (소비 MBTI)</h3>
               <h2 className="text-2xl font-black text-white font-heading tracking-tight">{data.mbti.name}</h2>
               <div className="flex flex-wrap gap-2 mt-4">
                 {data.mbti.tags.map((t: string) => (
@@ -132,22 +148,96 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* Cognitive Gap / Mirror Therapy Alert Box */}
-        <div className="bg-red-500/5 border border-red-500/20 rounded-3xl p-8 relative overflow-hidden shadow-2xl backdrop-blur-md">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl" />
-          <div className="flex items-start gap-4">
-            <span className="text-3xl text-red-500">⚠️</span>
-            <div>
-              <h2 className="text-xl font-bold text-white mb-2">메타인지 착각 지수: {data.misconception.index}점</h2>
-              <p className="text-sm text-slate-300 leading-relaxed font-semibold">
-                {data.misconception.message}
-              </p>
-              <div className="mt-4 inline-flex items-center gap-2 text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-full">
-                <span>최대 격차 지표: {data.misconception.worst_axis_name} ({data.misconception.worst_gap_value}점 편차)</span>
+        {/* [NEW] 자가진단 vs 실제 데이터 분석 DSAO 비교 카드 및 메타인지 갭 */}
+        {selfSurvey && data.actual_dsao && (
+          <div className="bg-slate-900/20 border border-slate-800/80 rounded-3xl p-6 md:p-8 backdrop-blur-md shadow-2xl space-y-6">
+            <div className="flex items-center gap-3 mb-2 border-b border-slate-900 pb-4">
+              <span className="text-xl">📊</span>
+              <div>
+                <h2 className="text-lg font-bold text-white font-heading">자가진단과 실제 분석 비교 및 메타인지 갭</h2>
+                <p className="text-xs text-slate-400">스스로 응답했던 자가진단(주관)과 YouTube 시청기록 분석(객관)의 동일 DSAO 지표 대조군입니다.</p>
               </div>
             </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* 주관적 자가진단 DSAO */}
+              <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl relative">
+                <span className="absolute top-4 right-4 text-[9px] uppercase font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
+                  자가 주관 진단
+                </span>
+                <h3 className="text-xs text-slate-500 font-bold uppercase tracking-wider">주관 인식 코드</h3>
+                <h4 className="text-3xl font-black text-white mt-1 font-heading tracking-tight">{selfSurvey.resultCode}</h4>
+                <h5 className="text-sm font-bold text-slate-350 mt-0.5">{selfSurvey.resultName}</h5>
+                
+                <div className="mt-4 space-y-2 text-xs text-slate-400">
+                  <div className="flex justify-between border-b border-slate-900 pb-1.5">
+                    <span>1. 탐색 방식:</span>
+                    <span className="font-semibold text-slate-200">{selfSurvey.resultCode.includes("D") ? "직접 운전형 (D)" : "추천 탑승형 (P)"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-900 pb-1.5">
+                    <span>2. 관심 범위:</span>
+                    <span className="font-semibold text-slate-200">{selfSurvey.resultCode.includes("W") ? "폭넓은 탐색형 (W)" : "집중 몰입형 (N)"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-900 pb-1.5">
+                    <span>3. 자극 성향:</span>
+                    <span className="font-semibold text-slate-200">{selfSurvey.resultCode.includes("M") ? "안정 정보형 (M)" : "고자극 반응형 (S)"}</span>
+                  </div>
+                  <div className="flex justify-between pb-0.5">
+                    <span>4. 시청 호흡:</span>
+                    <span className="font-semibold text-slate-200">{selfSurvey.resultCode.includes("L") ? "롱폼 몰입형 (L)" : "숏폼 속도형 (F)"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 객관적 실제 분석 DSAO */}
+              <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl relative">
+                <span className="absolute top-4 right-4 text-[9px] uppercase font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded">
+                  실제 데이터 측정
+                </span>
+                <h3 className="text-xs text-slate-500 font-bold uppercase tracking-wider">실제 분석 코드</h3>
+                <h4 className="text-3xl font-black text-white mt-1 font-heading tracking-tight">{data.actual_dsao.code}</h4>
+                <h5 className="text-sm font-bold text-slate-350 mt-0.5">{data.actual_dsao.name}</h5>
+                
+                <div className="mt-4 space-y-2 text-xs text-slate-400">
+                  <div className="flex justify-between border-b border-slate-900 pb-1.5">
+                    <span>1. 탐색 방식:</span>
+                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("D") ? "직접 운전형 (D)" : "추천 탑승형 (P)"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-900 pb-1.5">
+                    <span>2. 관심 범위:</span>
+                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("W") ? "폭넓은 탐색형 (W)" : "집중 몰입형 (N)"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-900 pb-1.5">
+                    <span>3. 자극 성향:</span>
+                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("M") ? "안정 정보형 (M)" : "고자극 반응형 (S)"}</span>
+                  </div>
+                  <div className="flex justify-between pb-0.5">
+                    <span>4. 시청 호흡:</span>
+                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("L") ? "롱폼 몰입형 (L)" : "숏폼 속도형 (F)"}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Meta-gap comparison text summary */}
+            <div className="bg-slate-950/20 border border-slate-850 rounded-2xl p-5">
+              <div className="flex items-start gap-3">
+                <span className="text-lg text-purple-400">💡</span>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-slate-350">메타인지 인지 부조화 경향성 리포트</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {selfSurvey.resultCode === data.actual_dsao.code 
+                      ? `귀하가 생각한 성향(${selfSurvey.resultCode})과 실제 시청 기록 데이터 분석 성향이 정확히 일치합니다! 자신의 미디어 소비 패턴에 대해 우수한 메타인지를 유지하고 계십니다.`
+                      : `귀하의 주관적 성향 인식([${selfSurvey.resultName}])과 실제 시청 데이터 측정 유형([${data.actual_dsao.name}]) 사이에 격차가 존재합니다. 추천 엔진 노출 비중 및 시청 호흡에서 자기도 모르게 알고리즘 수동 선택의 비중이 컸음을 의미하는 '메타인지 갭' 상태입니다.`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
           </div>
-        </div>
+        )}
 
         {/* 6-Axis Scores List */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
@@ -178,5 +268,18 @@ export default function DashboardPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-height-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <span className="animate-spin text-3xl mb-4">🌀</span>
+        <p className="text-slate-400 font-semibold">데이터 분석 결과 구성 중...</p>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }
