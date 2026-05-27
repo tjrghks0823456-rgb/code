@@ -66,9 +66,13 @@ CREATE TABLE IF NOT EXISTS public.score_run (
     bias_risk_score FLOAT NOT NULL, -- 최종 편향 위험도 종합 점수 (0 ~ 100)
     weighted_health FLOAT NOT NULL, -- 6축 가중합 종합 건강 점수 (0 ~ 100)
     mbti_type VARCHAR(10) NOT NULL, -- 16가지 미디어 소비 성향 유형 (예: INTP)
-    exception_codes VARCHAR(20)[] DEFAULT '{}', -- P01, P04, P05 등 예외코드 리스트
+    exception_codes VARCHAR(40)[] DEFAULT '{}', -- P01, P04, P05 등 예외코드 리스트
     analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE public.score_run
+    ALTER COLUMN exception_codes TYPE VARCHAR(40)[]
+    USING exception_codes::VARCHAR(40)[];
 
 -- 7. 6축 세부 점수 테이블
 CREATE TABLE IF NOT EXISTS public.score_axis (

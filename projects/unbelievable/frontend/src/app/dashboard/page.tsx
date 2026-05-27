@@ -204,8 +204,11 @@ function DashboardContent() {
 
   if (!processedData) return null;
 
+  const scoreWarnings = Array.isArray(processedData.score_warnings) ? processedData.score_warnings : [];
+
   // Formatting chart data mapping: replacing '주관적_인식' with '자가진단_결과'
   const chartData = Object.keys(processedData.meta_gap).map(key => ({
+    axisCode: key,
     subject: processedData.meta_gap[key].name,
     "자가진단_결과": processedData.meta_gap[key].survey,
     "실제_분석값": processedData.meta_gap[key].actual
@@ -329,8 +332,33 @@ function DashboardContent() {
           </div>
  
           {/* Right Block: Overlay Radar Chart (Meta-gap) */}
-          <div className="md:col-span-2">
-            <RadarChart data={chartData} />
+          <div className="md:col-span-2 space-y-4">
+            <RadarChart data={chartData} scoreWarnings={scoreWarnings} />
+            {scoreWarnings.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-400/20 rounded-2xl p-5 shadow-2xl">
+                <div className="flex items-start gap-3">
+                  <span className="text-lg text-amber-300">⚠️</span>
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-amber-100">해석 제한 안내</h3>
+                      <p className="text-xs text-amber-100/80 mt-1 leading-relaxed">
+                        일부 지표는 업로드된 Takeout 데이터에 검색 기록, 출처 정보, 충분한 NLP 샘플이 포함되지 않아 참고용으로 표시됩니다.
+                      </p>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {scoreWarnings.map((warning: any) => (
+                        <li key={`${warning.axis}-${warning.code}`} className="text-xs text-slate-300 leading-relaxed">
+                          <span className="font-bold text-amber-100">
+                            {warning.axis_name || warning.axis}:
+                          </span>{" "}
+                          {warning.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
  
         </div>

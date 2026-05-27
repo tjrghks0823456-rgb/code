@@ -13,16 +13,59 @@ import {
 } from "recharts";
 
 interface RadarDataPoint {
+  axisCode?: string;
   subject: string;
   자가진단_결과: number; // Survey score
   실제_분석값: number;  // Actual score
 }
 
-interface RadarChartProps {
-  data: RadarDataPoint[];
+interface ScoreWarning {
+  axis: string;
+  axis_name?: string;
+  code: string;
+  message: string;
 }
 
-export default function RadarChart({ data }: RadarChartProps) {
+interface RadarChartProps {
+  data: RadarDataPoint[];
+  scoreWarnings?: ScoreWarning[];
+}
+
+export default function RadarChart({ data, scoreWarnings = [] }: RadarChartProps) {
+  const warningByAxis = React.useMemo(() => {
+    return scoreWarnings.reduce<Record<string, ScoreWarning>>((acc, warning) => {
+      acc[warning.axis] = warning;
+      return acc;
+    }, {});
+  }, [scoreWarnings]);
+
+  const renderTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+
+    const point = payload[0]?.payload as RadarDataPoint | undefined;
+    const warning = point?.axisCode ? warningByAxis[point.axisCode] : undefined;
+    const title = label || point?.subject;
+
+    return (
+      <div className="rounded-xl border border-slate-700 bg-slate-950/95 px-4 py-3 text-xs shadow-2xl">
+        <div className="font-bold text-white">{title}</div>
+        {payload.map((entry: any) => (
+          <div key={entry.dataKey} className="mt-1 flex items-center justify-between gap-4 text-slate-300">
+            <span>{entry.name}</span>
+            <span className="font-bold" style={{ color: entry.color }}>
+              {Number(entry.value).toFixed(1)}점
+            </span>
+          </div>
+        ))}
+        {warning && (
+          <div className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold text-amber-200">
+            해석 제한: 참고용 지표
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full h-[360px] bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
       <div className="absolute top-4 left-6">
@@ -63,9 +106,7 @@ export default function RadarChart({ data }: RadarChartProps) {
               fillOpacity={0.3}
             />
             
-            <Tooltip 
-              contentStyle={{ background: "#0f172a", borderColor: "#1e293b", color: "#f8fafc" }}
-            />
+            <Tooltip content={renderTooltip} />
             <Legend 
               wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }}
               align="center"

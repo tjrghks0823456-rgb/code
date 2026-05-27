@@ -1,10 +1,95 @@
 import logging
+from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 from app.core.database import db_client
 from app.core.scoring import PERSONALITY_MAP
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+AXIS_NAMES = {
+    "TDS": "주제 다양성",
+    "SBS": "출처 균형",
+    "EBS": "감정 균형",
+    "VOS": "관점 개방성",
+    "SMS": "유해/자극 안전",
+    "UAS": "사용자 주도성",
+    "ALL": "전체 지표"
+}
+
+SCORE_WARNING_MAP: Dict[str, Dict[str, str]] = {
+    "P01_DATA_SHORT": {
+        "axis": "ALL",
+        "message": "분석 가능한 시청 이벤트가 부족하여 전체 지표는 참고용으로 표시됩니다."
+    },
+    "P02_TOPIC_SAMPLE_LIMITED": {
+        "axis": "TDS",
+        "message": "주제 카테고리 샘플이 부족하여 주제 다양성 지표는 참고용으로 표시됩니다."
+    },
+    "P02_SHORT_TEXT": {
+        "axis": "TDS",
+        "message": "분석 가능한 텍스트가 부족하여 주제 다양성 지표는 참고용으로 표시됩니다."
+    },
+    "P03_SENTIMENT_SAMPLE_LIMITED": {
+        "axis": "EBS",
+        "message": "감정 분석 샘플이 부족하여 감정 균형 지표는 참고용으로 표시됩니다."
+    },
+    "P04_NO_SEARCH": {
+        "axis": "UAS",
+        "message": "검색 기록 데이터가 포함되지 않았거나 검색 이벤트가 감지되지 않아 사용자 주도성 지표는 참고용으로 표시됩니다."
+    },
+    "P05_SOURCE_MISSING": {
+        "axis": "SBS",
+        "message": "채널 또는 출처 정보가 확인되지 않아 출처 균형 지표는 참고용으로 표시됩니다."
+    },
+    "P05_SOURCE_SAMPLE_LIMITED": {
+        "axis": "SBS",
+        "message": "유효한 채널 또는 출처 종류가 부족하여 출처 균형 지표는 참고용으로 표시됩니다."
+    },
+    "P06_VIEWPOINT_SAMPLE_LIMITED": {
+        "axis": "VOS",
+        "message": "분석 가능한 주제 샘플이 부족하여 관점 개방성 지표는 참고용으로 표시됩니다."
+    },
+    "P07_SAFETY_SAMPLE_LIMITED": {
+        "axis": "SMS",
+        "message": "유해/자극 안전성을 판단할 NLP 샘플이 부족하여 해당 지표는 참고용으로 표시됩니다."
+    }
+}
+
+def normalize_exception_codes(raw_codes: Any) -> List[str]:
+    if not raw_codes:
+        return []
+    if isinstance(raw_codes, list):
+        return [str(code) for code in raw_codes if code]
+    if isinstance(raw_codes, tuple):
+        return [str(code) for code in raw_codes if code]
+    if isinstance(raw_codes, str):
+        cleaned = raw_codes.strip("{}")
+        return [code.strip().strip('"') for code in cleaned.split(",") if code.strip()]
+    return []
+
+def build_score_warnings(exception_codes: List[str]) -> List[Dict[str, str]]:
+    warnings = []
+    seen_codes = set()
+
+    for code in exception_codes:
+        if code in seen_codes:
+            continue
+        seen_codes.add(code)
+
+        warning = SCORE_WARNING_MAP.get(code)
+        if not warning:
+            continue
+
+        axis = warning["axis"]
+        warnings.append({
+            "axis": axis,
+            "axis_name": AXIS_NAMES.get(axis, axis),
+            "code": code,
+            "message": warning["message"]
+        })
+
+    return warnings
 
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
@@ -42,17 +127,13 @@ async def get_dashboard_summary(
         max_gap_axis = "TDS"
         max_gap_value = -1.0
         
-        # Axis name mapping
-        axis_names = {
-            "TDS": "주제 다양성",
-            "SBS": "출처 균형",
-            "EBS": "감정 균형",
-            "VOS": "관점 개방성",
-            "SMS": "유해/자극 안전",
-            "UAS": "사용자 주도성"
-        }
-        
-        for code, name in axis_names.items():
+        exception_codes = normalize_exception_codes(run.get("exception_codes", []))
+        score_warnings = build_score_warnings(exception_codes)
+
+        for code, name in AXIS_NAMES.items():
+            if code == "ALL":
+                continue
+
             s_val = float(survey_scores.get(code, 50.0))
             a_val = float(axis_scores.get(code, 50.0))
             gap = abs(s_val - a_val)
@@ -98,22 +179,22 @@ async def get_dashboard_summary(
         actual_dsao_code = f"{actual_d_p}{actual_w_n}{actual_s_m}{actual_f_l}"
         
         DSAO_NAMES = {
-            "DWSF": "도파민 탐험가",
-            "DWSL": "마라맛 큐레이터",
-            "DWMF": "지식 스낵 탐색가",
-            "DWML": "지식 탐구형 선장",
-            "DNSF": "마라맛 쇼츠 광부",
-            "DNSL": "심연의 마라맛 광부",
-            "DNMF": "조용한 기술 덕후",
-            "DNML": "한우물 연구자",
-            "PWSF": "알고리즘 롤러코스터",
-            "PWSL": "자동재생 극장 관객",
-            "PWMF": "유튜브 유람선 탑승객",
-            "PWML": "편안한 자동재생러",
-            "PNSF": "알고리즘 도파민 루프",
-            "PNSL": "알고리즘 심연 정주행러",
-            "PNMF": "조용한 추천 루틴러",
-            "PNML": "자동재생 한우물러"
+            "DWSF": "다채로운 숏폼 탐색형",
+            "DWSL": "다채로운 롱폼 탐색형",
+            "DWMF": "지식 스낵 탐색형",
+            "DWML": "깊이 있는 지식 항해형",
+            "DNSF": "특정 관심 숏폼 집중형",
+            "DNSL": "특정 주제 장기 몰입형",
+            "DNMF": "전문 정보 압축형",
+            "DNML": "한우물 연구형",
+            "PWSF": "추천 피드 유람형",
+            "PWSL": "자동재생 감상형",
+            "PWMF": "편안한 정보 스낵형",
+            "PWML": "편안한 롱폼 흐름형",
+            "PNSF": "추천 피드 반복형",
+            "PNSL": "추천 주제 정주행형",
+            "PNMF": "조용한 추천 루틴형",
+            "PNML": "자동재생 한우물형"
         }
         actual_dsao_name = DSAO_NAMES.get(actual_dsao_code, "미지의 미디어 탐험가")
         
@@ -144,14 +225,15 @@ async def get_dashboard_summary(
                     "L": round(long_ratio, 1)
                 }
             },
-            "exception_codes": run.get("exception_codes", []),
+            "exception_codes": exception_codes,
+            "score_warnings": score_warnings,
             "meta_gap": meta_gap,
             "misconception": {
                 "index": misconception_index,
                 "worst_axis_code": max_gap_axis,
-                "worst_axis_name": axis_names[max_gap_axis],
+                "worst_axis_name": AXIS_NAMES[max_gap_axis],
                 "worst_gap_value": round(meta_gap[max_gap_axis]["gap"], 1),
-                "message": f"스스로 사전 인지했던 점수 대비 실제 YouTube 소비 데이터상으로 '{axis_names[max_gap_axis]}' 영역의 차이가 가장 크게 집계되었습니다. 가벼운 일상 추천 루틴 수정을 통해 성향의 균형을 복원하시는 것을 추천합니다."
+                "message": f"스스로 사전 인지했던 점수 대비 실제 YouTube 소비 데이터상으로 '{AXIS_NAMES[max_gap_axis]}' 영역의 차이가 가장 크게 집계되었습니다. 가벼운 일상 추천 루틴 수정을 통해 성향의 균형을 복원하시는 것을 추천합니다."
             }
         }
     except HTTPException:

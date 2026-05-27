@@ -20,10 +20,10 @@ PERSONALITY_MAP = {
     ("L", "H", "L", "H"): ("소통 지향 마니아", ["#트렌드", "#민감", "#교류"]),
     ("L", "H", "L", "L"): ("감성적 정보 몰입러", ["#몰입형", "#감수성", "#애청자"]),
     
-    ("L", "L", "H", "H"): ("디톡스 경고 대상", ["#과몰입", "#경고", "#디톡스"]),
-    ("L", "L", "H", "L"): ("도파민 추적자", ["#자극", "#쇼츠", "#재미"]),
+    ("L", "L", "H", "H"): ("추천 흐름 점검형", ["#반복패턴", "#균형회복", "#자기조절"]),
+    ("L", "L", "H", "L"): ("흥미 반응형", ["#자극", "#쇼츠", "#재미"]),
     ("L", "L", "L", "H"): ("수동적 수용자", ["#알고리즘", "#흘러가는대로", "#피동"]),
-    ("L", "L", "L", "L"): ("미디어 은둔자", ["#과외", "#휴식", "#디톡스필요"]),
+    ("L", "L", "L", "L"): ("조용한 휴식형", ["#차분함", "#휴식", "#균형회복"]),
 }
 
 def calculate_shannon_entropy(probabilities: List[float]) -> float:
@@ -59,26 +59,63 @@ def compute_6axis_scores(
         "SBS": 50.0, # 출처균형
         "EBS": 50.0, # 감정균형
         "VOS": 50.0, # 관점개방성
-        "SMS": 100.0,# 유해안전
+        "SMS": 50.0, # 유해안전
         "UAS": 50.0  # 사용자주도성
     }
     exception_codes = []
+
+    def add_exception(code: str) -> None:
+        if code not in exception_codes:
+            exception_codes.append(code)
+
+    def normalize_source(value: Any) -> str:
+        if value is None:
+            return "Unknown"
+        source = str(value).strip()
+        return source if source else "Unknown"
+
+    def is_known_source(value: str) -> bool:
+        return value.strip().lower() not in {"unknown", "none", "null", "n/a"}
+
+    def extract_topic_counts(results: List[Dict[str, Any]]) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for r in results:
+            cats = r.get("categories_json", [])
+            if not isinstance(cats, list):
+                continue
+
+            for c in cats:
+                if isinstance(c, dict):
+                    path = str(c.get("name", "")).strip()
+                else:
+                    path = str(c).strip()
+
+                if not path:
+                    continue
+
+                parts = [part.strip() for part in path.split("/") if part.strip()]
+                top_level = parts[0] if parts else path
+                if top_level:
+                    counts[top_level] = counts.get(top_level, 0) + 1
+
+        return counts
     
     # Check minimum events constraint (FEAT_07: P01_DATA_SHORT)
     if len(events) < 10:
-        exception_codes.append("P01_DATA_SHORT")
+        add_exception("P01_DATA_SHORT")
         return scores, exception_codes
         
     # --- 1. 사용자주도성 (User Agency - UAS) ---
     # Formula: 100 * (search_events) / (search_events + watch_events)
-    # If no searches exist: trigger P04_NO_SEARCH and set partial/low agency score
+    # If no searches exist, the Takeout export may not include search history.
+    # Treat this as an interpretation limit, not as evidence of low agency.
     search_events = sum(1 for e in events if e.get("action_type") == "search")
     watch_events = sum(1 for e in events if e.get("action_type") == "view")
     total_actions = search_events + watch_events
     
     if search_events == 0:
-        exception_codes.append("P04_NO_SEARCH")
-        scores["UAS"] = 15.0 # default low baseline
+        add_exception("P04_NO_SEARCH")
+        scores["UAS"] = 50.0
     elif total_actions > 0:
         # Scale to 0-100. Searches usually are fewer, so apply log-scaling or multipliers.
         search_ratio = search_events / total_actions
@@ -89,12 +126,19 @@ def compute_6axis_scores(
     # Group by author_id / channel_name
     channel_counts = {}
     for e in events:
-        ch = e.get("author_id") or e.get("source_surface") or "Unknown"
+        ch = normalize_source(e.get("author_id") or e.get("source_surface"))
         channel_counts[ch] = channel_counts.get(ch, 0) + 1
         
-    total_channels_calls = sum(channel_counts.values())
-    if total_channels_calls > 0:
-        shares = [(count / total_channels_calls) * 100 for count in channel_counts.values()]
+    valid_sources = [source for source in channel_counts.keys() if is_known_source(source)]
+    if not valid_sources:
+        scores["SBS"] = 50.0
+        add_exception("P05_SOURCE_MISSING")
+    elif len(valid_sources) < 2:
+        scores["SBS"] = 50.0
+        add_exception("P05_SOURCE_SAMPLE_LIMITED")
+    else:
+        valid_total = sum(channel_counts[source] for source in valid_sources)
+        shares = [(channel_counts[source] / valid_total) * 100 for source in valid_sources]
         hhi = calculate_hhi(shares)
         # HHI ranges from 0 to 10000. 10000 is single monopoly.
         # SBS = 100 - HHI_normalized (scaled to 100)
@@ -102,19 +146,13 @@ def compute_6axis_scores(
         
     # --- 3. 주제다양성 (Topic Diversity - TDS) ---
     # Extract categories from nlp_results
-    topic_counts = {}
-    for r in nlp_results:
-        cats = r.get("categories_json", [])
-        for c in cats:
-            path = c.get("name", "")
-            # Split paths (e.g. "/Computers & Electronics/Software") and take top level
-            top_level = path.split("/")[1] if len(path.split("/")) > 1 else path
-            topic_counts[top_level] = topic_counts.get(top_level, 0) + 1
-            
+    topic_counts = extract_topic_counts(nlp_results)
+    valid_topic_count = len(topic_counts)
     total_topics = sum(topic_counts.values())
-    if total_topics == 0:
-        exception_codes.append("P02_SHORT_TEXT")
-        scores["TDS"] = 30.0 # Default baseline
+
+    if len(nlp_results) < 2 or valid_topic_count < 2:
+        scores["TDS"] = 50.0
+        add_exception("P02_TOPIC_SAMPLE_LIMITED")
     else:
         probs = [count / total_topics for count in topic_counts.values()]
         entropy = calculate_shannon_entropy(probs)
@@ -124,8 +162,9 @@ def compute_6axis_scores(
     # --- 4. 감정균형 (Emotion Balance - EBS) ---
     # Distribute sentiment_scores (-1.0 to 1.0) into Positive/Neutral/Negative
     sentiments = [r.get("sentiment_score", 0.0) for r in nlp_results if "sentiment_score" in r]
-    if not sentiments:
+    if len(sentiments) < 2:
         scores["EBS"] = 50.0
+        add_exception("P03_SENTIMENT_SAMPLE_LIMITED")
     else:
         pos = sum(1 for s in sentiments if s > 0.25)
         neg = sum(1 for s in sentiments if s < -0.25)
@@ -149,22 +188,26 @@ def compute_6axis_scores(
             if any(toxic_word in name for toxic_word in ["adult", "violence", "drugs", "weapons", "gore", "hate"]):
                 toxic_hits += 1
                 
-    if total_items > 0:
+    if total_items < 2:
+        scores["SMS"] = 50.0
+        add_exception("P07_SAFETY_SAMPLE_LIMITED")
+    else:
         toxic_ratio = toxic_hits / total_items
         scores["SMS"] = max(0.0, 100.0 - (toxic_ratio * 300.0))
         
     # --- 6. 관점개방성 (Perspective Openness - VOS) ---
     # Formula fallback: 100 * (1 - Dominant Topic Concentration Ratio)
-    if topic_counts:
+    if valid_topic_count < 2:
+        scores["VOS"] = 50.0
+        add_exception("P06_VIEWPOINT_SAMPLE_LIMITED")
+    else:
         max_topic_count = max(topic_counts.values())
         dom_ratio = max_topic_count / total_topics
         scores["VOS"] = max(0.0, (1.0 - dom_ratio) * 100.0)
-    else:
-        scores["VOS"] = 40.0
         
-    # Make sure all scores are rounded cleanly
+    # Make sure all scores are clamped and rounded cleanly.
     for k in scores:
-        scores[k] = round(scores[k], 1)
+        scores[k] = round(max(0.0, min(100.0, scores[k])), 1)
         
     return scores, exception_codes
 
