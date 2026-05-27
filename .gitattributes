@@ -1,0 +1,24 @@
+* text=auto
+
+*.md text eol=lf
+*.py text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.sql text eol=lf
+*.ps1 text eol=crlf
+
+*.cs text diff=csharp eol=crlf
+*.csproj text eol=crlf
+*.sln text eol=crlf
+*.config text eol=crlf
+*.resx text eol=crlf
+*.settings text eol=crlf
+
+*.dll binary
+*.exe binary
+*.pdb binary
+*.zip binary
+*.pptx binary
+*.png binary
