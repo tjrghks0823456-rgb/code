@@ -80,7 +80,7 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="min-height-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-2xl bg-slate-900/40 border border-slate-800 rounded-3xl p-8 backdrop-blur-lg shadow-2xl relative">
         
         {/* Header */}

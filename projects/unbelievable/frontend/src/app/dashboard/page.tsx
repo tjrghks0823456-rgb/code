@@ -287,7 +287,7 @@ function DashboardContent() {
 
   if (loading) {
     return (
-      <div className="min-height-screen bg-slate-950 flex flex-col items-center justify-center text-white p-6">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-6">
         <span className="animate-spin text-3xl mb-4">🌀</span>
         <p className="text-slate-400 font-semibold">시청 기록 데이터 분석 결과 수집 중...</p>
       </div>
@@ -375,7 +375,7 @@ function DashboardContent() {
                 다시 시도
               </button>
               <button
-                onClick={() => router.push("/mission?plan_id=mvp-active-plan")}
+                onClick={() => router.push("/mission?demo=true")}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 font-bold rounded-xl text-xs transition-all w-full md:w-auto"
               >
                 시연용 데이터로 보기
@@ -630,7 +630,7 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <Suspense fallback={
-      <div className="min-height-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
         <span className="animate-spin text-3xl mb-4">🌀</span>
         <p className="text-slate-400 font-semibold">시청 기록 데이터 분석 결과 구성 중...</p>
       </div>
