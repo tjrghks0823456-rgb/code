@@ -93,5 +93,7 @@ async def run_analysis(
             "axis_scores": axis_scores,
             "exception_codes": exception_codes
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis calculation failed: {str(e)}")

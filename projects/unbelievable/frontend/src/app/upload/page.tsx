@@ -91,12 +91,12 @@ export default function UploadPage() {
           <h1 className="text-3xl font-extrabold text-white mt-3 font-heading">
             {step === 1 && "개인정보 수집 및 분석 동의"}
             {step === 2 && "YouTube 시청 기록 업로드"}
-            {step === 3 && "미디어 분석 준비 완료"}
+            {step === 3 && "미디어 분석 시작 준비"}
           </h1>
           <p className="text-sm text-slate-400 mt-2">
             {step === 1 && "디지털 디톡스 편향성 측정을 시작하기 위해 동의서에 서명해 주세요."}
             {step === 2 && "Google Takeout을 통해 발급받은 시청 및 검색기록 파일(.json / .csv)을 업로드해 주세요."}
-            {step === 3 && "시청 데이터 정규화 및 분석 가동 준비를 완수했습니다."}
+            {step === 3 && "선택한 시청 기록 데이터를 바탕으로 분석을 시작할 준비가 되었습니다."}
           </p>
         </div>
 
@@ -110,7 +110,7 @@ export default function UploadPage() {
                 <li><strong>Google Cloud Natural Language API</strong>: 영상 제목 및 검색어의 텍스트 감정 톤 및 주제 분류 수집 (정량 전처리용)</li>
                 <li><strong>Gemini 2.5 Flash API</strong>: 분석 완료 점수를 기반으로 디톡스 미션 및 맞춤형 검색 대안 권고사항 생성 (생성용)</li>
               </ul>
-              <p>귀하의 모든 업로드 원본 파일은 분석 완료 직후 또는 삭제 요청 시 완전 비식별화 처리 및 즉각 파기됩니다. Supabase RLS 정책에 따라 본인의 계정 외에는 어떠한 외부 접근도 원천 차단됨을 보장합니다.</p>
+              <p>귀하의 모든 업로드 원본 파일은 분석 직후 또는 삭제 요청 시 비식별 조치 및 파기됩니다. Supabase RLS 정책에 따라 본인의 계정 외에는 외부 접근이 차단되도록 보호됩니다.</p>
             </div>
             
             <label className="flex items-center gap-3 cursor-pointer p-4 rounded-xl hover:bg-slate-800/20 border border-slate-800/50">
@@ -176,20 +176,20 @@ export default function UploadPage() {
               <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center text-2xl text-purple-400 mx-auto mb-2 animate-bounce">
                 ⚙️
               </div>
-              <h3 className="text-base font-bold text-white">알고리즘 데이터 가동 및 정밀 6축 분석 준비 완료</h3>
+              <h3 className="text-base font-bold text-white">시청 데이터 분석 시작 준비</h3>
               <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
-                업로드된 원천 시청 데이터의 5초 미만 무의식 숏폼 노출(가짜 도파민) 필터링 처리가 끝났습니다. 최종 분석을 시작해 메타인지 갭을 대조할 수 있습니다.
+                파일 선택이 완료되었습니다. 이제 업로드와 분석을 시작할 수 있습니다. 분석 시작 후 서버에서 시청 기록 정규화, 5초 미만 보조 필터링, 6축 점수 계산이 순차적으로 진행됩니다.
               </p>
               
-              <div className="mt-4 pt-3 border-t border-slate-850/60 text-left space-y-2 max-w-xs mx-auto">
-                <div className="flex items-center gap-2 text-xs text-slate-350 font-semibold">
+              <div className="mt-4 pt-3 border-t border-slate-800/60 text-left space-y-2 max-w-xs mx-auto">
+                <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">
                   <span className="text-emerald-500">✓</span> 개인정보 보안 및 수집 이용 동의
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-355 font-semibold">
-                  <span className="text-emerald-500">✓</span> YouTube 시청 데이터 업로드 완료
+                <div className="flex items-center gap-2 text-xs text-slate-300 font-semibold">
+                  <span className="text-emerald-500">✓</span> YouTube 시청 데이터 선택 완료
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-350 font-semibold">
-                  <span className="text-emerald-500">✓</span> 정밀 정량 6축 분석 파이프라인 매핑 완료
+                <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">
+                  <span className="text-emerald-500">✓</span> 6축 성향 대조 파이프라인 대기 중
                 </div>
               </div>
             </div>

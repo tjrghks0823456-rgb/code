@@ -152,7 +152,7 @@ export default function TypesPage() {
           </div>
           <button 
             onClick={() => router.back()}
-            className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-350 hover:text-white font-bold rounded-xl transition-all text-xs"
+            className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white font-bold rounded-xl transition-all text-xs"
           >
             ← 이전 화면으로 복귀
           </button>
@@ -183,18 +183,18 @@ export default function TypesPage() {
                   
                   <div className="flex flex-wrap gap-1 mt-2.5">
                     {item.tags.map(t => (
-                      <span key={t} className="text-[8px] bg-slate-950 border border-slate-850 text-slate-400 px-2 py-0.5 rounded-full font-medium">
+                      <span key={t} className="text-[8px] bg-slate-950 border border-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-medium">
                         {t}
                       </span>
                     ))}
                   </div>
                   
-                  <p className="text-[11px] text-slate-400 mt-4 leading-relaxed border-t border-slate-850/60 pt-3">
+                  <p className="text-[11px] text-slate-400 mt-4 leading-relaxed border-t border-slate-800/60 pt-3">
                     {item.oneLiner}
                   </p>
                 </div>
                 
-                <div className="mt-4 pt-3 border-t border-dashed border-slate-850/50 bg-slate-950/20 p-2.5 rounded-xl">
+                <div className="mt-4 pt-3 border-t border-dashed border-slate-800/50 bg-slate-950/20 p-2.5 rounded-xl">
                   <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider block">소비 양상 예시</span>
                   <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
                     {item.pattern}

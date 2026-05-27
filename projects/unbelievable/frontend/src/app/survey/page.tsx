@@ -187,7 +187,7 @@ export default function SurveyPage() {
             </div>
 
             {/* Stepper progress bar */}
-            <div className="w-full bg-slate-950 rounded-full h-1.5 mb-8 border border-slate-850 overflow-hidden">
+            <div className="w-full bg-slate-950 rounded-full h-1.5 mb-8 border border-slate-800 overflow-hidden">
               <div 
                 className="bg-purple-600 h-full rounded-full transition-all duration-300"
                 style={{ width: `${((currentPage + 1) / 4) * 100}%` }}
@@ -203,7 +203,7 @@ export default function SurveyPage() {
             {/* Questions list (4 per module page) */}
             <div className="space-y-6">
               {getPageQuestions(currentPage).map((q, idx) => (
-                <div key={q.id} className="bg-slate-950/40 border border-slate-850/60 rounded-2xl p-5 space-y-4">
+                <div key={q.id} className="bg-slate-950/40 border border-slate-800/60 rounded-2xl p-5 space-y-4">
                   <div className="flex gap-2">
                     <span className="text-xs font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded h-fit">
                       Q{currentPage * 4 + idx + 1}
@@ -226,7 +226,7 @@ export default function SurveyPage() {
                           className={`py-2 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center border ${
                             isSelected 
                               ? "bg-purple-950/20 border-purple-500/80 text-purple-300 font-bold" 
-                              : "bg-slate-900/40 border-slate-850 text-slate-400 hover:border-slate-700 hover:text-slate-300"
+                              : "bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300"
                           }`}
                         >
                           <span className="text-xs md:text-sm">{score}</span>
@@ -250,7 +250,7 @@ export default function SurveyPage() {
                 className={`px-5 py-3 font-semibold text-xs rounded-xl transition-all ${
                   currentPage === 0 
                     ? "bg-slate-900/10 text-slate-600 cursor-not-allowed border border-transparent" 
-                    : "bg-slate-900 border border-slate-850 text-slate-300 hover:text-white hover:border-slate-700"
+                    : "bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
                 }`}
               >
                 이전 단계
@@ -268,7 +268,7 @@ export default function SurveyPage() {
                   className={`px-6 py-3 font-bold text-xs rounded-xl transition-all ${
                     isPageComplete(currentPage)
                       ? "bg-purple-600 text-white hover:bg-purple-500"
-                      : "bg-slate-900 text-slate-650 cursor-not-allowed border border-transparent"
+                      : "bg-slate-900 text-slate-600 cursor-not-allowed border border-transparent"
                   }`}
                 >
                   다음 단계 →
@@ -281,7 +281,7 @@ export default function SurveyPage() {
                   className={`px-6 py-3 font-bold text-xs rounded-xl transition-all ${
                     allQuestionsAnswered()
                       ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500"
-                      : "bg-slate-900 text-slate-650 cursor-not-allowed border border-transparent"
+                      : "bg-slate-900 text-slate-600 cursor-not-allowed border border-transparent"
                   }`}
                 >
                   결과 확인하기 ✓
@@ -311,7 +311,7 @@ export default function SurveyPage() {
             {/* 4-Axis Diagnosis summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               
-              <div className="bg-slate-950/30 border border-slate-850 p-4 rounded-2xl">
+              <div className="bg-slate-950/30 border border-slate-800 p-4 rounded-2xl">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">1. 탐색 방식</span>
                 <h4 className="text-sm font-bold text-white mt-1">
                   {result.resultCode.includes("D") ? "직접 운전형 (Driver)" : "추천 탑승형 (Passenger)"}
@@ -323,7 +323,7 @@ export default function SurveyPage() {
                 </p>
               </div>
 
-              <div className="bg-slate-950/30 border border-slate-850 p-4 rounded-2xl">
+              <div className="bg-slate-950/30 border border-slate-800 p-4 rounded-2xl">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">2. 관심 범위</span>
                 <h4 className="text-sm font-bold text-white mt-1">
                   {result.resultCode.includes("W") ? "폭넓은 탐색형 (Wide)" : "집중 몰입형 (Narrow)"}
@@ -335,7 +335,7 @@ export default function SurveyPage() {
                 </p>
               </div>
 
-              <div className="bg-slate-950/30 border border-slate-850 p-4 rounded-2xl">
+              <div className="bg-slate-950/30 border border-slate-800 p-4 rounded-2xl">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">3. 자극 성향</span>
                 <h4 className="text-sm font-bold text-white mt-1">
                   {result.resultCode.includes("M") ? "안정 정보형 (Mild)" : "고자극 반응형 (Spicy)"}
@@ -347,7 +347,7 @@ export default function SurveyPage() {
                 </p>
               </div>
 
-              <div className="bg-slate-950/30 border border-slate-850 p-4 rounded-2xl">
+              <div className="bg-slate-950/30 border border-slate-800 p-4 rounded-2xl">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">4. 시청 호흡</span>
                 <h4 className="text-sm font-bold text-white mt-1">
                   {result.resultCode.includes("L") ? "롱폼 몰입형 (Long)" : "숏폼 속도형 (Flash)"}
@@ -369,7 +369,7 @@ export default function SurveyPage() {
             </div>
 
             {/* Informative Neutral Disclaimer Box */}
-            <div className="bg-slate-900/10 border border-slate-850 rounded-2xl p-4 text-center">
+            <div className="bg-slate-900/10 border border-slate-800 rounded-2xl p-4 text-center">
               <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
                 ℹ️ 이 결과는 사용자가 스스로 응답한 자가진단 결과이며, 이후 실제 시청 데이터 분석 결과와 비교됩니다.
               </p>
@@ -380,7 +380,7 @@ export default function SurveyPage() {
               <button
                 type="button"
                 onClick={handleRetake}
-                className="w-full sm:w-1/3 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 font-bold rounded-xl transition-all text-xs"
+                className="w-full sm:w-1/3 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold rounded-xl transition-all text-xs"
               >
                 🔄 다시 진단하기
               </button>

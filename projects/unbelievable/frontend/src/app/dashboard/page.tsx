@@ -136,6 +136,7 @@ function DashboardContent() {
   const [selfSurvey, setSelfSurvey] = useState<SelfSurveyResult | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [detoxError, setDetoxError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load local self-survey result
@@ -170,6 +171,7 @@ function DashboardContent() {
   const handleStartDetox = async () => {
     if (!runId) return;
     setGeneratingPlan(true);
+    setDetoxError(null);
     try {
       const res = await fetch(`http://localhost:8000/api/v1/detox/generate?run_id=${runId}&user_id=00000000-0000-0000-0000-000000000001`, {
         method: "POST"
@@ -179,17 +181,109 @@ function DashboardContent() {
         if (json.success && json.plan_id) {
           router.push(`/mission?plan_id=${json.plan_id}`);
           return;
+        } else {
+          setDetoxError(json.detail || "디톡스 미션 플랜 생성에 실패했습니다. 백엔드에서 빈 결과를 반환했습니다.");
         }
+      } else {
+        const errorText = await res.text();
+        let parsedDetail = "서버 내부 오류가 발생했습니다.";
+        try {
+          const parsed = JSON.parse(errorText);
+          parsedDetail = parsed.detail || parsedDetail;
+        } catch (_) {}
+        setDetoxError(`디톡스 플랜 생성 실패 (HTTP 상태코드 ${res.status}): ${parsedDetail}`);
       }
-      // Offline fallback
-      router.push(`/mission?plan_id=mvp-active-plan`);
-    } catch (err) {
-      console.warn("Detox plan generation failed. Redirecting to plan portal.", err);
-      router.push(`/mission?plan_id=mvp-active-plan`);
+    } catch (err: any) {
+      console.error("Detox plan generation failed:", err);
+      setDetoxError(`디톡스 플랜 생성 에러: ${err.message || "네트워크 연결을 확인해주세요."}`);
     } finally {
       setGeneratingPlan(false);
     }
   };
+
+  // 1. Process local survey scores and override backend meta_gap if available
+  const processedData = React.useMemo(() => {
+    if (!data) return null;
+    
+    // Deep clone to avoid mutating the original fetched data
+    const clone = JSON.parse(JSON.stringify(data));
+    
+    if (!selfSurvey || !selfSurvey.axisScores) {
+      return clone;
+    }
+    
+    const { D, P, W, N, S, M } = selfSurvey.axisScores;
+    
+    const safeDiv = (num: number, den: number, fallback = 50) => {
+      if (den === 0) return fallback;
+      return Math.round((num / den) * 100);
+    };
+
+    // [Requirement 2: MVP temporary mapping]
+    // This mapping converts the 8-axis (DP/WN/SM/FL) self-survey values from localStorage
+    // to match the 6-axis structure used by the dashboard:
+    // UAS = D / (D + P) * 100
+    // TDS = W / (W + N) * 100
+    // SMS = M / (S + M) * 100
+    // EBS = 50 (default fallback for MVP)
+    // VOS = W / (W + N) * 100
+    // SBS = 50 (default fallback for MVP)
+    //
+    // Note: This is an MVP-only local mapping. When Supabase Survey DB is connected,
+    // this logic should be migrated to the backend database / api routes so that
+    // meta_gap is calculated server-side directly.
+    const surveyValues: Record<string, number> = {
+      UAS: safeDiv(D, D + P),
+      TDS: safeDiv(W, W + N),
+      SMS: safeDiv(M, S + M),
+      EBS: 50,
+      VOS: safeDiv(W, W + N),
+      SBS: 50
+    };
+
+    // Recompute meta_gap and misconception based on local survey values
+    let maxGapValue = -1;
+    let worstAxisCode = "TDS";
+    
+    const axis_names: Record<string, string> = {
+      TDS: "주제 다양성",
+      SBS: "출처 균형",
+      EBS: "감정 균형",
+      VOS: "관점 개방성",
+      SMS: "유해/자극 안전",
+      UAS: "사용자 주도성"
+    };
+
+    Object.keys(clone.meta_gap).forEach(code => {
+      if (surveyValues[code] !== undefined) {
+        const s_val = surveyValues[code];
+        const a_val = clone.meta_gap[code].actual;
+        const gap = s_val - a_val;
+        
+        clone.meta_gap[code].survey = s_val;
+        clone.meta_gap[code].gap = Math.round(gap * 10) / 10;
+        
+        const absGap = Math.abs(gap);
+        if (absGap > maxGapValue) {
+          maxGapValue = absGap;
+          worstAxisCode = code;
+        }
+      }
+    });
+
+    const avgGap = Object.keys(clone.meta_gap).reduce((sum, code) => sum + Math.abs(clone.meta_gap[code].gap), 0) / 6;
+    const misconceptionIndex = Math.min(100.0, Math.round(avgGap * 1.5 * 10) / 10);
+    
+    clone.misconception = {
+      index: misconceptionIndex,
+      worst_axis_code: worstAxisCode,
+      worst_axis_name: axis_names[worstAxisCode],
+      worst_gap_value: clone.meta_gap[worstAxisCode].gap,
+      message: `스스로 사전 인지했던 점수 대비 실제 YouTube 소비 데이터상으로 '${axis_names[worstAxisCode]}' 영역의 차이가 가장 크게 집계되었습니다. 가벼운 일상 추천 루틴 수정을 통해 성향의 균형을 복원하시는 것을 추천합니다.`
+    };
+
+    return clone;
+  }, [data, selfSurvey]);
 
   if (loading) {
     return (
@@ -218,7 +312,7 @@ function DashboardContent() {
           </div>
           <button 
             onClick={() => router.push("/upload")} 
-            className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white font-bold rounded-xl transition-all text-xs"
+            className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-bold rounded-xl transition-all text-xs"
           >
             시청 기록 업로드 화면으로 돌아가기
           </button>
@@ -227,11 +321,13 @@ function DashboardContent() {
     );
   }
 
+  if (!processedData) return null;
+
   // Formatting chart data mapping: replacing '주관적_인식' with '자가진단_결과'
-  const chartData = Object.keys(data.meta_gap).map(key => ({
-    subject: data.meta_gap[key].name,
-    "자가진단_결과": data.meta_gap[key].survey,
-    "실제_분석값": data.meta_gap[key].actual
+  const chartData = Object.keys(processedData.meta_gap).map(key => ({
+    subject: processedData.meta_gap[key].name,
+    "자가진단_결과": processedData.meta_gap[key].survey,
+    "실제_분석값": processedData.meta_gap[key].actual
   }));
 
   // Signal Light (Traffic light) based on bias risk score
@@ -243,12 +339,12 @@ function DashboardContent() {
     return { bg: "bg-red-500", text: "text-red-400", label: "위험 (Critical)" };
   };
 
-  const signal = getSignalColor(data.bias_risk_score);
+  const signal = getSignalColor(processedData.bias_risk_score);
   
   // Look up character properties based on calculated actual code
-  const actualCode = data.actual_dsao?.code || "PNML";
+  const actualCode = processedData.actual_dsao?.code || "PNML";
   const character = CHARACTER_MAP[actualCode] || {
-    name: data.actual_dsao?.name || "알고리즘 한우물러",
+    name: processedData.actual_dsao?.name || "알고리즘 한우물러",
     oneLiner: "다양한 취미/관심사의 비디오를 알고리즘 피드가 지정하는 고유 흐름대로 시청하는 안정적 유형입니다.",
     tags: ["#자동한우물", "#안정시청", "#알고리즘적용"],
     attention: "다양한 외부 정보원을 골고루 경험하여 시야를 다양하게 복원하는 노력이 다소 아쉬울 수 있습니다.",
@@ -259,6 +355,35 @@ function DashboardContent() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8 font-body">
       <div className="max-w-6xl mx-auto space-y-8">
         
+        {/* Detox Generation API Error Alert */}
+        {detoxError && (
+          <div className="bg-red-950/20 border border-red-500/30 rounded-3xl p-6 backdrop-blur-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-red-400 flex items-center gap-2">
+                <span>⚠️</span> 디톡스 미션 생성 실패
+              </h4>
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                실제 API(FastAPI: Port 8000)를 통한 디톡스 미션 플랜 실시간 생성에 실패했습니다. 서버 상태 또는 API Key를 점검하세요.<br />
+                <span className="text-[10px] text-red-400 font-mono">오류메시지: {detoxError}</span>
+              </p>
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
+              <button
+                onClick={handleStartDetox}
+                className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 font-bold rounded-xl text-xs transition-all w-full md:w-auto"
+              >
+                다시 시도
+              </button>
+              <button
+                onClick={() => router.push("/mission?plan_id=mvp-active-plan")}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 font-bold rounded-xl text-xs transition-all w-full md:w-auto"
+              >
+                시연용 데이터로 보기
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Navbar */}
         <div className="flex justify-between items-center border-b border-slate-900 pb-6">
           <div>
@@ -268,7 +393,7 @@ function DashboardContent() {
           <div className="flex gap-3">
             <button 
               onClick={() => router.push("/types")}
-              className="px-5 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-350 hover:text-white font-bold rounded-xl transition-all text-xs"
+              className="px-5 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white font-bold rounded-xl transition-all text-xs"
             >
               🌐 다른 유형 둘러보기
             </button>
@@ -287,7 +412,7 @@ function DashboardContent() {
             </button>
           </div>
         </div>
-
+ 
         {/* Dashboard Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           
@@ -300,7 +425,7 @@ function DashboardContent() {
               <div className="flex items-center gap-4">
                 <div className={`w-6 h-6 rounded-full ${signal.bg} animate-pulse shadow-2xl`} />
                 <div>
-                  <div className="text-3xl font-extrabold text-white">{data.bias_risk_score}점</div>
+                  <div className="text-3xl font-extrabold text-white">{processedData.bias_risk_score}점</div>
                   <div className={`text-sm font-bold mt-1 ${signal.text}`}>{signal.label}</div>
                 </div>
               </div>
@@ -308,14 +433,14 @@ function DashboardContent() {
                 전체 6축 인지 지표의 가중합을 계산한 결과입니다. 현재 시청 이력에서 알고리즘 자동 추천 노출로 인해 축적된 편향 상태를 시각화합니다.
               </p>
             </div>
-
+ 
             {/* 16-Type MBTI Card */}
             <div className="bg-gradient-to-br from-purple-900/30 to-indigo-900/20 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl" />
               <h3 className="text-xs uppercase tracking-wider text-purple-400 font-semibold mb-4">미디어 소비성향 유형 (소비 MBTI)</h3>
-              <h2 className="text-2xl font-black text-white font-heading tracking-tight">{data.mbti.name}</h2>
+              <h2 className="text-2xl font-black text-white font-heading tracking-tight">{processedData.mbti.name}</h2>
               <div className="flex flex-wrap gap-2 mt-4">
-                {data.mbti.tags.map((t: string) => (
+                {processedData.mbti.tags.map((t: string) => (
                   <span key={t} className="text-[10px] bg-purple-500/10 text-purple-300 px-3 py-1 rounded-full border border-purple-500/20 font-semibold">
                     {t}
                   </span>
@@ -327,14 +452,14 @@ function DashboardContent() {
             </div>
             
           </div>
-
+ 
           {/* Right Block: Overlay Radar Chart (Meta-gap) */}
           <div className="md:col-span-2">
             <RadarChart data={chartData} />
           </div>
-
+ 
         </div>
-
+ 
         {/* Dynamic DSAO Character Profile Card */}
         <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-md shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl" />
@@ -359,7 +484,7 @@ function DashboardContent() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1 space-y-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">유형 한 줄 요약</span>
-              <p className="text-sm text-slate-350 leading-relaxed font-medium">
+              <p className="text-sm text-slate-400 leading-relaxed font-medium">
                 {character.oneLiner}
               </p>
             </div>
@@ -379,9 +504,9 @@ function DashboardContent() {
             </div>
           </div>
         </div>
-
+ 
         {/* 자가진단 vs 실제 데이터 분석 DSAO 비교 카드 및 메타인지 갭 */}
-        {selfSurvey && data.actual_dsao && (
+        {selfSurvey && processedData.actual_dsao && (
           <div className="bg-slate-900/20 border border-slate-800/80 rounded-3xl p-6 md:p-8 backdrop-blur-md shadow-2xl space-y-6">
             <div className="flex items-center gap-3 mb-2 border-b border-slate-900 pb-4">
               <span className="text-xl">📊</span>
@@ -394,13 +519,13 @@ function DashboardContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* 자가진단 결과 DSAO */}
-              <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl relative">
+              <div className="bg-slate-950/40 border border-slate-800 p-5 rounded-2xl relative">
                 <span className="absolute top-4 right-4 text-[9px] uppercase font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
                   사전 자가진단 결과
                 </span>
                 <h3 className="text-xs text-slate-500 font-bold uppercase tracking-wider">자가진단 예측 코드</h3>
                 <h4 className="text-3xl font-black text-white mt-1 font-heading tracking-tight">{selfSurvey.resultCode}</h4>
-                <h5 className="text-sm font-bold text-slate-350 mt-0.5">{selfSurvey.resultName}</h5>
+                <h5 className="text-sm font-bold text-slate-400 mt-0.5">{selfSurvey.resultName}</h5>
                 
                 <div className="mt-4 space-y-2 text-xs text-slate-400">
                   <div className="flex justify-between border-b border-slate-900 pb-1.5">
@@ -421,60 +546,60 @@ function DashboardContent() {
                   </div>
                 </div>
               </div>
-
+ 
               {/* 객관적 실제 분석 DSAO */}
-              <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl relative">
+              <div className="bg-slate-950/40 border border-slate-800 p-5 rounded-2xl relative">
                 <span className="absolute top-4 right-4 text-[9px] uppercase font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded">
                   실제 데이터 분석 결과
                 </span>
                 <h3 className="text-xs text-slate-500 font-bold uppercase tracking-wider">실제 분석 사후 코드</h3>
-                <h4 className="text-3xl font-black text-white mt-1 font-heading tracking-tight">{data.actual_dsao.code}</h4>
-                <h5 className="text-sm font-bold text-slate-350 mt-0.5">{data.actual_dsao.name}</h5>
+                <h4 className="text-3xl font-black text-white mt-1 font-heading tracking-tight">{processedData.actual_dsao.code}</h4>
+                <h5 className="text-sm font-bold text-slate-400 mt-0.5">{processedData.actual_dsao.name}</h5>
                 
                 <div className="mt-4 space-y-2 text-xs text-slate-400">
                   <div className="flex justify-between border-b border-slate-900 pb-1.5">
                     <span>1. 탐색 방식:</span>
-                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("D") ? "직접 운전형 (D)" : "추천 탑승형 (P)"}</span>
+                    <span className="font-semibold text-slate-200">{processedData.actual_dsao.code.includes("D") ? "직접 운전형 (D)" : "추천 탑승형 (P)"}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-900 pb-1.5">
                     <span>2. 관심 범위:</span>
-                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("W") ? "폭넓은 탐색형 (W)" : "집중 몰입형 (N)"}</span>
+                    <span className="font-semibold text-slate-200">{processedData.actual_dsao.code.includes("W") ? "폭넓은 탐색형 (W)" : "집중 몰입형 (N)"}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-900 pb-1.5">
                     <span>3. 자극 성향:</span>
-                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("M") ? "안정 정보형 (M)" : "고자극 반응형 (S)"}</span>
+                    <span className="font-semibold text-slate-200">{processedData.actual_dsao.code.includes("M") ? "안정 정보형 (M)" : "고자극 반응형 (S)"}</span>
                   </div>
                   <div className="flex justify-between pb-0.5">
                     <span>4. 시청 호흡:</span>
-                    <span className="font-semibold text-slate-200">{data.actual_dsao.code.includes("L") ? "롱폼 몰입형 (L)" : "숏폼 속도형 (F)"}</span>
+                    <span className="font-semibold text-slate-200">{processedData.actual_dsao.code.includes("L") ? "롱폼 몰입형 (L)" : "숏폼 속도형 (F)"}</span>
                   </div>
                 </div>
               </div>
-
+ 
             </div>
-
+ 
             {/* Meta-gap comparison text summary */}
-            <div className="bg-slate-950/20 border border-slate-850 rounded-2xl p-5">
+            <div className="bg-slate-950/20 border border-slate-800 rounded-2xl p-5">
               <div className="flex items-start gap-3">
                 <span className="text-lg text-purple-400">💡</span>
                 <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-slate-350">메타인지 격차 경향성 리포트</h4>
+                  <h4 className="text-xs font-bold text-slate-400">메타인지 격차 경향성 리포트</h4>
                   <p className="text-xs text-slate-400 leading-relaxed font-body">
-                    {selfSurvey.resultCode === data.actual_dsao.code 
+                    {selfSurvey.resultCode === processedData.actual_dsao.code 
                       ? `귀하가 사전 진단한 예측 성향(${selfSurvey.resultCode})과 실제 시청 기록 데이터 분석 성향이 일치합니다! 자신의 미디어 소비 패턴에 대해 우수한 메타인지를 유지하고 계십니다.`
-                      : `귀하의 사전 자가진단 예측 유형([${selfSurvey.resultName}])과 실제 시청 데이터 사후 측정 유형([${data.actual_dsao.name}]) 사이에 격차가 존재합니다. 추천 엔진 노출 비중 및 시청 호흡에서 자기도 모르게 수동 노출의 비중이 컸음을 나타내는 '메타인지 갭' 상태입니다.`}
+                      : `귀하의 사전 자가진단 예측 유형([${selfSurvey.resultName}])과 실제 시청 데이터 사후 측정 유형([${processedData.actual_dsao.name}]) 사이에 격차가 존재합니다. 추천 엔진 노출 비중 및 시청 호흡에서 자기도 모르게 수동 노출의 비중이 컸음을 나타내는 '메타인지 갭' 상태입니다.`}
                   </p>
                 </div>
               </div>
             </div>
-
+ 
           </div>
         )}
-
+ 
         {/* 6-Axis Scores List */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {Object.keys(data.meta_gap).map(key => {
-            const axis = data.meta_gap[key];
+          {Object.keys(processedData.meta_gap).map(key => {
+            const axis = processedData.meta_gap[key];
             return (
               <div key={key} className="bg-slate-900/20 border border-slate-800/80 rounded-2xl p-6 transition-all hover:border-slate-700/80 hover:bg-slate-900/30">
                 <div className="flex justify-between items-start mb-2">

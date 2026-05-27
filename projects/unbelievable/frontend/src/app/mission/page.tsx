@@ -18,7 +18,10 @@ function MissionContent() {
     // Attempt to fetch from local FastAPI backend
     const fetchPlan = async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/v1/detox/plan?user_id=00000000-0000-0000-0000-000000000001");
+        const url = planId && planId !== "mvp-active-plan"
+          ? `http://localhost:8000/api/v1/detox/plan?plan_id=${planId}&user_id=00000000-0000-0000-0000-000000000001`
+          : "http://localhost:8000/api/v1/detox/plan?user_id=00000000-0000-0000-0000-000000000001";
+        const res = await fetch(url);
         if (res.ok) {
           const json = await res.json();
           if (json.active) {
@@ -148,7 +151,7 @@ function MissionContent() {
           </div>
           <button 
             onClick={() => router.push("/dashboard")}
-            className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-350 hover:text-white font-bold rounded-xl transition-all text-xs"
+            className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white font-bold rounded-xl transition-all text-xs"
           >
             ← 대시보드로 복귀
           </button>
@@ -168,14 +171,14 @@ function MissionContent() {
 
               <div className="space-y-4">
                 {data.reverse_queries.map((item: any, idx: number) => (
-                  <div key={idx} className="bg-slate-950/60 border border-slate-850 p-4 rounded-2xl relative group hover:border-purple-500/30 transition-all">
+                  <div key={idx} className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl relative group hover:border-purple-500/30 transition-all">
                     <span className="text-[10px] uppercase font-bold text-purple-400 tracking-wider">대안 검색어 {idx + 1}</span>
                     <h4 className="text-sm font-bold text-white mt-1 break-words">{item.query_text}</h4>
                     <p className="text-[10px] text-slate-500 mt-1">{item.why_this_helps}</p>
                     
                     <button 
                       onClick={() => copyToClipboard(item.query_text, idx)}
-                      className="mt-3 w-full py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-[10px] font-bold text-slate-300 hover:text-white rounded-lg transition-all flex items-center justify-center gap-1.5"
+                      className="mt-3 w-full py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 hover:text-white rounded-lg transition-all flex items-center justify-center gap-1.5"
                     >
                       {copiedIndex === idx ? "✓ 복사 완료!" : "📋 텍스트 복사하기"}
                     </button>
@@ -257,7 +260,7 @@ function MissionContent() {
 
                     {/* Aligned Lightweight Interactive Forms (No forced capture verification) */}
                     {!mission.completed && (
-                      <div className="mt-2 pl-10 border-l border-slate-850 space-y-3">
+                      <div className="mt-2 pl-10 border-l border-slate-800 space-y-3">
                         {isChoice && mission.choices && (
                           <div className="flex flex-wrap gap-2">
                             {mission.choices.map((choice: string) => (
@@ -267,7 +270,7 @@ function MissionContent() {
                                   setInputs(prev => ({ ...prev, [mission.id]: choice }));
                                   toggleMission(idx, choice);
                                 }}
-                                className="px-3.5 py-1.5 bg-slate-950 hover:bg-purple-950/20 border border-slate-800 hover:border-purple-500/50 rounded-xl text-xs text-slate-355 hover:text-purple-300 font-medium transition-all"
+                                className="px-3.5 py-1.5 bg-slate-950 hover:bg-purple-950/20 border border-slate-800 hover:border-purple-500/50 rounded-xl text-xs text-slate-300 hover:text-purple-300 font-medium transition-all"
                               >
                                 {choice}
                               </button>
@@ -282,7 +285,7 @@ function MissionContent() {
                               value={inputs[mission.id] || ""}
                               onChange={(e) => setInputs(prev => ({ ...prev, [mission.id]: e.target.value }))}
                               placeholder="가벼운 성찰 소감을 입력해 보세요 (예: 생각 환기 완료)"
-                              className="flex-1 bg-slate-950 border border-slate-850 rounded-xl px-3.5 py-2 text-xs text-slate-300 focus:outline-none focus:border-purple-500/50"
+                              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-300 focus:outline-none focus:border-purple-500/50"
                             />
                             <button
                               onClick={() => handleTextSubmit(idx)}

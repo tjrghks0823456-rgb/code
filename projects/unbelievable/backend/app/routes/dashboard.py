@@ -154,6 +154,8 @@ async def get_dashboard_summary(
                 "message": f"스스로 사전 인지했던 점수 대비 실제 YouTube 소비 데이터상으로 '{axis_names[max_gap_axis]}' 영역의 차이가 가장 크게 집계되었습니다. 가벼운 일상 추천 루틴 수정을 통해 성향의 균형을 복원하시는 것을 추천합니다."
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch dashboard summary: {e}")
         raise HTTPException(status_code=500, detail=f"Dashboard rendering failed: {str(e)}")
