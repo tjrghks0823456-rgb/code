@@ -23,8 +23,8 @@ code/
 | [emotion-music-recommendation](projects/emotion-music-recommendation/) | 감정 기반 음악 추천 Flask 앱과 발표 자료 | Python, Flask, MySQL | AI Programming |
 | [semitool-hmi](projects/semitool-hmi/) | 반도체 장비 HMI, EtherCAT 제어, 공정 시나리오 통합 프로젝트 | C#, WinForms, EtherCAT | Equipment Control |
 | [flask-csharp-integration](projects/flask-csharp-integration/) | Flask 백엔드와 C# 클라이언트를 연동한 모니터링 시스템 | Python, Flask, C# | System Communication |
-| [equipment-management-winforms](projects/equipment-management-winforms/) | 장비 등록, 대여, 이력, 사용자 관리를 포함한 WinForms 관리 앱 | C#, WinForms, SQL | GUI |
-| [winforms-gui-portfolio](projects/winforms-gui-portfolio/) | 로그인, 계산기, 숫자 맞추기, Todo 등 WinForms 화면 모음 | C#, WinForms | GUI |
+| [equipment-management-winforms](projects/equipment-management-winforms/) | MySQL 기반 장비 등록, 대여/반납, 고장 처리, 이력 조회, 관리자 일정 관리 WinForms 앱 | C#, WinForms, MySQL | GUI |
+| [winforms-gui-portfolio](projects/winforms-gui-portfolio/) | 로그인, 숫자 맞추기, 계산기, Todo로 WinForms 이벤트/UI 패턴을 연습한 런처형 앱 | C#, WinForms | GUI |
 
 ## Coursework
 
