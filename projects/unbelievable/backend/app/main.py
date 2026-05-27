@@ -22,10 +22,10 @@ app.add_middleware(
 )
 
 # Register routes
-app.include_router(upload.router, prefix=settings.API_V1_STR, tags=["Upload"])
-app.include_router(analysis.router, prefix=settings.API_V1_STR, tags=["Analysis"])
-app.include_router(detox.router, prefix=settings.API_V1_STR, tags=["Detox"])
-app.include_router(dashboard.router, prefix=settings.API_V1_STR, tags=["Dashboard"])
+app.include_router(upload, prefix=settings.API_V1_STR, tags=["Upload"])
+app.include_router(analysis, prefix=settings.API_V1_STR, tags=["Analysis"])
+app.include_router(detox, prefix=settings.API_V1_STR, tags=["Detox"])
+app.include_router(dashboard, prefix=settings.API_V1_STR, tags=["Dashboard"])
 
 @app.get("/")
 def read_root():
