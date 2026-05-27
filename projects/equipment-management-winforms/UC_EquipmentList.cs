@@ -100,10 +100,7 @@ namespace WindowsFormsApp1
             // 아무 것도 선택 안된 경우 → 초기 안내 문구 표시
             if (lvEquip.SelectedItems.Count == 0)
             {
-                lblSelectedInfo.Text = "선택된 장비: 없음";
-                lblSpecs.Text = "장비를 선택하면 스펙이 표시됩니다.";
-                lblGuide.Text = "장비를 선택하면 가이드가 표시됩니다.";
-                pbEquipImage.Image = null;
+                ResetSelectedEquipment();
                 return;
             }
 
@@ -130,6 +127,18 @@ namespace WindowsFormsApp1
             Form1 parent = this.FindForm() as Form1;
             if (parent != null)
                 parent.SelectedEquipmentName = equipName;
+        }
+
+        private void ResetSelectedEquipment()
+        {
+            lblSelectedInfo.Text = "선택된 장비: 없음";
+            lblSpecs.Text = "장비를 선택하면 스펙이 표시됩니다.";
+            lblGuide.Text = "장비를 선택하면 가이드가 표시됩니다.";
+            pbEquipImage.Image = null;
+
+            Form1 parent = this.FindForm() as Form1;
+            if (parent != null)
+                parent.SelectedEquipmentName = "";
         }
 
         // =====================================================================
@@ -297,6 +306,54 @@ namespace WindowsFormsApp1
                 {
                     MessageBox.Show("장비 등록 실패: " + ex.Message, "오류");
                 }
+            }
+        }
+
+        // =====================================================================
+        // 장비 삭제 버튼
+        //  - 목록에서 선택한 장비를 삭제하고, 삭제 이력을 남긴다.
+        //  - 대여중 장비는 반납 절차가 먼저 필요하므로 삭제를 막는다.
+        // =====================================================================
+        private void btnDelete_Click(object sender, EventArgs e)
+        {
+            if (lvEquip.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("삭제할 장비를 목록에서 선택하세요.", "선택 확인");
+                return;
+            }
+
+            string equipmentName = lvEquip.SelectedItems[0].Text;
+            string status = lvEquip.SelectedItems[0].SubItems[2].Text;
+
+            if (status == "대여중")
+            {
+                MessageBox.Show("대여중인 장비는 반납 처리 후 삭제할 수 있습니다.", "삭제 불가");
+                return;
+            }
+
+            DialogResult result = MessageBox.Show(
+                $"'{equipmentName}' 장비를 삭제하시겠습니까?\r\n삭제 후 장비 목록에서는 사라지고, 기존 이력은 남습니다.",
+                "장비 삭제 확인",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes)
+                return;
+
+            try
+            {
+                _repo.DeleteEquipment(equipmentName);
+                _historyRepo.AddLog("장비삭제", "관리자", equipmentName);
+
+                txtSearch.Text = "";
+                LoadEquipmentList();
+                ResetSelectedEquipment();
+
+                MessageBox.Show("장비가 삭제되었습니다.", "삭제 완료");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("장비 삭제 실패: " + ex.Message, "오류");
             }
         }
 

@@ -26,6 +26,7 @@
         private System.Windows.Forms.Button btnReset;
         private System.Windows.Forms.Button btnSearch;
         private System.Windows.Forms.Button btnRegister;
+        private System.Windows.Forms.Button btnDelete;
         private System.Windows.Forms.TextBox txtSearch;
         private System.Windows.Forms.Label lblSearch;
         
@@ -49,6 +50,7 @@
             this.btnReset = new System.Windows.Forms.Button();
             this.btnSearch = new System.Windows.Forms.Button();
             this.btnRegister = new System.Windows.Forms.Button();
+            this.btnDelete = new System.Windows.Forms.Button();
             this.txtSearch = new System.Windows.Forms.TextBox();
             this.lblSearch = new System.Windows.Forms.Label();
             this.lblSelectedInfo = new System.Windows.Forms.Label();
@@ -69,6 +71,7 @@
             this.groupBox1.Controls.Add(this.btnReset);
             this.groupBox1.Controls.Add(this.btnSearch);
             this.groupBox1.Controls.Add(this.btnRegister);
+            this.groupBox1.Controls.Add(this.btnDelete);
             this.groupBox1.Controls.Add(this.txtSearch);
             this.groupBox1.Controls.Add(this.lblSearch);
             this.groupBox1.Controls.Add(this.lblSelectedInfo);
@@ -158,6 +161,16 @@
             this.btnRegister.Text = "장비 등록";
             this.btnRegister.UseVisualStyleBackColor = true;
             this.btnRegister.Click += new System.EventHandler(this.btnRegister_Click);
+            //
+            // btnDelete
+            //
+            this.btnDelete.Location = new System.Drawing.Point(465, 30);
+            this.btnDelete.Name = "btnDelete";
+            this.btnDelete.Size = new System.Drawing.Size(105, 30);
+            this.btnDelete.TabIndex = 7;
+            this.btnDelete.Text = "장비 삭제";
+            this.btnDelete.UseVisualStyleBackColor = true;
+            this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
             // 
             // txtSearch
             // 

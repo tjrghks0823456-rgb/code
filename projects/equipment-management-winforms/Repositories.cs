@@ -88,6 +88,50 @@ namespace WindowsFormsApp1
         }
 
         // -------------------------------------------------------------
+        // DeleteEquipment
+        //  - 선택한 장비를 equipment 테이블에서 삭제
+        //  - 현재 대여중인 장비는 반납 이력이 꼬일 수 있으므로 삭제하지 못하게 막는다.
+        // -------------------------------------------------------------
+        public void DeleteEquipment(string equipmentName)
+        {
+            if (string.IsNullOrWhiteSpace(equipmentName))
+                throw new Exception("삭제할 장비를 선택하세요.");
+
+            string name = equipmentName.Trim();
+
+            using (var conn = DbManager.GetConnection())
+            {
+                conn.Open();
+
+                string selectQuery = "SELECT status FROM equipment WHERE name=@name";
+
+                using (var selectCmd = new MySqlCommand(selectQuery, conn))
+                {
+                    selectCmd.Parameters.AddWithValue("@name", name);
+                    object statusObj = selectCmd.ExecuteScalar();
+
+                    if (statusObj == null)
+                        throw new Exception("존재하지 않는 장비입니다.");
+
+                    string status = statusObj.ToString();
+                    if (status == "대여중")
+                        throw new Exception("대여중인 장비는 반납 처리 후 삭제할 수 있습니다.");
+                }
+
+                string deleteQuery = "DELETE FROM equipment WHERE name=@name";
+
+                using (var deleteCmd = new MySqlCommand(deleteQuery, conn))
+                {
+                    deleteCmd.Parameters.AddWithValue("@name", name);
+                    int rows = deleteCmd.ExecuteNonQuery();
+
+                    if (rows == 0)
+                        throw new Exception("장비 삭제에 실패했습니다.");
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
         // SelectAll
         //  - equipment 테이블에 있는 모든 장비를 가져오는 함수
         //  - 결과는 List<Equipment> 형태로 돌려준다.
