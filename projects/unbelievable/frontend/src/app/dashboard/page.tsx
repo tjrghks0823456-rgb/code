@@ -2,129 +2,10 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import CharacterAvatar from "../../components/CharacterAvatar";
 import RadarChart from "../../components/RadarChart";
+import { getDsaoCharacter } from "../../data/dsaoCharacters";
 import { loadSelfSurveyResult, SelfSurveyResult } from "../../utils/surveyStorage";
-
-const CHARACTER_MAP: Record<string, {
-  name: string;
-  oneLiner: string;
-  tags: string[];
-  attention: string;
-  recovery: string;
-}> = {
-  DWSF: {
-    name: "도파민 탐험가",
-    oneLiner: "자발적으로 다채로운 정보를 개척하지만, 유희적인 숏폼 자극도 유연하게 수용하는 유형입니다.",
-    tags: ["#주도적탐색", "#다채로운장르", "#가벼운숏폼"],
-    attention: "때로는 목적을 갖고 시작한 검색이 숏폼 추천 리스트로 새어 나가지 않는지 한 번씩 체크해 볼 필요가 있습니다.",
-    recovery: "오늘 본 영상 중 가장 기억에 남는 가치 있는 제목 1개만 수첩에 적어 보는 습관을 권장합니다."
-  },
-  DWSL: {
-    name: "마라맛 큐레이터",
-    oneLiner: "주도적으로 풍부한 정보원을 발굴하되, 호흡이 길고 강렬한 몰입감 높은 주제들을 탐색하는 경향이 뚜렷한 유형입니다.",
-    tags: ["#강렬한몰입", "#주체적아카이빙", "#롱폼선호"],
-    attention: "자극적인 시사 논쟁이나 극단적인 대립 영상에 긴 시간 몰입하여 심리적 스트레스를 축적하지 않도록 조심하세요.",
-    recovery: "자극이 없는 자연 상태의 고전 인문학이나 다큐멘터리 영상을 하루 1회 감상하는 것을 권장합니다."
-  },
-  DWMF: {
-    name: "지식 스낵 탐색가",
-    oneLiner: "자율적으로 지식과 교양을 채굴하며, 바쁜 일상 속에서 주로 컴팩트하게 요약된 스낵 숏폼 비디오를 즐깁니다.",
-    tags: ["#지식스낵", "#자율적학습", "#컴팩트소비"],
-    attention: "단편화된 지식 요약에 익숙해져 긴 글이나 복잡한 맥락의 지식을 끝까지 탐독하는 호흡이 다소 감소할 수 있습니다.",
-    recovery: "20분 이상의 호흡이 긴 전문 지식 강좌나 역사 다큐멘터리 1편을 건너뛰지 않고 진득하게 관람해 보세요."
-  },
-  DWML: {
-    name: "지식 탐구형 선장",
-    oneLiner: "추천 알고리즘 피드에 안주하지 않고 본인의 나침반을 들고 차분하고 밀도 높은 롱폼 교육 콘텐츠를 항해합니다.",
-    tags: ["#지식탐구", "#주체적항해", "#깊은몰입"],
-    attention: "자신만의 지식 주제에 지나치게 수렴되어 다른 관점이나 대중적인 유희 카테고리의 트렌드를 완고하게 배척할 수 있습니다.",
-    recovery: "가끔은 대중적인 최신 테크나 문화 트렌드 요약 숏폼을 가볍게 구경하며 시야를 환기해 보세요."
-  },
-  DNSF: {
-    name: "마라맛 쇼츠 광부",
-    oneLiner: "확고하게 매료된 특정 장르나 채널에 들어가, 자극도가 강렬한 숏폼들만 집중적으로 시청하는 경향입니다.",
-    tags: ["#특정장르", "#쇼츠채굴", "#고자극선호"],
-    attention: "알고리즘이 주는 좁고 강력한 자극의 루프에 매료되어 폭넓은 지식 노출과 사고의 다양성이 제한되기 쉽습니다.",
-    recovery: "유튜브를 켜기 전에 평소 보던 주제 반대편에 있는 유익한 키워드를 직접 1회 검색해 보세요."
-  },
-  DNSL: {
-    name: "심연의 마라맛 광부",
-    oneLiner: "본인이 매료된 특정 관심 주제에 긴 시간 깊이 몰입하며, 논쟁적이고 강렬한 자극의 롱폼 영상을 집요하게 시청합니다.",
-    tags: ["#심연탐구", "#집요한몰입", "#논쟁주제"],
-    attention: "소수의 극단적이거나 논쟁적인 정보원에 고착되어 다른 사람들의 평범한 상식이나 다각도 시각과 괴리될 위험이 있습니다.",
-    recovery: "국제 외신이나 공영 다큐멘터리를 통해 더 다각적이고 균형 잡힌 정보 출처를 복원해 보세요."
-  },
-  DNMF: {
-    name: "조용한 기술 덕후",
-    oneLiner: "본인의 명확한 전문 분야(Tech, 코딩, 기계 조작 등)의 유익한 정보 위주로 가볍고 핵심적인 스낵 콘텐츠를 봅니다.",
-    tags: ["#기술탐구", "#덕후성향", "#조용한수용"],
-    attention: "일상적 유희나 감정적 공감을 나누는 스토리 중심 콘텐츠를 소홀히 하여 소통의 유연성이 다소 저하될 수 있습니다.",
-    recovery: "따뜻한 감동 중심의 인간 극장이나 일상 다큐멘터리 영상 1편을 평온하게 감상해 보는 것을 추천합니다."
-  },
-  DNML: {
-    name: "한우물 연구자",
-    oneLiner: "특정 학술/전문 분야에 대한 깊은 애착을 바탕으로 유해성 있는 자극을 배제하고 한우물만 진지하게 연구하듯 봅니다.",
-    tags: ["#학구파", "#자극배제", "#진지한탐구"],
-    attention: "미디어 소비 습관은 매우 건전하나 지나친 학술적 고립으로 인해 미디어 소비의 즐거움과 다양성이 아쉬울 수 있습니다.",
-    recovery: "유튜브를 단순한 학습 도구가 아닌 가벼운 웃음을 주는 스포츠 하이라이트 등 오락성 콘텐츠로 하루 5분 휴식해 보세요."
-  },
-  PWSF: {
-    name: "알고리즘 롤러코스터",
-    oneLiner: "추천 알고리즘 피드의 파도를 타고 유희적이고 흥미진진한 숏폼 콘텐츠를 스릴 넘치게 즐겨보는 유형입니다.",
-    tags: ["#추천파도", "#롤러코스터", "#숏폼여행"],
-    attention: "직접 검색어를 입력하는 적극적 의지가 점차 수동적으로 변해 주체적인 미디어 소비 근력이 약해질 수 있습니다.",
-    recovery: "피드의 영상을 누르기 전에 내가 '왜 누르는지'를 스스로에게 한마디 질문하는 잠깐 멈춤 루틴을 가져보세요."
-  },
-  PWSL: {
-    name: "자동재생 극장 관객",
-    oneLiner: "자동재생이 추천하는 다채롭고 감정적인 롱폼 콘텐츠들을 수동적으로 켜두고 몰입하여 감상하는 관객입니다.",
-    tags: ["#자동재생", "#수동적관객", "#롱폼시청"],
-    attention: "본인과 다른 성격의 가짜 자극 영상도 끊임없이 자동 재생되어 인지적 불균형을 스스로 인지하지 못할 수 있습니다.",
-    recovery: "자동재생 옵션을 의도적으로 해제하고, 영상 하나가 끝날 때마다 다음에 볼 채널을 직접 검색해 고르세요."
-  },
-  PWMF: {
-    name: "유튜브 유람선 탑승객",
-    oneLiner: "추천 피드가 데려다주는 안전하고 건전하며 자극이 적은 정보/취미 카테고리의 스낵 영상들을 평화롭게 소비합니다.",
-    tags: ["#유람선탑승", "#안전지대", "#취미탐방"],
-    attention: "모험을 피해 늘 익숙하고 편안한 에코 챔버에만 갇혀 있어, 뇌에 신선하고 깊이 있는 지적 도전을 가로막을 수 있습니다.",
-    recovery: "평소 접하지 않던 약간은 어렵고 학술적인 전문 과학 대중 강연을 10분만 시청해보는 지적 도전을 추천합니다."
-  },
-  PWML: {
-    name: "편안한 자동재생러",
-    oneLiner: "다양하고 편안한 성격의 롱폼 영상들을 추천 흐름에 맞춰 평화롭게 틀어두고 부담 없이 배경음처럼 활용합니다.",
-    tags: ["#라디오유저", "#편안한흐름", "#무자극롱폼"],
-    attention: "미디어 소비의 적극성이 매우 떨어져 필요한 정보가 생겼을 때 스스로 능동적으로 교차 검증하는 능력이 무뎌질 수 있습니다.",
-    recovery: "라디오처럼 틀어놓는 습관 대신, 15분 동안 오직 영상의 자막과 내레이션에 고도로 주의를 다해 적극적으로 관람해보세요."
-  },
-  PNSF: {
-    name: "알고리즘 도파민 루프",
-    oneLiner: "추천 피드가 연결해 주는 특정 관심 영역의 짧고 입체적이며 호기심을 유발하는 콘텐츠 루프 속에 머무는 성향입니다.",
-    tags: ["#도파민루프", "#알고리즘노출", "#속도감"],
-    attention: "가장 짧고 강렬한 지점만 학습하므로 차분한 전개가 계속되는 문장이나 깊이 있는 미디어 소통에 지루함을 느끼기 쉽습니다.",
-    recovery: "추천 영상 하나를 바로 누르기 전에 검색창에 직접 내가 원하는 키워드 하나를 검색하여 재생해 보세요."
-  },
-  PNSL: {
-    name: "알고리즘 심연 정주행러",
-    oneLiner: "알고리즘이 제시한 특정 자극이나 논쟁 중심의 강력한 테마 흐름을 따라 긴 롱폼 정주행에 깊이 몰입하는 유형입니다.",
-    tags: ["#심연정주행", "#알고리즘추적", "#끝장몰입"],
-    attention: "논쟁적인 자극 영상들이 꼬리를 물어 특정 채널의 주장을 무비판적으로 수용하거나 인지적 편중을 가중시킬 수 있습니다.",
-    recovery: "반대 성향을 가진 차분한 중립 뉴스나 공영 방송사의 정량적인 시각을 1편 곁들여보세요."
-  },
-  PNMF: {
-    name: "조용한 추천 루틴러",
-    oneLiner: "추천 메커니즘을 전적으로 신뢰하되, 자극적인 이슈보다는 차분하고 짧게 정돈된 지식/취미 위주로 평화롭게 봅니다.",
-    tags: ["#조용한루틴", "#차분한시청", "#안정적정보"],
-    attention: "알고리즘이 잘 정제된 취미를 추천해 주므로 안전하지만, 직접 다른 정보원을 발굴하고 비판적으로 분석하는 노력이 줄어듭니다.",
-    recovery: "오늘 본 미디어에서 가장 흥미로웠던 사실 한 줄을 기록하고 그 주장이 참인지 포털에 직접 구글링해보세요."
-  },
-  PNML: {
-    name: "자동재생 한우물러",
-    oneLiner: "알고리즘 피드가 가리키는 특정 건전 주제와 롱폼 채널에 안착하여, 자동재생 흐름에 맞춰 평화롭게 한우물을 시청하는 경향입니다.",
-    tags: ["#자동한우물", "#평화적시청", "#건전수용"],
-    attention: "특정 채널에 과도하게 의존하게 되어 다양한 인지 자극과 새로운 흥미 요소를 발견하는 기회가 차단될 수 있습니다.",
-    recovery: "전혀 다른 분야인 '스포츠 분석'이나 '대중 교양 음악사' 채널의 대표 명작 영상을 1편 의도적으로 구동해 보세요."
-  }
-};
 
 function DashboardContent() {
   const router = useRouter();
@@ -342,14 +223,8 @@ function DashboardContent() {
   const signal = getSignalColor(processedData.bias_risk_score);
   
   // Look up character properties based on calculated actual code
-  const actualCode = processedData.actual_dsao?.code || "PNML";
-  const character = CHARACTER_MAP[actualCode] || {
-    name: processedData.actual_dsao?.name || "알고리즘 한우물러",
-    oneLiner: "다양한 취미/관심사의 비디오를 알고리즘 피드가 지정하는 고유 흐름대로 시청하는 안정적 유형입니다.",
-    tags: ["#자동한우물", "#안정시청", "#알고리즘적용"],
-    attention: "다양한 외부 정보원을 골고루 경험하여 시야를 다양하게 복원하는 노력이 다소 아쉬울 수 있습니다.",
-    recovery: "평소와 완전히 다른 새로운 시사 뉴스나 기술 강좌 영상을 한 편 의도적으로 찾아 관람해 보세요."
-  };
+  const actualCode = processedData.actual_dsao?.code?.toUpperCase() || "PNML";
+  const character = getDsaoCharacter(actualCode);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8 font-body">
@@ -463,16 +338,26 @@ function DashboardContent() {
         {/* Dynamic DSAO Character Profile Card */}
         <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-md shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl" />
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-900 pb-4">
-            <div>
-              <span className="text-xs font-semibold tracking-wider text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full uppercase">
-                실제 데이터 기반 알고리즘 유형 캐릭터
-              </span>
-              <h2 className="text-2xl font-black text-white mt-3 font-heading tracking-tight flex items-center gap-2">
-                {character.name} <span className="text-sm font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{actualCode}</span>
-              </h2>
+          <div className="flex flex-col lg:flex-row justify-between items-start gap-6 mb-6 border-b border-slate-900 pb-6">
+            <div className="flex flex-col sm:flex-row items-start gap-5">
+              <CharacterAvatar code={actualCode} size="lg" showName={false} />
+              <div>
+                <span className="text-xs font-semibold tracking-wider text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full uppercase">
+                  실제 데이터 기반 알고리즘 유형 캐릭터
+                </span>
+                <h2 className="text-3xl font-black text-white mt-4 font-heading tracking-tight flex flex-wrap items-center gap-2">
+                  {character.characterName}
+                  <span className="text-sm font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                    {actualCode}
+                  </span>
+                </h2>
+                <p className="text-sm font-bold text-slate-300 mt-1">{character.name}</p>
+                <p className="text-xs text-slate-500 mt-2 leading-relaxed max-w-2xl">
+                  {character.visualConcept}
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 lg:justify-end">
               {character.tags.map(tag => (
                 <span key={tag} className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-full font-bold">
                   {tag}
@@ -480,7 +365,7 @@ function DashboardContent() {
               ))}
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1 space-y-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">유형 한 줄 요약</span>
