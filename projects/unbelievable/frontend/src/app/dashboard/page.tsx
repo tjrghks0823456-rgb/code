@@ -131,7 +131,7 @@ function DashboardContent() {
       SBS: "출처 균형",
       EBS: "감정 균형",
       VOS: "관점 개방성",
-      SMS: "유해/자극 안전",
+      SMS: "자극성 안전",
       UAS: "사용자 주도성"
     };
 
@@ -205,6 +205,12 @@ function DashboardContent() {
   if (!processedData) return null;
 
   const scoreWarnings = Array.isArray(processedData.score_warnings) ? processedData.score_warnings : [];
+  const scoreComponents = processedData.score_components && typeof processedData.score_components === "object"
+    ? processedData.score_components
+    : {};
+  const scoreBasisSummary = processedData.score_basis_summary && typeof processedData.score_basis_summary === "object"
+    ? processedData.score_basis_summary
+    : {};
 
   // Formatting chart data mapping: replacing '주관적_인식' with '자가진단_결과'
   const chartData = Object.keys(processedData.meta_gap).map(key => ({
@@ -362,6 +368,63 @@ function DashboardContent() {
           </div>
  
         </div>
+
+        {Object.keys(scoreComponents).length > 0 && (
+          <div className="bg-slate-900/30 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-md shadow-2xl">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 border-b border-slate-800 pb-5 mb-5">
+              <div>
+                <h2 className="text-lg font-black text-white font-heading">점수 산출 근거</h2>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  6축 점수는 단일 지표가 아니라 시청 기록에서 추출 가능한 여러 하위 지표를 재가중 평균해 계산합니다.
+                </p>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-950/60 border border-slate-800 px-3 py-1 rounded-full">
+                데이터 없음 항목은 해석 제한으로 제외
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {chartData.map((axis) => {
+                const components = Array.isArray(scoreComponents[axis.axisCode]) ? scoreComponents[axis.axisCode] : [];
+                const actualValue = axis["실제_분석값"];
+                const isExtreme = actualValue <= 5 || actualValue >= 95;
+
+                return (
+                  <div key={axis.axisCode} className="bg-slate-950/30 border border-slate-800 rounded-2xl p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-white">{axis.subject}</h3>
+                        <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                          {scoreBasisSummary[axis.axisCode] || "사용 가능한 하위 지표를 조합해 계산했습니다."}
+                        </p>
+                      </div>
+                      <span className="text-xs font-black text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg">
+                        {actualValue}점
+                      </span>
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      {components.map((part: any) => (
+                        <div key={part.name} className="flex items-center justify-between gap-3 text-[11px]">
+                          <span className="text-slate-300 truncate">{part.label || part.name}</span>
+                          <span className={`shrink-0 font-bold ${part.status === "limited" ? "text-amber-300" : "text-emerald-300"}`}>
+                            {part.status === "limited" ? "해석 제한" : `${part.value}점 반영`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {isExtreme && (
+                      <p className="mt-3 text-[10px] text-amber-200 bg-amber-500/10 border border-amber-400/20 rounded-xl px-3 py-2 leading-relaxed">
+                        이 축의 극단값은 반영된 하위 지표들이 한쪽으로 강하게 모였다는 뜻이며, 제외된 지표가 있으면 함께 참고해야 합니다.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
  
         {/* Dynamic DSAO Character Profile Card */}
         <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-md shadow-2xl relative overflow-hidden">

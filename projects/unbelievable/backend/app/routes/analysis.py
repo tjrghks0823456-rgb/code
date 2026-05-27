@@ -47,7 +47,7 @@ async def run_analysis(
         
         # 5. Compute 6-axis scores using deterministic python scoring engine (FEAT_06)
         # We pass the events and the newly saved nlp_entry
-        axis_scores, exception_codes = compute_6axis_scores(events, [nlp_entry])
+        axis_scores, exception_codes, score_components = compute_6axis_scores(events, [nlp_entry])
         
         # 6. Classify into one of 16 types (FEAT_08)
         type_code, type_name, tags = classify_16_type(axis_scores)
@@ -67,7 +67,8 @@ async def run_analysis(
             "bias_risk_score": bias_risk_score,
             "weighted_health": weighted_health,
             "mbti_type": type_code, # e.g. "HHHH"
-            "exception_codes": exception_codes
+            "exception_codes": exception_codes,
+            "score_components": score_components
         }
         db_client.save_data("score_run", score_run_entry)
         
@@ -91,7 +92,8 @@ async def run_analysis(
             "mbti_name": type_name,
             "mbti_tags": tags,
             "axis_scores": axis_scores,
-            "exception_codes": exception_codes
+            "exception_codes": exception_codes,
+            "score_components": score_components
         }
     except HTTPException:
         raise

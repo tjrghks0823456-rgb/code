@@ -15,7 +15,7 @@ export default function UploadPage() {
     SBS: 50, // 출처 균형
     EBS: 50, // 감정 균형
     VOS: 50, // 관점 개방성
-    SMS: 50, // 유해/자극 안전
+    SMS: 50, // 자극성 안전
     UAS: 50  // 사용자 주도성
   });
   

@@ -12,7 +12,7 @@ AXIS_NAMES = {
     "SBS": "출처 균형",
     "EBS": "감정 균형",
     "VOS": "관점 개방성",
-    "SMS": "유해/자극 안전",
+    "SMS": "자극성 안전",
     "UAS": "사용자 주도성",
     "ALL": "전체 지표"
 }
@@ -52,8 +52,41 @@ SCORE_WARNING_MAP: Dict[str, Dict[str, str]] = {
     },
     "P07_SAFETY_SAMPLE_LIMITED": {
         "axis": "SMS",
-        "message": "유해/자극 안전성을 판단할 NLP 샘플이 부족하여 해당 지표는 참고용으로 표시됩니다."
+        "message": "자극성 안전 패턴을 판단할 NLP 샘플이 부족하여 해당 지표는 참고용으로 표시됩니다."
+    },
+    "P08_DIRECTNESS_METADATA_LIMITED": {
+        "axis": "UAS",
+        "message": "직접 선택 여부를 추정할 source_surface 정보가 부족하여 일부 사용자 주도성 하위 지표는 제외되었습니다."
+    },
+    "P09_KEYWORD_SAMPLE_LIMITED": {
+        "axis": "TDS",
+        "message": "제목 또는 검색어 키워드 샘플이 부족하여 키워드 기반 하위 지표는 제한적으로 반영됩니다."
+    },
+    "P09_REPETITION_SAMPLE_LIMITED": {
+        "axis": "UAS",
+        "message": "연속 시청 패턴을 판단할 비교 샘플이 부족하여 반복 시청 하위 지표는 제외되었습니다."
+    },
+    "P10_DURATION_SAMPLE_LIMITED": {
+        "axis": "SMS",
+        "message": "실제 시청 지속 시간 정보가 부족하여 짧은 반복 시청 하위 지표는 제한적으로 반영됩니다."
+    },
+    "P11_EMOTION_KEYWORD_LIMITED": {
+        "axis": "EBS",
+        "message": "감정 또는 정보성 키워드 샘플이 부족하여 키워드 기반 감정 균형 지표는 제한적으로 반영됩니다."
+    },
+    "P12_SEARCH_KEYWORD_SAMPLE_LIMITED": {
+        "axis": "VOS",
+        "message": "검색어 키워드 샘플이 부족하여 검색어 다양성 하위 지표는 제외되었습니다."
     }
+}
+
+SCORE_BASIS_SUMMARY = {
+    "UAS": "검색 비율, 주제 전환, 반복 시청 패턴, 직접 선택 추정치를 함께 반영했습니다.",
+    "TDS": "NLP 카테고리, 제목 키워드 다양성, 주제 전환 빈도, 상위 주제 집중도를 함께 반영했습니다.",
+    "SBS": "출처 HHI, 고유 출처 수, 상위 출처 집중도, 동일 출처 연속 패턴, 출처 메타데이터 품질을 함께 반영했습니다.",
+    "EBS": "NLP 감정 분포, 감정 키워드 균형, 중립 정보 키워드 비율, 반복 감정 톤을 함께 반영했습니다.",
+    "SMS": "자극성 카테고리, 자극 키워드, 짧은 반복 시청, 감정 극단 키워드, 반복 자극 주제를 함께 반영했습니다.",
+    "VOS": "주제 집중도, 출처 다양성, 키워드 반복, 교차 주제 전환, 검색어 다양성을 함께 반영했습니다."
 }
 
 def normalize_exception_codes(raw_codes: Any) -> List[str]:
@@ -129,6 +162,9 @@ async def get_dashboard_summary(
         
         exception_codes = normalize_exception_codes(run.get("exception_codes", []))
         score_warnings = build_score_warnings(exception_codes)
+        score_components = run.get("score_components", {})
+        if not isinstance(score_components, dict):
+            score_components = {}
 
         for code, name in AXIS_NAMES.items():
             if code == "ALL":
@@ -227,6 +263,8 @@ async def get_dashboard_summary(
             },
             "exception_codes": exception_codes,
             "score_warnings": score_warnings,
+            "score_components": score_components,
+            "score_basis_summary": SCORE_BASIS_SUMMARY,
             "meta_gap": meta_gap,
             "misconception": {
                 "index": misconception_index,

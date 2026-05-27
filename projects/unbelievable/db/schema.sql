@@ -67,12 +67,16 @@ CREATE TABLE IF NOT EXISTS public.score_run (
     weighted_health FLOAT NOT NULL, -- 6축 가중합 종합 건강 점수 (0 ~ 100)
     mbti_type VARCHAR(10) NOT NULL, -- 16가지 미디어 소비 성향 유형 (예: INTP)
     exception_codes VARCHAR(40)[] DEFAULT '{}', -- P01, P04, P05 등 예외코드 리스트
+    score_components JSONB DEFAULT '{}'::jsonb, -- 6축 점수 산출에 사용된 하위 지표별 근거
     analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE public.score_run
     ALTER COLUMN exception_codes TYPE VARCHAR(40)[]
     USING exception_codes::VARCHAR(40)[];
+
+ALTER TABLE public.score_run
+    ADD COLUMN IF NOT EXISTS score_components JSONB DEFAULT '{}'::jsonb;
 
 -- 7. 6축 세부 점수 테이블
 CREATE TABLE IF NOT EXISTS public.score_axis (
