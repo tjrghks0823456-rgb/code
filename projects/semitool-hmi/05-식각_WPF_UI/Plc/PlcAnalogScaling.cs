@@ -25,50 +25,50 @@ internal static class PlcAnalogScaling
         return slope * raw + intercept;
     }
 
-    public static (double HumidityPercent, double TemperatureC, double PressurePercent, bool PressureValid, double VibrationPercent)
+    public static (double HumidityPercent, double TemperatureC, double PressureMtorr, bool PressureValid, double VibrationPercent)
         ToEngineering(AnalogInputData data)
     {
         double humidityPercent = Clamp(ScaleLinear(data.HumiditySensor, 5500, 7550, 68, 94), 0, 100);
         double temperatureC = Clamp(ConvertTemperatureCelsius(data.TemperatureSensor), -10, 60);
-
-        bool pressureValid = TryPressurePercent(data.PressureSensor, out double pressurePercent);
-
+        bool pressureValid = TryPressureMtorr(data.PressureSensor, out double pressureMtorr);
         double vibrationPercent = Clamp(ScaleLinear(data.VibrationSensor, 450, 6500, 0, 100), 0, 100);
-
-        return (humidityPercent, temperatureC, pressurePercent, pressureValid, vibrationPercent);
+        return (humidityPercent, temperatureC, pressureMtorr, pressureValid, vibrationPercent);
     }
 
-    /// <summary>PLC 압력 채널 raw → 0~100%. raw &lt; PressureRawMin 이면 신호 없음(false).</summary>
-    public static bool TryPressurePercent(short raw, out double pressurePercent)
+    /// <summary>
+    /// EtherCAT 압력 채널 raw(ADC) → mTorr 직선 환산. (farmui 채광 %·95~100 kPa 맵과 무관)
+    /// </summary>
+    public static bool TryPressureMtorr(short raw, out double pressureMtorr)
     {
         int rawMin = AppSettings.PressureRawMin;
         int rawMax = AppSettings.PressureRawMax;
+        double mMin = AppSettings.PressureMtorrAtRawMin;
+        double mMax = AppSettings.PressureMtorrAtRawMax;
 
         if (raw < rawMin)
         {
-            pressurePercent = 0;
+            pressureMtorr = 0;
             return false;
         }
 
         if (raw > rawMax)
         {
-            pressurePercent = 100.0;
+            pressureMtorr = mMax;
         }
         else
         {
-            pressurePercent = ScaleLinear(raw, rawMin, rawMax, 0, 100);
+            pressureMtorr = ScaleLinear(raw, rawMin, rawMax, mMin, mMax);
         }
 
-        pressurePercent = Clamp(pressurePercent, 0, 100);
+        pressureMtorr = Math.Round(pressureMtorr, AppSettings.PressureDecimals);
         return true;
     }
 
-    public static double PressurePercentToKpa(double pressurePercent)
-    {
-        double k0 = AppSettings.PressureKpaAt0Percent;
-        double k100 = AppSettings.PressureKpaAt100Percent;
-        return k0 + pressurePercent / 100.0 * (k100 - k0);
-    }
+    /// <summary>시뮬·초기값 — 인터락 대역 중앙(레시피 확정 전 임시).</summary>
+    public static double DefaultSimulationPressureMtorr()
+        => Math.Round(
+            (AppSettings.PressureMtorrMin + AppSettings.PressureMtorrMax) / 2.0,
+            AppSettings.PressureDecimals);
 
     public static double VibrationPercentToG(double vibrationPercent)
         => vibrationPercent / 100.0 * 2.0;

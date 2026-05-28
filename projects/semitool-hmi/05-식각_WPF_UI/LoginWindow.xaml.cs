@@ -11,6 +11,15 @@ public partial class LoginWindow : Window
     {
         InitializeComponent();
         _databaseService = databaseService;
+        ResetFields();
+    }
+
+    /// <summary>로그아웃 후 재표시 시 입력·오류 메시지 초기화.</summary>
+    public void ResetFields()
+    {
+        TxtUsername.Clear();
+        TxtPassword.Clear();
+        TxtError.Text = string.Empty;
         TxtUsername.Focus();
     }
 

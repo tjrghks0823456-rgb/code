@@ -5,12 +5,14 @@ namespace etch_ui.Plc;
 public sealed record PlcProcessSnapshot(
     double TemperatureC,
     double HumidityPercent,
-    double PressureKpa,
-    double PressurePercent,
+    double PressureMtorr,
     short PressureRaw,
     bool PressureSignalValid,
     double VibrationG,
+    /// <summary>유도형 true=닫힘(정상). AccessInputValid일 때만 의미 있음.</summary>
     bool AccessSafe,
+    /// <summary>NX_ID5342 디지털 입력을 읽었는지.</summary>
+    bool AccessInputValid,
     ushort DigitalInputBits);
 
 /// <summary>
@@ -33,6 +35,9 @@ public sealed class PlcAdsService : IDisposable
     private const string DigitalInputSymbol = "GVL.NX_ID5342";
     private const string DigitalOutputSymbol = "GVL.NX_OD5121";
 
+    /// <summary>유도형(도어) 센서 DI 비트 — Inductive_Sensor, NX_ID5342 비트5.</summary>
+    private const int InductiveDoorDiBit = 5;
+
     public bool IsConnected { get; private set; }
 
     public string? LastError { get; private set; }
@@ -45,7 +50,10 @@ public sealed class PlcAdsService : IDisposable
         {
             try
             {
-                _client = new AdsClient();
+                _client = new AdsClient
+                {
+                    Timeout = 800,
+                };
                 _client.Connect(port);
 
                 _analogHandle = _client.CreateVariableHandle(AnalogInputSymbol);
@@ -113,43 +121,66 @@ public sealed class PlcAdsService : IDisposable
                 return false;
             }
 
+            if (!_client.IsConnected)
+            {
+                LastError = "TwinCAT ADS 연결 끊김";
+                MarkDisconnectedUnsafe();
+                return false;
+            }
+
             try
             {
                 object? analogObj = _client.ReadAny(_analogHandle, typeof(AnalogInputData));
                 if (analogObj is not AnalogInputData analogData)
                 {
+                    LastError = "Analog 데이터 형식 오류";
+                    MarkDisconnectedUnsafe();
                     return false;
                 }
 
-                (double humi, double temp, double pressPct, bool pressValid, double vibPct) =
+                (double humi, double temp, double pressureMtorr, bool pressValid, double vibPct) =
                     PlcAnalogScaling.ToEngineering(analogData);
-                double pressureKpa = pressValid
-                    ? PlcAnalogScaling.PressurePercentToKpa(pressPct)
-                    : 0;
+                if (!pressValid)
+                {
+                    pressureMtorr = 0;
+                }
+
                 double vibG = PlcAnalogScaling.VibrationPercentToG(vibPct);
 
                 ushort bits = 0;
+                bool accessInputValid = false;
                 if (_hasDigitalIn)
                 {
                     object? dio = _client.ReadAny(_digitalInHandle, typeof(DigitalIoBits));
                     if (dio is DigitalIoBits typed)
                     {
                         bits = typed.Bits;
+                        accessInputValid = true;
                     }
                 }
 
-                bool accessSafe = (bits & (1 << 4)) == 0;
+                // 비트5 Inductive_Sensor: true=닫힘(정상), false=열림(인터락 미충족)
+                bool doorClosed = accessInputValid && (bits & (1 << InductiveDoorDiBit)) != 0;
+                bool accessSafe = doorClosed;
                 snapshot = new PlcProcessSnapshot(
-                    temp, humi, pressureKpa, pressPct, analogData.PressureSensor, pressValid, vibG, accessSafe, bits);
+                    temp, humi, pressureMtorr, analogData.PressureSensor, pressValid, vibG,
+                    accessSafe, accessInputValid, bits);
                 return true;
             }
             catch (Exception ex)
             {
                 LastError = ex.Message;
-                IsConnected = false;
+                MarkDisconnectedUnsafe();
                 return false;
             }
         }
+    }
+
+    /// <summary>ADS/EtherCAT 링크 상실 시 세션 정리(플래그·핸들만, Dispose는 Disconnect).</summary>
+    private void MarkDisconnectedUnsafe()
+    {
+        IsConnected = false;
+        CleanupHandlesUnsafe();
     }
 
     public void WriteDigitalOutputLamps(ushort lampBits)
@@ -169,7 +200,7 @@ public sealed class PlcAdsService : IDisposable
             catch (Exception ex)
             {
                 LastError = ex.Message;
-                IsConnected = false;
+                MarkDisconnectedUnsafe();
             }
         }
     }

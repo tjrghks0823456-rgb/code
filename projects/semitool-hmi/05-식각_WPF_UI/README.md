@@ -1,20 +1,79 @@
-# 식각 WPF UI
+# etch_ui
 
-식각 장비 상태를 표시하고 Flask 대시보드로 장비/센서 데이터를 전송하는 WPF 클라이언트입니다.
+
+
+에칭 Load Lock HMI — WPF(.NET 8) 현장 클라이언트. Flask(`C:\etchflask`)·TwinCAT ADS·가상 TM 이송(`TmTransferSimulator`) 연동.
+
+
+
+## 3계층 (요약)
+
+
+
+| 계층 | 내용 |
+
+|------|------|
+
+| **실장비** | 센서, **Load Lock 접촉(DI5)**, **버튼 DI0~3**, **램프 DO0~3** |
+
+| **WPF** | 인터락·조작·가상 도식·(예정) AI 조언 **표시** |
+
+| **Flask** | 원격 조회·이력·**AI 추론** (`etch_ai.py`) |
+
+
+
+가상 이송 참고: `D:\semitest\SemiconductorUi` · 상세: [`PROJECT_계획.md`](PROJECT_계획.md)
+
+
+
+## 요구 사항
+
+
+
+- .NET 8 SDK, Visual Studio 2022 (WPF)
+
+- (선택) TwinCAT ADS
+
+- (선택) Flask — `appsettings.json` → `FlaskBaseUrl` (기본 `http://127.0.0.1:5000`)
+
+
 
 ## 실행
 
-Visual Studio에서 `etch_ui.sln`을 열고 복원 후 실행합니다.
 
-## 주요 파일
 
-- `MainWindow.xaml`, `MainWindow.xaml.cs`: 메인 HMI 화면
-- `ViewModels/MainViewModel.cs`: 화면 상태와 장비 데이터 바인딩
-- `Plc/`: ADS PLC 통신과 아날로그 스케일링
-- `Services/EtchFlaskClient.cs`: Flask 서버 연동
-- `Security/`: 사용자 로그인, 계정 관리, 비밀번호 해시 처리
-- `appsettings.json`: Flask 주소, ADS 포트, 인터록 기준값
+1. `C:\etchflask\run_flask.bat`
 
-## 제외한 파일
+2. `etch_ui.sln` → F5 · 로그인 `admin` / `Admin1234`
 
-`.vs`, `bin`, `obj`, `*.user` 같은 개인 IDE 설정과 빌드 산출물은 GitHub 업로드 대상에서 제외했습니다.
+
+
+## 문서
+
+
+
+| 문서 | 용도 |
+
+|------|------|
+
+| [**PROJECT_계획.md**](PROJECT_계획.md) | **전체 로드맵** (Phase 0~5, AI §10) |
+
+| [PROJECT_개요.md](PROJECT_개요.md) | 현황 스냅샷 |
+
+| [PROTO_실행순서.md](PROTO_실행순서.md) | 실행·데모·API |
+
+| [PLC_IO_매핑.md](PLC_IO_매핑.md) | DI/DO |
+
+| [WPF_장비UI_이식_계획.md](WPF_장비UI_이식_계획.md) | semitest ↔ 가상 이송 |
+
+| `C:\etchflask\ETCH_AI.md` | AI 모델·API |
+
+
+
+## 설정
+
+
+
+`appsettings.json` — Flask URL, ADS 포트, `SimulationEnabled`, `Interlock`, `PressureScale`
+
+

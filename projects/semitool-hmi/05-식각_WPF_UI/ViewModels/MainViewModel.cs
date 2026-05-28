@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
+using etch_ui.Equipment.Models;
+using etch_ui.Equipment.ViewModels;
 using etch_ui.Security;
 
 namespace etch_ui.ViewModels;
@@ -7,6 +9,8 @@ namespace etch_ui.ViewModels;
 /// <summary>메인 HMI 화면 바인딩용 (코드비하인드가 주기적으로 SyncFromRuntime 호출).</summary>
 public sealed class MainViewModel : ViewModelBase
 {
+    public EquipmentMotionViewModel Equipment { get; } = new();
+
     private string _currentUserText = "-";
     private bool _showUserManage;
     private string _simAllowButtonText = "시뮬 허용: 끔";
@@ -29,19 +33,26 @@ public sealed class MainViewModel : ViewModelBase
     private string _temperatureText = "0.00";
     private string _humidityText = "0.00";
     private string _pressureText = "—";
-    private string _pressureDetailText = "";
     private string _vibrationText = "0.00";
     private string _accessText = "SAFE";
     private Brush _accessBrush = Brushes.ForestGreen;
 
-    private string _interlockPlcText = "[✗] PLC/시뮬 통신";
+    private string _interlockPlcText = "[✗] EtherCAT/시뮬 통신";
     private string _interlockPressureText = "[✗] 압력 정상";
+    private string _interlockPressureDetailText = "";
     private string _interlockVibText = "[✗] 진동 정상";
     private string _interlockAccessText = "[✗] 접근 안전";
     private string _interlockTempText = "[✗] 온도 정상";
     private string _interlockHumiText = "[✗] 습도 정상";
     private string _interlockResultText = "공정 시작 불가";
     private Brush _interlockResultBrush = Brushes.OrangeRed;
+    private Brush _interlockPlcBrush = Brushes.OrangeRed;
+    private Brush _interlockPressureBrush = Brushes.OrangeRed;
+    private Brush _interlockVibBrush = Brushes.OrangeRed;
+    private Brush _interlockAccessBrush = Brushes.OrangeRed;
+    private Brush _interlockTempBrush = Brushes.OrangeRed;
+    private Brush _interlockHumiBrush = Brushes.OrangeRed;
+    private string _startButtonToolTip = "공정을 시작합니다.";
 
     private bool _lampReadyOn;
     private bool _lampRunOn;
@@ -53,7 +64,33 @@ public sealed class MainViewModel : ViewModelBase
     private bool _canReset;
     private bool _canMaint;
 
+    private double _sensorPressureValue;
+    private double _sensorVibrationValue;
+    private double _sensorTempValue;
+    private double _sensorHumiValue;
+    private double _pressureSparkYMax = 1000;
+    private double _vibrationSparkYMax = 1.2;
+
+    private int _processStepIndex;
+    private bool _processStepWarning;
+
+    private string _aiScoreText = "—";
+    private string _aiHintText = "Flask 서버 연결 후 표시됩니다.";
+    private Brush _aiScoreBrush = Brushes.DimGray;
+
     public ObservableCollection<string> LogLines { get; } = new();
+    public ObservableCollection<double> PressureSparkValues { get; } = new();
+    public ObservableCollection<double> VibrationSparkValues { get; } = new();
+    public ObservableCollection<ModuleStateSnapshot> ModuleStates { get; } = new();
+
+    public void SetModuleSnapshots(IReadOnlyList<ModuleStateSnapshot> snapshots)
+    {
+        ModuleStates.Clear();
+        foreach (ModuleStateSnapshot s in snapshots)
+        {
+            ModuleStates.Add(s);
+        }
+    }
 
     public string CurrentUserText
     {
@@ -175,13 +212,6 @@ public sealed class MainViewModel : ViewModelBase
         set => SetField(ref _pressureText, value);
     }
 
-    /// <summary>PLC raw·% 등 부가 설명(압력 스케일 확인용).</summary>
-    public string PressureDetailText
-    {
-        get => _pressureDetailText;
-        set => SetField(ref _pressureDetailText, value);
-    }
-
     public string VibrationText
     {
         get => _vibrationText;
@@ -211,6 +241,20 @@ public sealed class MainViewModel : ViewModelBase
         get => _interlockPressureText;
         set => SetField(ref _interlockPressureText, value);
     }
+
+    /// <summary>압력 허용 범위·현재값 (인터락 패널).</summary>
+    public string InterlockPressureDetailText
+    {
+        get => _interlockPressureDetailText;
+        set => SetField(ref _interlockPressureDetailText, value);
+    }
+
+    /// <summary>appsettings.json Interlock 섹션 요약.</summary>
+    public string InterlockThresholdsText =>
+        $"압력 {AppSettings.PressureMtorrMin:F0}–{AppSettings.PressureMtorrMax:F0} mTorr  ·  " +
+        $"진동 ≤{AppSettings.VibrationGMax:F2} g  ·  " +
+        $"온도 {AppSettings.TempCMin:F0}–{AppSettings.TempCMax:F0} ℃  ·  " +
+        $"습도 {AppSettings.HumiMin:F0}–{AppSettings.HumiMax:F0} %";
 
     public string InterlockVibText
     {
@@ -246,6 +290,48 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _interlockResultBrush;
         set => SetField(ref _interlockResultBrush, value);
+    }
+
+    public Brush InterlockPlcBrush
+    {
+        get => _interlockPlcBrush;
+        set => SetField(ref _interlockPlcBrush, value);
+    }
+
+    public Brush InterlockPressureBrush
+    {
+        get => _interlockPressureBrush;
+        set => SetField(ref _interlockPressureBrush, value);
+    }
+
+    public Brush InterlockVibBrush
+    {
+        get => _interlockVibBrush;
+        set => SetField(ref _interlockVibBrush, value);
+    }
+
+    public Brush InterlockAccessBrush
+    {
+        get => _interlockAccessBrush;
+        set => SetField(ref _interlockAccessBrush, value);
+    }
+
+    public Brush InterlockTempBrush
+    {
+        get => _interlockTempBrush;
+        set => SetField(ref _interlockTempBrush, value);
+    }
+
+    public Brush InterlockHumiBrush
+    {
+        get => _interlockHumiBrush;
+        set => SetField(ref _interlockHumiBrush, value);
+    }
+
+    public string StartButtonToolTip
+    {
+        get => _startButtonToolTip;
+        set => SetField(ref _startButtonToolTip, value);
     }
 
     public bool LampReadyOn
@@ -294,6 +380,92 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _canMaint;
         set => SetField(ref _canMaint, value);
+    }
+
+    public double PressureSparkYMin => 0;
+
+    public double PressureSparkYMax
+    {
+        get => _pressureSparkYMax;
+        set => SetField(ref _pressureSparkYMax, value);
+    }
+
+    public double VibrationSparkYMin => 0;
+
+    public double VibrationSparkYMax
+    {
+        get => _vibrationSparkYMax;
+        set => SetField(ref _vibrationSparkYMax, value);
+    }
+
+    public double SensorPressureValue
+    {
+        get => _sensorPressureValue;
+        set => SetField(ref _sensorPressureValue, value);
+    }
+
+    public double SensorVibrationValue
+    {
+        get => _sensorVibrationValue;
+        set => SetField(ref _sensorVibrationValue, value);
+    }
+
+    public double SensorTempValue
+    {
+        get => _sensorTempValue;
+        set => SetField(ref _sensorTempValue, value);
+    }
+
+    public double SensorHumiValue
+    {
+        get => _sensorHumiValue;
+        set => SetField(ref _sensorHumiValue, value);
+    }
+
+    public double SensorPressureRangeMin => AppSettings.PressureMtorrMin;
+    public double SensorPressureRangeMax => AppSettings.PressureMtorrMax;
+    public double SensorPressureScaleMax => AppSettings.PressureMtorrAtRawMax;
+
+    public double SensorVibrationRangeMax => AppSettings.VibrationGMax;
+    public double SensorVibrationScaleMax => AppSettings.VibrationGMax * 1.5;
+
+    public double SensorTempRangeMin => AppSettings.TempCMin;
+    public double SensorTempRangeMax => AppSettings.TempCMax;
+    public double SensorTempScaleMin => AppSettings.TempCMin - 5;
+    public double SensorTempScaleMax => AppSettings.TempCMax + 5;
+
+    public double SensorHumiRangeMin => AppSettings.HumiMin;
+    public double SensorHumiRangeMax => AppSettings.HumiMax;
+    public double SensorHumiScaleMax => 100;
+
+    public int ProcessStepIndex
+    {
+        get => _processStepIndex;
+        set => SetField(ref _processStepIndex, value);
+    }
+
+    public bool ProcessStepWarning
+    {
+        get => _processStepWarning;
+        set => SetField(ref _processStepWarning, value);
+    }
+
+    public string AiScoreText
+    {
+        get => _aiScoreText;
+        set => SetField(ref _aiScoreText, value);
+    }
+
+    public string AiHintText
+    {
+        get => _aiHintText;
+        set => SetField(ref _aiHintText, value);
+    }
+
+    public Brush AiScoreBrush
+    {
+        get => _aiScoreBrush;
+        set => SetField(ref _aiScoreBrush, value);
     }
 
     public void PrependLog(string line)

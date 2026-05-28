@@ -9,50 +9,30 @@ namespace etch_ui;
 /// </summary>
 public static class AppSettings
 {
-    public static string FlaskBaseUrl { get; }
-    public static int AdsPort { get; }
+    public static string FlaskBaseUrl { get; private set; } = "http://127.0.0.1:5000";
+    public static int AdsPort { get; private set; } = PlcAdsService.DefaultPort;
+    public static bool SimulationEnabled { get; private set; }
 
-    /// <summary>
-    /// 시작 시 시뮬 허용 여부(메인 창에서 변경 가능, 앱 재시작 시 여기서 다시 읽음).
-    /// </summary>
-    public static bool SimulationEnabled { get; }
+    /// <summary>인터락·정상 대역 하한 (mTorr). 레시피 확정 후 조정.</summary>
+    public static double PressureMtorrMin { get; private set; } = 50.0;
 
-    public static double PressureKpaMin { get; }
-    public static double PressureKpaMax { get; }
-    public static double VibrationGMax { get; }
-    public static double TempCMin { get; }
-    public static double TempCMax { get; }
-    public static double HumiMin { get; }
-    public static double HumiMax { get; }
+    /// <summary>인터락·정상 대역 상한 (mTorr).</summary>
+    public static double PressureMtorrMax { get; private set; } = 150.0;
 
-    /// <summary>PLC 압력 raw 이 값 미만이면 신호 없음(표시 —, 인터락 NG).</summary>
-    public static int PressureRawMin { get; }
+    public static double VibrationGMax { get; private set; } = 0.80;
+    public static double TempCMin { get; private set; } = 20.0;
+    public static double TempCMax { get; private set; } = 30.0;
+    public static double HumiMin { get; private set; } = 30.0;
+    public static double HumiMax { get; private set; } = 55.0;
 
-    public static int PressureRawMax { get; }
-
-    /// <summary>압력 0% 일 때 kPa (기본 95).</summary>
-    public static double PressureKpaAt0Percent { get; }
-
-    /// <summary>압력 100% 일 때 kPa (기본 100). 50% → (95+100)/2 = 97.5 kPa.</summary>
-    public static double PressureKpaAt100Percent { get; }
+    public static int PressureRawMin { get; private set; } = 5;
+    public static int PressureRawMax { get; private set; } = 3575;
+    public static double PressureMtorrAtRawMin { get; private set; }
+    public static double PressureMtorrAtRawMax { get; private set; } = 1000.0;
+    public static int PressureDecimals { get; private set; } = 1;
 
     static AppSettings()
     {
-        FlaskBaseUrl = "http://127.0.0.1:5000";
-        AdsPort = PlcAdsService.DefaultPort;
-        SimulationEnabled = false;
-        PressureKpaMin = 95.0;
-        PressureKpaMax = 100.0;
-        PressureRawMin = 5;
-        PressureRawMax = 3575;
-        PressureKpaAt0Percent = 95.0;
-        PressureKpaAt100Percent = 100.0;
-        VibrationGMax = 0.80;
-        TempCMin = 20.0;
-        TempCMax = 30.0;
-        HumiMin = 30.0;
-        HumiMax = 55.0;
-
         try
         {
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
@@ -63,6 +43,7 @@ public static class AppSettings
 
             using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
             JsonElement root = doc.RootElement;
+
             if (root.TryGetProperty("FlaskBaseUrl", out JsonElement f))
             {
                 string? u = f.GetString();
@@ -91,14 +72,14 @@ public static class AppSettings
 
             if (root.TryGetProperty("Interlock", out JsonElement il) && il.ValueKind == JsonValueKind.Object)
             {
-                if (il.TryGetProperty("PressureKpaMin", out JsonElement pmin) && pmin.TryGetDouble(out double pkMin))
+                if (il.TryGetProperty("PressureMtorrMin", out JsonElement mMin) && mMin.TryGetDouble(out double vMin))
                 {
-                    PressureKpaMin = pkMin;
+                    PressureMtorrMin = vMin;
                 }
 
-                if (il.TryGetProperty("PressureKpaMax", out JsonElement pmax) && pmax.TryGetDouble(out double pkMax))
+                if (il.TryGetProperty("PressureMtorrMax", out JsonElement mMax) && mMax.TryGetDouble(out double vMax))
                 {
-                    PressureKpaMax = pkMax;
+                    PressureMtorrMax = vMax;
                 }
 
                 if (il.TryGetProperty("VibrationGMax", out JsonElement vib) && vib.TryGetDouble(out double vibMax))
@@ -139,20 +120,25 @@ public static class AppSettings
                     PressureRawMax = rawMax;
                 }
 
-                if (ps.TryGetProperty("KpaAt0Percent", out JsonElement k0) && k0.TryGetDouble(out double kpa0))
+                if (ps.TryGetProperty("MtorrAtRawMin", out JsonElement mmn) && mmn.TryGetDouble(out double atMin))
                 {
-                    PressureKpaAt0Percent = kpa0;
+                    PressureMtorrAtRawMin = atMin;
                 }
 
-                if (ps.TryGetProperty("KpaAt100Percent", out JsonElement k100) && k100.TryGetDouble(out double kpa100))
+                if (ps.TryGetProperty("MtorrAtRawMax", out JsonElement mmx) && mmx.TryGetDouble(out double atMax))
                 {
-                    PressureKpaAt100Percent = kpa100;
+                    PressureMtorrAtRawMax = atMax;
+                }
+
+                if (ps.TryGetProperty("Decimals", out JsonElement dec) && dec.TryGetInt32(out int d) && d >= 0 && d <= 3)
+                {
+                    PressureDecimals = d;
                 }
             }
         }
         catch
         {
-            // 기본값 유지
+            // 필드 초기값 유지
         }
     }
 }

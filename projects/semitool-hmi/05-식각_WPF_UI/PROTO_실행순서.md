@@ -1,37 +1,192 @@
 # 식각 HMI 프로토타입 실행 순서
 
-## 1) Flask (먼저 실행)
 
-1. `C:\etchflask\run_flask.bat` 더블클릭  
-   또는 터미널에서:
-   ```bat
-   cd C:\etchflask
-   run_flask.bat
-   ```
-2. 브라우저에서 확인: `http://127.0.0.1:5000` — **탭**: 실시간 / 서버 이력 / 이벤트 / AI 진단(스텁).  
-   - 최신 스냅샷: `GET /api/sensors`  
-   - 시계열(메모리, 재시작 시 초기화): `GET /api/etch/history?limit=500`  
-   - 상태·알람·인터록 이벤트: `GET /api/etch/events?limit=100`  
-   - KPI 요약: `GET /api/etch/summary`
 
-## 2) WPF HMI
+## 관련 문서
 
-1. Visual Studio에서 `D:\WPFProject\etch_ui\etch_ui.sln` 열기 → F5  
-   또는:
-   ```bat
-   dotnet run --project D:\WPFProject\etch_ui\etch_ui.csproj
-   ```
-2. 로그인: `admin` / `Admin1234`
-3. 상단 **Flask: OK**, **PLC: Connected** 또는 **SIMULATION** 확인 · **시뮬 허용**은 메인 창 버튼으로 켜고 끕니다(기본 끔).  
-   - Flask가 꺼져 있으면 `OFF` — `run_flask.bat` 실행 후 앱만 다시 시작하거나, Flask를 켠 뒤 잠시 기다리면 주기 전송 성공 시 `OK`으로 갱신됩니다.
 
-## 설정
 
-- WPF 출력 폴더의 `appsettings.json`에서 `FlaskBaseUrl`, `AdsPort`(기본 851), `SimulationEnabled`(기본 `false` · **시작 시 시뮬 허용 여부 초깃값**), **`Interlock`**(압력·진동·온·습도 정상 범위, 인터락 판정에 사용) 변경 가능합니다.  
-  - 실행 중에는 메인 상단 **「시뮬 허용」** 버튼으로 on/off 할 수 있습니다 (PLC 끊김 시에만 시뮬로 **대체**할지 여부).  
-  - **끔**: 실데이터만 — PLC 없으면 오프라인·알람. **켬**: PLC 실패 시 데스크/비기능 테스트용 가짜 센서.
+| 문서 | 경로 |
 
-## 연동 데이터
+|------|------|
 
-- WPF → `POST /api/etch/sensor-data` (약 2초마다, 센서 이름 `압력`·`진동` 등)
-- 웹/대시보드 → `GET /api/sensors` (최신 스냅샷 + `equipmentState`, `alarmCode` 등)
+| **전체 계획** | [`PROJECT_계획.md`](PROJECT_계획.md) |
+
+| **현황** | [`PROJECT_개요.md`](PROJECT_개요.md) |
+
+| **PLC I/O** | [`PLC_IO_매핑.md`](PLC_IO_매핑.md) (접촉=Load Lock DI bit5) |
+
+| **가상 이송** | [`WPF_장비UI_이식_계획.md`](WPF_장비UI_이식_계획.md) (`D:\semitest` 참고) |
+
+| **AI** | `C:\etchflask\ETCH_AI.md` |
+
+| **원격 모니터링** | `C:\etchflask\REMOTE_MONITORING.md` |
+
+| **Flask README** | `C:\etchflask\README.md` |
+
+
+
+## 2대 PC 구성 (권장)
+
+
+
+| PC | 할 일 |
+
+|----|--------|
+
+| **현장 PC** | EtherCAT + WPF + Flask (`run_flask.bat`) |
+
+| **모니터링 PC** | 브라우저 → `http://<현장PC IP>:5000` (조회·AI 탭) |
+
+
+
+## 1) Flask — 현장 PC
+
+
+
+1. `C:\etchflask\run_flask.bat`  
+
+2. `http://127.0.0.1:5000` — 실시간 / 이력 / 이벤트 / **AI 진단** 탭  
+
+3. 모니터링 PC: `http://<현장IP>:5000` · TCP **5000** 허용  
+
+
+
+### API
+
+
+
+| API | 용도 |
+
+|-----|------|
+
+| `GET /api/sensors` | 스냅샷·헬스 |
+
+| `POST /api/etch/sensor-data` | WPF 텔레메트리 (~2초) |
+
+| `GET /api/etch/history` · `events` · `summary` | 이력 |
+
+| `GET /api/etch/ai/status` | AI 모델 상태 |
+
+| `POST /api/etch/ai/predict` | 추론 (스텁/실모델) |
+
+| `GET /api/etch/ai/latest` | WPF AI 조언 폴링 (~6초) |
+
+
+
+## 2) WPF HMI — 현장 PC
+
+
+
+1. `D:\WPFProject\etch_ui\etch_ui.sln` → F5  
+
+2. 로그인: `admin` / `Admin1234`  
+
+3. EtherCAT Connected → **실측** 센서 표시 (미연결 시 **—**)  
+
+4. `FlaskBaseUrl` = `http://127.0.0.1:5000` (현장 PC 로컬)  
+
+
+
+### 조작
+
+
+
+| 입력 | 동작 |
+
+|------|------|
+
+| **접촉 닫힘** | Load Lock 인터락 — Start 가능 조건 |
+
+| **Start** | RUNNING + **가상 TM 이송** 시작 |
+
+| **Stop** | 정지 + 가상 이송 정지 |
+
+| **Reset / Maint** | 관리자, 알람 리셋·유지보수 |
+
+| **HW DI0~3** | UI와 동일 (Start/Stop/Reset/Maint) |
+
+
+
+## 설정 (`appsettings.json`)
+
+
+
+- `FlaskBaseUrl`, `AdsPort`, `SimulationEnabled`, `Interlock`, `PressureScale`
+
+
+
+## 실장비 vs 가상
+
+
+
+| 신호 | 실제 | HMI |
+
+|------|:----:|-----|
+
+| 압력·진동·온·습도 | ✓ | 인터락·표시·Flask·**AI** |
+
+| 접촉 DI5 | ✓ | **Load Lock 인터락만** (A004) |
+
+| 버튼 DI0~3 | ✓ | Start/Stop/Reset/Maint |
+
+| 램프 DO0~3 | ✓ | 상태 **출력** |
+
+| TM·챔버·FOUP | ✗ | `TmTransferSimulator` (`D:\semitest` 참고) |
+
+
+
+> AI는 Flask에서 추론. WPF·웹은 **조언 표시만** — 인터락·Start 자동 변경 없음.
+
+
+
+## 화면 구역
+
+
+
+| 영역 | WPF | Flask 웹 |
+
+|------|-----|----------|
+
+| 주 | 5:3:2.2 (도식·인터락·**예정 AI**·램프·버튼) | KPI·차트·가상 요약 |
+
+| 로그 | 하단 ~140px | 하단 스트립 ~132px |
+
+| AI | 중앙 **AI 조언** 패널 | **AI 진단** 탭 |
+| 이벤트 | 헤더 **이벤트 로그** 버튼 | Flask events 탭 |
+
+
+
+## 데모 체크리스트 (3분 · `PROJECT_계획.md` §6)
+
+
+
+- [ ] Flask OK, WPF EtherCAT Connected, 실측 센서  
+
+- [ ] 접촉 닫힘 → 인터락 OK → Start → 가상 TM 이동  
+
+- [ ] (Phase 1.2) 접촉 열림 → ALARM, 이송 정지  
+
+- [ ] 모니터링 PC Flask 실시간 + AI 탭  
+
+- [ ] Stop / Reset — AI는 조언만  
+
+
+
+## HW·UI 버튼 매트릭스 (Phase 1.3)
+
+
+
+| 동작 | UI | DI | 권한 |
+
+|------|:--:|:--:|------|
+
+| Start | ✓ | 0 | 작업자+ |
+
+| Stop | ✓ | 1 | 작업자+ |
+
+| Reset | ✓ | 2 | 관리자 |
+
+| Maint | ✓ | 3 | 관리자 |
+
+
