@@ -6,13 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AssemblyName>DemoEquipmentMotion</AssemblyName>
-    <RootNamespace>DemoEquipmentMotionRunner</RootNamespace>
+    <RootNamespace>etch_ui.PresentationMotion</RootNamespace>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Page Include="..\DemoEquipmentMotionWindow.xaml"
-          Link="DemoEquipmentMotionWindow.xaml" />
-    <Compile Include="..\DemoEquipmentMotionWindow.xaml.cs"
-             Link="DemoEquipmentMotionWindow.xaml.cs" />
-  </ItemGroup>
 </Project>

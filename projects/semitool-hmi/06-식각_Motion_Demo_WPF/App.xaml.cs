@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace DemoEquipmentMotionRunner;
+namespace etch_ui.PresentationMotion;
 
 public partial class App : Application
 {
