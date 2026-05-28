@@ -147,6 +147,30 @@
                     <TextBlock Text="Dispatcher" Style="{StaticResource StatusLabelStyle}"/>
                     <TextBlock x:Name="DispatcherStatusText" Style="{StaticResource StatusValueStyle}" FontSize="16"/>
 
+                    <TextBlock Text="Production KPI" Style="{StaticResource StatusLabelStyle}"/>
+                    <Border Background="{StaticResource Panel2Brush}" BorderBrush="#25485D" BorderThickness="1" CornerRadius="8" Padding="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="24"/>
+                                <RowDefinition Height="24"/>
+                                <RowDefinition Height="24"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Cycle" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/>
+                            <TextBlock x:Name="CycleCounterText" Grid.Column="1" Text="0 wafers" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
+
+                            <TextBlock Grid.Row="1" Text="Robot Dead Time" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/>
+                            <TextBlock x:Name="DeadTimeText" Grid.Row="1" Grid.Column="1" Text="0.0 s" Foreground="{StaticResource AmberBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
+
+                            <TextBlock Grid.Row="2" Text="Pipeline Mode" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/>
+                            <TextBlock x:Name="PipelineModeText" Grid.Row="2" Grid.Column="1" Text="AUTO PREP" Foreground="{StaticResource GoodBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </Border>
+
                     <TextBlock Text="Resource Locks" Style="{StaticResource StatusLabelStyle}"/>
                     <Border Background="{StaticResource Panel2Brush}" BorderBrush="#25485D" BorderThickness="1" CornerRadius="8" Padding="10">
                         <TextBlock x:Name="ResourceLockText"
@@ -230,6 +254,16 @@
                     <Line X1="88" Y1="270" X2="198" Y2="270" Stroke="#355F76" StrokeThickness="2"/>
                     <Line X1="88" Y1="305" X2="198" Y2="305" Stroke="#355F76" StrokeThickness="2"/>
                     <Line X1="88" Y1="340" X2="198" Y2="340" Stroke="#355F76" StrokeThickness="2"/>
+                    <TextBlock Canvas.Left="92" Canvas.Top="215" Text="05" Foreground="#7EA9BB" FontFamily="Consolas" FontSize="12"/>
+                    <TextBlock Canvas.Left="92" Canvas.Top="250" Text="04" Foreground="#7EA9BB" FontFamily="Consolas" FontSize="12"/>
+                    <TextBlock Canvas.Left="92" Canvas.Top="285" Text="03" Foreground="#7EA9BB" FontFamily="Consolas" FontSize="12"/>
+                    <TextBlock Canvas.Left="92" Canvas.Top="320" Text="02" Foreground="#7EA9BB" FontFamily="Consolas" FontSize="12"/>
+                    <TextBlock Canvas.Left="92" Canvas.Top="355" Text="01" Foreground="#7EA9BB" FontFamily="Consolas" FontSize="12"/>
+                    <Rectangle x:Name="Slot05Indicator" Canvas.Left="170" Canvas.Top="216" Width="24" Height="12" RadiusX="3" RadiusY="3" Fill="#315064"/>
+                    <Rectangle x:Name="Slot04Indicator" Canvas.Left="170" Canvas.Top="251" Width="24" Height="12" RadiusX="3" RadiusY="3" Fill="#315064"/>
+                    <Rectangle x:Name="Slot03Indicator" Canvas.Left="170" Canvas.Top="286" Width="24" Height="12" RadiusX="3" RadiusY="3" Fill="#315064"/>
+                    <Rectangle x:Name="Slot02Indicator" Canvas.Left="170" Canvas.Top="321" Width="24" Height="12" RadiusX="3" RadiusY="3" Fill="#315064"/>
+                    <Rectangle x:Name="Slot01Indicator" Canvas.Left="170" Canvas.Top="356" Width="24" Height="12" RadiusX="3" RadiusY="3" Fill="#FFC857"/>
 
                     <Rectangle x:Name="FoupReturnModule"
                                Canvas.Left="58" Canvas.Top="477"
@@ -508,6 +542,23 @@
                             <TextBlock Grid.Row="4" Grid.Column="1" Text="Alarm / Fault" Foreground="#DCEFFF" VerticalAlignment="Center"/>
                             <TextBlock x:Name="SignalFaultText" Grid.Row="4" Grid.Column="2" Text="OFF" Foreground="#86A7BA" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                         </Grid>
+                    </Border>
+
+                    <TextBlock Text="Manual Training Commands" Style="{StaticResource StatusLabelStyle}"/>
+                    <Border Background="{StaticResource Panel2Brush}"
+                            BorderBrush="#25485D"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="10"
+                            Margin="0,0,0,10">
+                        <WrapPanel>
+                            <Button Content="FOUP Clamp" Style="{StaticResource DemoButtonStyle}" MinWidth="92" IsEnabled="False"/>
+                            <Button Content="Align" Style="{StaticResource DemoButtonStyle}" MinWidth="78" IsEnabled="False"/>
+                            <Button Content="LL Pump" Style="{StaticResource DemoButtonStyle}" MinWidth="82" IsEnabled="False"/>
+                            <Button Content="Door" Style="{StaticResource DemoButtonStyle}" MinWidth="74" IsEnabled="False"/>
+                            <Button Content="Robot Home" Style="{StaticResource DemoButtonStyle}" MinWidth="98" IsEnabled="False"/>
+                            <Button Content="Chamber Vent" Style="{StaticResource DemoButtonStyle}" MinWidth="108" IsEnabled="False"/>
+                        </WrapPanel>
                     </Border>
 
                     <TextBlock Text="Operation Guide" Style="{StaticResource StatusLabelStyle}"/>

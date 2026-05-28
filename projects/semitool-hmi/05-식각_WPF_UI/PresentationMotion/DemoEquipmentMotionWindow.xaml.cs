@@ -26,6 +26,8 @@ public partial class DemoEquipmentMotionWindow : Window
     private bool _isError;
     private bool _waitingForLoop;
     private DateTime _loopWaitStartedAt;
+    private int _completedCycles;
+    private double _robotDeadTimeSeconds;
 
     private Point _currentWaferCenter;
     private Point _fromWaferCenter;
@@ -105,6 +107,8 @@ public partial class DemoEquipmentMotionWindow : Window
         _waitingForLoop = false;
         _stepIndex = 0;
         _cycleSlot = 1;
+        _completedCycles = 0;
+        _robotDeadTimeSeconds = 0;
         ResetVisualState();
         AddLog("Demo reset");
     }
@@ -127,6 +131,8 @@ public partial class DemoEquipmentMotionWindow : Window
         SchedulerDecisionText.Text = "Scheduler hold: fault active";
         DispatcherStatusText.Text = "Dispatcher stopped";
         ResourceLockText.Text = "RobotArm = LOCKED\nLoadLockDoor = LOCKED\nVacuumPath = LOCKED";
+        PipelineModeText.Text = "FAULT HOLD";
+        PipelineModeText.Foreground = BrushFrom("#FF5A6A");
         SetSignalState(isDoorOpen: false, isFault: true);
         SetModuleFill("ALL", "#3B1822");
         AddLog("ERROR injected by presenter");
@@ -147,6 +153,8 @@ public partial class DemoEquipmentMotionWindow : Window
         _stepIndex = 0;
         EventLogList.Items.Clear();
         ResetVisualState(clearLog: false);
+        PipelineModeText.Text = "AUTO PREP";
+        PipelineModeText.Foreground = BrushFrom("#4FE38A");
         AddLog($"Cycle start: FOUP A Slot {_cycleSlot:00}");
         BeginStep(_stepIndex);
         _motionTimer.Start();
@@ -204,6 +212,9 @@ public partial class DemoEquipmentMotionWindow : Window
 
         if (_waitingForLoop)
         {
+            _robotDeadTimeSeconds += _motionTimer.Interval.TotalSeconds;
+            UpdateKpiPanel();
+
             if ((DateTime.Now - _loopWaitStartedAt).TotalMilliseconds >= 1600)
             {
                 _waitingForLoop = false;
@@ -276,6 +287,8 @@ public partial class DemoEquipmentMotionWindow : Window
             DispatcherStatusText.Text = "Dispatcher: cycle complete";
             ResourceLockText.Text = "RobotArm = FREE\nChamber = FREE\nLoadLockDoor = CLOSED";
             AddLog("Demo cycle complete");
+            _completedCycles++;
+            UpdateKpiPanel();
 
             _waitingForLoop = true;
             _loopWaitStartedAt = DateTime.Now;
@@ -333,6 +346,8 @@ public partial class DemoEquipmentMotionWindow : Window
         ResetModuleHighlights();
         SetChamberProgress(null, 0);
         UpdatePipelinePanel(null, 0);
+        UpdateSlotIndicators();
+        UpdateKpiPanel();
 
         if (clearLog)
         {
@@ -371,6 +386,9 @@ public partial class DemoEquipmentMotionWindow : Window
             ? "Vacuum interlock display: atmosphere side door open"
             : "Vacuum interlock display: vacuum transfer path sealed";
 
+        UpdateSlotIndicators();
+        UpdateKpiPanel();
+
         ModuleStateList.Items.Clear();
         AddModuleState("EFEM", step?.ActiveModule is "FOUP A" or "Aligner" or "Unload / FOUP Return" ? "BUSY" : "READY");
         AddModuleState("Align/Buffer", step?.ActiveModule == "Aligner" ? "BUSY" : "READY");
@@ -385,6 +403,53 @@ public partial class DemoEquipmentMotionWindow : Window
     private void AddModuleState(string module, string state)
     {
         ModuleStateList.Items.Add($"{module,-13} {state}");
+    }
+
+    private void UpdateKpiPanel()
+    {
+        CycleCounterText.Text = $"{_completedCycles} wafers";
+        DeadTimeText.Text = $"{_robotDeadTimeSeconds:0.0} s";
+
+        if (_isError)
+        {
+            PipelineModeText.Text = "FAULT HOLD";
+            PipelineModeText.Foreground = BrushFrom("#FF5A6A");
+        }
+        else if (_waitingForLoop)
+        {
+            PipelineModeText.Text = "NEXT SLOT READY";
+            PipelineModeText.Foreground = BrushFrom("#FFC857");
+        }
+        else
+        {
+            PipelineModeText.Text = "AUTO PREP";
+            PipelineModeText.Foreground = BrushFrom("#4FE38A");
+        }
+    }
+
+    private void UpdateSlotIndicators()
+    {
+        SetSlotIndicator(Slot01Indicator, 1);
+        SetSlotIndicator(Slot02Indicator, 2);
+        SetSlotIndicator(Slot03Indicator, 3);
+        SetSlotIndicator(Slot04Indicator, 4);
+        SetSlotIndicator(Slot05Indicator, 5);
+    }
+
+    private void SetSlotIndicator(System.Windows.Shapes.Rectangle slot, int slotNumber)
+    {
+        if (slotNumber < _cycleSlot)
+        {
+            slot.Fill = BrushFrom("#4FE38A");
+        }
+        else if (slotNumber == _cycleSlot)
+        {
+            slot.Fill = BrushFrom("#FFC857");
+        }
+        else
+        {
+            slot.Fill = BrushFrom("#315064");
+        }
     }
 
     private void ResetModuleHighlights()
