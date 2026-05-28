@@ -10,15 +10,16 @@ namespace etch_ui.PresentationMotion;
 public partial class DemoEquipmentMotionWindow : Window
 {
     private const double WaferSize = 36;
-    private const double RobotCenterX = 583;
-    private const double RobotCenterY = 323;
-    private const double RobotArmLength = 131;
-    private const double ModuleProgressWidth = 126;
+    private const double RobotCenterX = 885;
+    private const double RobotCenterY = 355;
+    private const double RobotArmLength = 180;
+    private const double ModuleProgressWidth = 142;
 
     private readonly DispatcherTimer _motionTimer;
     private readonly List<MotionStep> _steps;
 
     private int _stepIndex;
+    private int _cycleSlot = 1;
     private DateTime _stepStartedAt;
     private bool _isRunning;
     private bool _isPaused;
@@ -43,21 +44,18 @@ public partial class DemoEquipmentMotionWindow : Window
         _fromRobotAngle = 180;
         _toRobotAngle = 180;
 
-        _motionTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(33)
-        };
+        _motionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         _motionTimer.Tick += MotionTimer_Tick;
 
         ResetVisualState();
-        AddLog("Demo screen ready - no PLC, EtherCAT, Flask, or DB connection is used.");
+        AddLog("Demo ready - visual scheduler only, no PLC or EtherCAT connection.");
     }
 
     private void StartDemo_Click(object sender, RoutedEventArgs e)
     {
         if (_isError)
         {
-            AddLog("Cannot start while ERROR is active. Press Clear Error first.");
+            AddLog("Start blocked: simulated ERROR is active.");
             return;
         }
 
@@ -65,6 +63,7 @@ public partial class DemoEquipmentMotionWindow : Window
         {
             _isPaused = false;
             AddLog("Demo resumed");
+            BeginStep(_stepIndex, useCurrentPosition: true);
             _motionTimer.Start();
             return;
         }
@@ -84,7 +83,6 @@ public partial class DemoEquipmentMotionWindow : Window
 
         _isPaused = !_isPaused;
         RobotStatusText.Text = _isPaused ? "Paused" : "Motion resumed";
-        CurrentStepText.Text = _isPaused ? $"PAUSED - {CurrentStepText.Text}" : _steps[_stepIndex].StepName;
         AddLog(_isPaused ? "Demo paused" : "Demo resumed");
 
         if (_isPaused)
@@ -93,8 +91,8 @@ public partial class DemoEquipmentMotionWindow : Window
         }
         else
         {
-            // Restart the current visual step from the current position.
             BeginStep(_stepIndex, useCurrentPosition: true);
+            _motionTimer.Start();
         }
     }
 
@@ -106,7 +104,7 @@ public partial class DemoEquipmentMotionWindow : Window
         _isError = false;
         _waitingForLoop = false;
         _stepIndex = 0;
-
+        _cycleSlot = 1;
         ResetVisualState();
         AddLog("Demo reset");
     }
@@ -126,7 +124,9 @@ public partial class DemoEquipmentMotionWindow : Window
         RobotStatusText.Text = "Stopped";
         InterlockStatusText.Text = "DISPLAY ONLY - INTERLOCK FAULT SIMULATED";
         InterlockStatusText.Foreground = BrushFrom("#FF5A6A");
-
+        SchedulerDecisionText.Text = "Scheduler hold: fault active";
+        DispatcherStatusText.Text = "Dispatcher stopped";
+        ResourceLockText.Text = "RobotArm = LOCKED\nLoadLockDoor = LOCKED\nVacuumPath = LOCKED";
         SetModuleFill("ALL", "#3B1822");
         AddLog("ERROR injected by presenter");
     }
@@ -134,7 +134,7 @@ public partial class DemoEquipmentMotionWindow : Window
     private void ClearError_Click(object sender, RoutedEventArgs e)
     {
         _isError = false;
-        ResetVisualState();
+        ResetVisualState(clearLog: false);
         AddLog("Error cleared - demo ready");
     }
 
@@ -146,7 +146,7 @@ public partial class DemoEquipmentMotionWindow : Window
         _stepIndex = 0;
         EventLogList.Items.Clear();
         ResetVisualState(clearLog: false);
-        AddLog("Demo cycle started");
+        AddLog($"Cycle start: FOUP A Slot {_cycleSlot:00}");
         BeginStep(_stepIndex);
         _motionTimer.Start();
     }
@@ -187,6 +187,7 @@ public partial class DemoEquipmentMotionWindow : Window
             SetModuleFill(step.ActiveModule, "#203F52");
         }
 
+        UpdatePipelinePanel(step, 0);
         AddLog(step.StartLog);
     }
 
@@ -201,12 +202,13 @@ public partial class DemoEquipmentMotionWindow : Window
 
         if (_waitingForLoop)
         {
-            if ((DateTime.Now - _loopWaitStartedAt).TotalMilliseconds >= 1700)
+            if ((DateTime.Now - _loopWaitStartedAt).TotalMilliseconds >= 1600)
             {
                 _waitingForLoop = false;
                 _stepIndex = 0;
+                _cycleSlot = _cycleSlot >= 5 ? 1 : _cycleSlot + 1;
                 ResetVisualState(clearLog: false);
-                AddLog("Next wafer cycle auto-start");
+                AddLog($"Next wafer reserved: FOUP A Slot {_cycleSlot:00}");
                 BeginStep(_stepIndex);
             }
 
@@ -232,6 +234,8 @@ public partial class DemoEquipmentMotionWindow : Window
         {
             SetChamberProgress(null, 0);
         }
+
+        UpdatePipelinePanel(step, progress);
 
         if (progress >= 1)
         {
@@ -266,6 +270,9 @@ public partial class DemoEquipmentMotionWindow : Window
             RobotStatusText.Text = "Standby";
             ChamberProgressBar.Value = 100;
             ChamberProgressText.Text = "100%";
+            SchedulerDecisionText.Text = "Scheduler: next slot pre-reserved";
+            DispatcherStatusText.Text = "Dispatcher: cycle complete";
+            ResourceLockText.Text = "RobotArm = FREE\nChamber = FREE\nLoadLockDoor = CLOSED";
             AddLog("Demo cycle complete");
 
             _waitingForLoop = true;
@@ -280,191 +287,24 @@ public partial class DemoEquipmentMotionWindow : Window
     {
         return new List<MotionStep>
         {
-            new(
-                StepName: "FOUP A wafer pickup",
-                StartLog: "FOUP A wafer pickup",
-                CompleteLog: null,
-                WaferLocation: "FOUP A",
-                ActiveModule: "FOUP A",
-                RobotStatus: "EFEM pickup ready",
-                TargetWaferCenter: DemoPoints.FoupA,
-                RobotAngle: 180,
-                DurationMs: 700,
-                ProcessingModule: null,
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "Move wafer to aligner",
-                StartLog: "EFEM moving wafer to aligner",
-                CompleteLog: "Aligner position reached",
-                WaferLocation: "Aligner",
-                ActiveModule: "Aligner",
-                RobotStatus: "EFEM transfer",
-                TargetWaferCenter: DemoPoints.Aligner,
-                RobotAngle: 180,
-                DurationMs: 1300,
-                ProcessingModule: null,
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "Load Lock door open",
-                StartLog: "Load Lock door open",
-                CompleteLog: null,
-                WaferLocation: "Aligner",
-                ActiveModule: "Load Lock",
-                RobotStatus: "Waiting for LL open",
-                TargetWaferCenter: DemoPoints.Aligner,
-                RobotAngle: 180,
-                DurationMs: 700,
-                ProcessingModule: null,
-                LoadLockDoorOpen: true),
-
-            new(
-                StepName: "Wafer entered Load Lock",
-                StartLog: "Wafer entered Load Lock",
-                CompleteLog: null,
-                WaferLocation: "Load Lock",
-                ActiveModule: "Load Lock",
-                RobotStatus: "EFEM handoff complete",
-                TargetWaferCenter: DemoPoints.LoadLock,
-                RobotAngle: 180,
-                DurationMs: 1150,
-                ProcessingModule: null,
-                LoadLockDoorOpen: true),
-
-            new(
-                StepName: "Transfer Robot moving to PM2",
-                StartLog: "Transfer Robot moving to PM2",
-                CompleteLog: null,
-                WaferLocation: "PM2",
-                ActiveModule: "PM2 Etch",
-                RobotStatus: "Robot arm rotating to PM2",
-                TargetWaferCenter: DemoPoints.Pm2,
-                RobotAngle: -58,
-                DurationMs: 1550,
-                ProcessingModule: null,
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "PM2 Etch processing",
-                StartLog: "PM2 Etch processing start",
-                CompleteLog: "PM2 process complete",
-                WaferLocation: "PM2",
-                ActiveModule: "PM2 Etch",
-                RobotStatus: "Wafer seated in PM2",
-                TargetWaferCenter: DemoPoints.Pm2,
-                RobotAngle: -58,
-                DurationMs: 2400,
-                ProcessingModule: "PM2",
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "Transfer Robot moving to PM3",
-                StartLog: "Transfer Robot moving to PM3",
-                CompleteLog: null,
-                WaferLocation: "PM3",
-                ActiveModule: "PM3 Etch",
-                RobotStatus: "Robot arm rotating to PM3",
-                TargetWaferCenter: DemoPoints.Pm3,
-                RobotAngle: -5,
-                DurationMs: 1400,
-                ProcessingModule: null,
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "PM3 process",
-                StartLog: "PM3 process start",
-                CompleteLog: "PM3 process complete",
-                WaferLocation: "PM3",
-                ActiveModule: "PM3 Etch",
-                RobotStatus: "Wafer seated in PM3",
-                TargetWaferCenter: DemoPoints.Pm3,
-                RobotAngle: -5,
-                DurationMs: 2100,
-                ProcessingModule: "PM3",
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "Transfer Robot moving to PM4",
-                StartLog: "Transfer Robot moving to PM4",
-                CompleteLog: null,
-                WaferLocation: "PM4",
-                ActiveModule: "PM4 Etch",
-                RobotStatus: "Robot arm rotating to PM4",
-                TargetWaferCenter: DemoPoints.Pm4,
-                RobotAngle: 58,
-                DurationMs: 1400,
-                ProcessingModule: null,
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "PM4 process",
-                StartLog: "PM4 process start",
-                CompleteLog: "PM4 process complete",
-                WaferLocation: "PM4",
-                ActiveModule: "PM4 Etch",
-                RobotStatus: "Wafer seated in PM4",
-                TargetWaferCenter: DemoPoints.Pm4,
-                RobotAngle: 58,
-                DurationMs: 2100,
-                ProcessingModule: "PM4",
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "Transfer Robot moving to PM1",
-                StartLog: "Transfer Robot moving to PM1",
-                CompleteLog: null,
-                WaferLocation: "PM1",
-                ActiveModule: "PM1 Strip",
-                RobotStatus: "Robot arm rotating to PM1",
-                TargetWaferCenter: DemoPoints.Pm1,
-                RobotAngle: -118,
-                DurationMs: 1600,
-                ProcessingModule: null,
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "PM1 Strip process",
-                StartLog: "PM1 Strip processing start",
-                CompleteLog: "PM1 Strip process complete",
-                WaferLocation: "PM1",
-                ActiveModule: "PM1 Strip",
-                RobotStatus: "Wafer seated in PM1",
-                TargetWaferCenter: DemoPoints.Pm1,
-                RobotAngle: -118,
-                DurationMs: 2300,
-                ProcessingModule: "PM1",
-                LoadLockDoorOpen: false),
-
-            new(
-                StepName: "Load Lock return",
-                StartLog: "Transfer Robot returning wafer to Load Lock",
-                CompleteLog: "Load Lock door open",
-                WaferLocation: "Load Lock",
-                ActiveModule: "Load Lock",
-                RobotStatus: "Robot arm returning",
-                TargetWaferCenter: DemoPoints.LoadLock,
-                RobotAngle: 180,
-                DurationMs: 1500,
-                ProcessingModule: null,
-                LoadLockDoorOpen: true),
-
-            new(
-                StepName: "FOUP Return",
-                StartLog: "Wafer returned to FOUP",
-                CompleteLog: null,
-                WaferLocation: "FOUP Return",
-                ActiveModule: "Unload / FOUP Return",
-                RobotStatus: "EFEM unload complete",
-                TargetWaferCenter: DemoPoints.FoupReturn,
-                RobotAngle: 180,
-                DurationMs: 1400,
-                ProcessingModule: null,
-                LoadLockDoorOpen: true),
+            new("FOUP A wafer pickup", "FOUP A wafer pickup", null, "FOUP A Slot 01", "FOUP A", "EFEM pickup ready", DemoPoints.FoupA, 180, 700, null, false, "Reserve next FOUP slot"),
+            new("Aligner transfer", "EFEM moving wafer to aligner", "Aligner position reached", "Aligner / Buffer", "Aligner", "EFEM transfer", DemoPoints.Aligner, 180, 1300, null, false, "Dispatch align job"),
+            new("Load Lock door open", "Load Lock door open", null, "Aligner / Buffer", "Load Lock", "Waiting for LL open", DemoPoints.Aligner, 180, 700, null, true, "Check atmosphere side interlock"),
+            new("Wafer entered Load Lock", "Wafer entered Load Lock", null, "Load Lock", "Load Lock", "EFEM handoff complete", DemoPoints.LoadLock, 180, 1150, null, true, "Lock Load Lock resource"),
+            new("Robot moving to PM2", "Transfer Robot moving to PM2", null, "PM2", "PM2 Etch", "Robot arm rotating to PM2", DemoPoints.Pm2, -52, 1550, null, false, "Dispatch robot move"),
+            new("PM2 Etch processing", "PM2 Etch processing start", "PM2 process complete", "PM2", "PM2 Etch", "Wafer seated in PM2", DemoPoints.Pm2, -52, 2400, "PM2", false, "Pre-stage next wafer while PM2 runs"),
+            new("Robot moving to PM3", "Transfer Robot moving to PM3", null, "PM3", "PM3 Etch", "Robot arm rotating to PM3", DemoPoints.Pm3, -2, 1400, null, false, "Select available chamber"),
+            new("PM3 process", "PM3 process start", "PM3 process complete", "PM3", "PM3 Etch", "Wafer seated in PM3", DemoPoints.Pm3, -2, 2100, "PM3", false, "Keep robot free during chamber process"),
+            new("Robot moving to PM4", "Transfer Robot moving to PM4", null, "PM4", "PM4 Etch", "Robot arm rotating to PM4", DemoPoints.Pm4, 55, 1400, null, false, "Avoid arm/chamber collision"),
+            new("PM4 process", "PM4 process start", "PM4 process complete", "PM4", "PM4 Etch", "Wafer seated in PM4", DemoPoints.Pm4, 55, 2100, "PM4", false, "Queue downstream unload"),
+            new("Robot moving to PM1", "Transfer Robot moving to PM1", null, "PM1", "PM1 Strip", "Robot arm rotating to PM1", DemoPoints.Pm1, -126, 1600, null, false, "Route final strip step"),
+            new("PM1 Strip process", "PM1 Strip processing start", "PM1 Strip process complete", "PM1", "PM1 Strip", "Wafer seated in PM1", DemoPoints.Pm1, -126, 2300, "PM1", false, "Reserve Load Lock return path"),
+            new("Load Lock return", "Transfer Robot returning wafer to Load Lock", "Load Lock door open", "Load Lock", "Load Lock", "Robot arm returning", DemoPoints.LoadLock, 180, 1500, null, true, "Release chamber and lock LL"),
+            new("FOUP Return", "Wafer returned to FOUP", null, "FOUP Return", "Unload / FOUP Return", "EFEM unload complete", DemoPoints.FoupReturn, 180, 1400, null, true, "Complete wafer and dispatch next slot"),
         };
     }
 
-    private void ResetVisualState(bool clearLog = false)
+    private void ResetVisualState(bool clearLog = true)
     {
         _currentWaferCenter = DemoPoints.FoupA;
         _fromWaferCenter = DemoPoints.FoupA;
@@ -475,10 +315,10 @@ public partial class DemoEquipmentMotionWindow : Window
         EquipmentStateText.Text = "IDLE";
         EquipmentStateText.Foreground = BrushFrom("#EAF6FF");
         CurrentStepText.Text = "Ready";
-        WaferLocationText.Text = "FOUP A";
+        WaferLocationText.Text = $"FOUP A Slot {_cycleSlot:00}";
         ActiveModuleText.Text = "None";
         RobotStatusText.Text = "Standby";
-        InterlockStatusText.Text = "DISPLAY ONLY - ALL CONDITIONS OK";
+        InterlockStatusText.Text = "DISPLAY ONLY - VAC / DOOR / ROBOT OK";
         InterlockStatusText.Foreground = BrushFrom("#4FE38A");
         ChamberProgressBar.Value = 0;
         ChamberProgressText.Text = "0%";
@@ -489,6 +329,7 @@ public partial class DemoEquipmentMotionWindow : Window
         SetDoorOpen(false);
         ResetModuleHighlights();
         SetChamberProgress(null, 0);
+        UpdatePipelinePanel(null, 0);
 
         if (clearLog)
         {
@@ -496,11 +337,59 @@ public partial class DemoEquipmentMotionWindow : Window
         }
     }
 
+    private void UpdatePipelinePanel(MotionStep? step, double progress)
+    {
+        int nextSlot = _cycleSlot >= 5 ? 1 : _cycleSlot + 1;
+        SlotQueueText.Text =
+            $"Active : Slot {_cycleSlot:00}\n" +
+            $"Next   : Slot {nextSlot:00} reserved\n" +
+            "Rule   : bottom slot first\n" +
+            "Buffer : 1 wafer pre-stage";
+
+        SchedulerDecisionText.Text = step?.SchedulerNote ?? "Scheduler: wait for Start Demo";
+        DispatcherStatusText.Text = step is null
+            ? "Dispatcher: idle"
+            : $"Dispatcher: {step.ActiveModule} command issued";
+
+        string robotLock = step is null ? "FREE" : "LOCKED";
+        string chamberLock = step?.ProcessingModule is null ? "FREE" : $"{step.ProcessingModule} BUSY";
+        string loadLock = step?.ActiveModule.Contains("Load Lock", StringComparison.OrdinalIgnoreCase) == true ? "LOCKED" : "READY";
+        ResourceLockText.Text =
+            $"RobotArm    = {robotLock}\n" +
+            $"Chamber     = {chamberLock}\n" +
+            $"LoadLock    = {loadLock}\n" +
+            $"VacuumPath  = {(step?.LoadLockDoorOpen == true ? "ATM GATE" : "VAC READY")}";
+
+        RecipeStatusText.Text = step?.ProcessingModule is null
+            ? "Recipe: transfer / handling step"
+            : $"Recipe: {step.ProcessingModule} active ({progress * 100:0}%)";
+
+        VacuumStatusText.Text = step?.LoadLockDoorOpen == true
+            ? "Vacuum interlock display: atmosphere side door open"
+            : "Vacuum interlock display: vacuum transfer path sealed";
+
+        ModuleStateList.Items.Clear();
+        AddModuleState("EFEM", step?.ActiveModule is "FOUP A" or "Aligner" or "Unload / FOUP Return" ? "BUSY" : "READY");
+        AddModuleState("Align/Buffer", step?.ActiveModule == "Aligner" ? "BUSY" : "READY");
+        AddModuleState("LoadLock", step?.ActiveModule == "Load Lock" ? "BUSY" : "READY");
+        AddModuleState("Robot", step?.RobotStatus.Contains("rotating", StringComparison.OrdinalIgnoreCase) == true ? "BUSY" : "READY");
+        AddModuleState("PM1", step?.ProcessingModule == "PM1" ? "BUSY" : "READY");
+        AddModuleState("PM2", step?.ProcessingModule == "PM2" ? "BUSY" : "READY");
+        AddModuleState("PM3", step?.ProcessingModule == "PM3" ? "BUSY" : "READY");
+        AddModuleState("PM4", step?.ProcessingModule == "PM4" ? "BUSY" : "READY");
+    }
+
+    private void AddModuleState(string module, string state)
+    {
+        ModuleStateList.Items.Add($"{module,-13} {state}");
+    }
+
     private void ResetModuleHighlights()
     {
         SetModuleFill("FOUP A", "#162C3C");
         SetModuleFill("FOUP Return", "#162C3C");
         SetModuleFill("Aligner", "#162C3C");
+        SetModuleFill("Buffer Stage", "#142838");
         SetModuleFill("Load Lock", "#182F3D");
         SetModuleFill("PM1", "#152B3A");
         SetModuleFill("PM2", "#152B3A");
@@ -538,7 +427,7 @@ public partial class DemoEquipmentMotionWindow : Window
         LoadLockDoor.Fill = isOpen ? BrushFrom("#4FE38A") : BrushFrom("#FF5A6A");
         DoorStatusText.Text = isOpen ? "DOOR OPEN" : "DOOR CLOSED";
         DoorStatusText.Foreground = isOpen ? BrushFrom("#4FE38A") : BrushFrom("#FF8A96");
-        Canvas.SetLeft(LoadLockDoor, isOpen ? 380 : 392);
+        Canvas.SetLeft(LoadLockDoor, isOpen ? 508 : 524);
     }
 
     private void SetChamberProgress(string? module, double percent)
@@ -576,6 +465,7 @@ public partial class DemoEquipmentMotionWindow : Window
             FoupAModule.Fill = brush;
             FoupReturnModule.Fill = brush;
             AlignerModule.Fill = brush;
+            BufferModule.Fill = brush;
             LoadLockModule.Fill = brush;
             PM1Module.Fill = brush;
             PM2Module.Fill = brush;
@@ -596,6 +486,9 @@ public partial class DemoEquipmentMotionWindow : Window
                 break;
             case "Aligner":
                 AlignerModule.Fill = brush;
+                break;
+            case "Buffer Stage":
+                BufferModule.Fill = brush;
                 break;
             case "Load Lock":
                 LoadLockModule.Fill = brush;
@@ -645,7 +538,6 @@ public partial class DemoEquipmentMotionWindow : Window
 
     private static double EaseInOut(double t)
     {
-        // Smoothstep easing keeps the visual movement presentation-friendly.
         return t * t * (3 - 2 * t);
     }
 
@@ -665,17 +557,18 @@ public partial class DemoEquipmentMotionWindow : Window
         double RobotAngle,
         double DurationMs,
         string? ProcessingModule,
-        bool LoadLockDoorOpen);
+        bool LoadLockDoorOpen,
+        string SchedulerNote);
 
     private static class DemoPoints
     {
-        public static readonly Point FoupA = new(117, 279);
-        public static readonly Point Aligner = new(284, 300);
-        public static readonly Point LoadLock = new(468, 300);
-        public static readonly Point Pm2 = new(704, 142);
-        public static readonly Point Pm3 = new(870, 304);
-        public static readonly Point Pm4 = new(704, 484);
-        public static readonly Point Pm1 = new(500, 142);
-        public static readonly Point FoupReturn = new(117, 445);
+        public static readonly Point FoupA = new(143, 268);
+        public static readonly Point Aligner = new(374, 278);
+        public static readonly Point LoadLock = new(624, 362);
+        public static readonly Point Pm2 = new(1043, 138);
+        public static readonly Point Pm3 = new(1279, 349);
+        public static readonly Point Pm4 = new(1043, 612);
+        public static readonly Point Pm1 = new(773, 138);
+        public static readonly Point FoupReturn = new(143, 554);
     }
 }
