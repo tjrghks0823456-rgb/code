@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>플라즈마 식각 장비 · 모니터링</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #f3f4f6;
+            --header: #1f2937;
+            --card: #ffffff;
+            --accent: #2563eb;
+            --ok: #16a34a;
+            --warn: #ca8a04;
+            --alarm: #dc2626;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+            background: var(--bg);
+            color: #111827;
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--header);
+            color: #fff;
+            padding: 14px 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .header h1 { font-size: 1.15rem; font-weight: 700; }
+        .header .sub { font-size: 0.8rem; color: #d1d5db; margin-top: 4px; max-width: 520px; line-height: 1.4; }
+        .header-status {
+            display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+            font-size: 0.85rem;
+        }
+        .pill {
+            padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 0.8rem;
+        }
+        .pill.state-idle, .pill.state-ready { background: #374151; color: #e5e7eb; }
+        .pill.state-running { background: var(--ok); color: #fff; }
+        .pill.state-warning { background: var(--warn); color: #fff; }
+        .pill.state-alarm { background: var(--alarm); color: #fff; }
+        .pill.state-maintenance { background: #7c3aed; color: #fff; }
+        .pill.alarm-none { background: #374151; color: #9ca3af; }
+        .pill.alarm-code { background: #431407; color: #fed7aa; }
+
+        .tabs {
+            background: #374151;
+            padding: 0 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            border-bottom: 2px solid #111827;
+        }
+        .tabs button {
+            background: transparent;
+            color: #d1d5db;
+            border: none;
+            padding: 12px 18px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.88rem;
+            border-radius: 8px 8px 0 0;
+            margin-bottom: -2px;
+        }
+        .tabs button:hover { color: #fff; background: #4b5563; }
+        .tabs button.active {
+            background: var(--bg);
+            color: #111827;
+            border: 2px solid #111827;
+            border-bottom-color: var(--bg);
+        }
+
+        .wrap { padding: 16px; max-width: 1400px; margin: 0 auto; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 10px;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        }
+        .card label { display: block; font-size: 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+        .card .val { font-size: 1.35rem; font-weight: 700; margin-top: 6px; }
+        .card .unit { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+        .card.access-ok .val { color: var(--ok); }
+        .card.access-bad .val { color: var(--alarm); }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        @media (max-width: 900px) {
+            .grid2 { grid-template-columns: 1fr; }
+        }
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        }
+        .panel h2 { font-size: 0.95rem; color: var(--header); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); }
+        .panel-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 0.9rem; }
+        .panel-row:last-child { border-bottom: none; }
+        .panel-row span:first-child { color: var(--muted); }
+        .panel-row span:last-child { font-weight: 600; }
+
+        .chart-box {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        }
+        .chart-box h2 { font-size: 0.95rem; margin-bottom: 12px; color: var(--header); }
+        .chart-canvas { height: 260px; position: relative; }
+
+        .log-box {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        }
+        .log-box h2 { font-size: 0.95rem; margin-bottom: 10px; color: var(--header); }
+        .log-toolbar { font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+        th { background: #f9fafb; color: var(--muted); font-weight: 600; }
+        tr:hover td { background: #fafafa; }
+        .empty-msg { color: var(--muted); padding: 24px; text-align: center; }
+
+        .kpi-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+        .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; min-width: 140px; }
+        .kpi .lbl { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+        .kpi .num { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
+
+        .ai-box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+        .ai-box h2 { font-size: 0.95rem; margin-bottom: 10px; color: var(--header); }
+        .ai-pre { background: #1f2937; color: #e5e7eb; padding: 12px; border-radius: 8px; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; }
+
+        footer.note {
+            font-size: 0.75rem; color: var(--muted);
+            padding: 12px 22px 24px;
+            max-width: 1400px; margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div>
+            <h1>플라즈마 식각 · 원격 모니터링</h1>
+            <div class="sub">현장 조작은 WPF HMI에서만 수행합니다. 본 화면은 WPF가 전송한 텔레메트리·서버 축적 이력·요약입니다. 수신: <code style="background:#374151;padding:2px 6px;border-radius:4px;">POST /api/etch/sensor-data</code></div>
+        </div>
+        <div class="header-status">
+            <span id="hdrUser" class="pill alarm-none">사용자: -</span>
+            <span id="hdrState" class="pill state-idle">상태: -</span>
+            <span id="hdrAlarm" class="pill alarm-none">알람: -</span>
+            <span id="hdrInterlock" class="pill alarm-none">인터록: -</span>
+            <span id="hdrTime" style="color:#9ca3af;">마지막 수신: -</span>
+        </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+        <button type="button" class="active" data-tab="realtime" role="tab" aria-selected="true">실시간</button>
+        <button type="button" data-tab="history" role="tab" aria-selected="false">서버 이력</button>
+        <button type="button" data-tab="events" role="tab" aria-selected="false">이벤트</button>
+        <button type="button" data-tab="ai" role="tab" aria-selected="false">AI 진단(스텁)</button>
+    </nav>
+
+    <div class="wrap tab-panel active" id="tab-realtime" role="tabpanel">
+        <div class="cards">
+            <div class="card"><label>압력</label><div><span class="val" id="cPressure">-</span> <span class="unit">kPa</span></div></div>
+            <div class="card"><label>진동</label><div><span class="val" id="cVib">-</span> <span class="unit">g</span></div></div>
+            <div class="card"><label>온도</label><div><span class="val" id="cTemp">-</span> <span class="unit">℃</span></div></div>
+            <div class="card"><label>습도</label><div><span class="val" id="cHumi">-</span> <span class="unit">%</span></div></div>
+            <div class="card" id="cardAccess"><label>접근 센서</label><div><span class="val" id="cAccess">-</span></div></div>
+        </div>
+        <div class="grid2">
+            <div class="panel">
+                <h2>Load Lock 요약</h2>
+                <div class="panel-row"><span>접근 / 도어 인터록</span><span id="llAccess">-</span></div>
+                <div class="panel-row"><span>압력 상태</span><span id="llPress">-</span></div>
+                <div class="panel-row"><span>인터록 전체</span><span id="llInterlock">-</span></div>
+            </div>
+            <div class="panel">
+                <h2>Chamber 요약</h2>
+                <div class="panel-row"><span>온도 / 습도</span><span id="chEnv">-</span></div>
+                <div class="panel-row"><span>압력 / 진동</span><span id="chPv">-</span></div>
+                <div class="panel-row"><span>장비 상태</span><span id="chState">-</span></div>
+            </div>
+        </div>
+        <div class="chart-box">
+            <h2>실시간 추세 (브라우저 버퍼 · 최대 80점)</h2>
+            <div class="chart-canvas"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="log-box">
+            <h2>수신 스냅샷 이력</h2>
+            <div class="log-toolbar">폴링 약 2초 · 표는 값 변화 시만 한 줄 추가</div>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr><th>시간</th><th>상태</th><th>알람</th><th>인터록</th><th>압력</th><th>진동</th><th>온도</th><th>습도</th><th>접근</th></tr></thead>
+                    <tbody id="logBody"></tbody>
+                </table>
+            </div>
+            <div id="logEmpty" class="empty-msg" style="display:none;">아직 수신 데이터가 없습니다. WPF HMI를 실행하세요.</div>
+        </div>
+    </div>
+
+    <div class="wrap tab-panel" id="tab-history" role="tabpanel" hidden>
+        <div class="kpi-row" id="kpiRow">
+            <div class="kpi"><div class="lbl">버퍼 샘플 수</div><div class="num" id="kpiSamples">-</div></div>
+            <div class="kpi"><div class="lbl">RUNNING 비율(추정)</div><div class="num" id="kpiRun">-</div></div>
+            <div class="kpi"><div class="lbl">알람 이벤트</div><div class="num" id="kpiAlEv">-</div></div>
+            <div class="kpi"><div class="lbl">인터록 위반 이벤트</div><div class="num" id="kpiIlEv">-</div></div>
+        </div>
+        <p class="log-toolbar">Flask 메모리에 쌓인 시계열(최대 2500점). 서버 재시작 시 초기화됩니다.</p>
+        <div class="chart-box">
+            <h2>서버 저장 추세</h2>
+            <div class="chart-canvas" style="height:320px"><canvas id="serverTrendChart"></canvas></div>
+        </div>
+        <button type="button" id="btnRefreshHistory" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-weight:600;">이력 다시 불러오기</button>
+    </div>
+
+    <div class="wrap tab-panel" id="tab-events" role="tabpanel" hidden>
+        <div class="log-box">
+            <h2>상태·알람·인터록 이벤트</h2>
+            <div class="log-toolbar">최근 100건 · Flask 메모리 (재시작 시 초기화)</div>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr><th>시간</th><th>유형</th><th>메시지</th><th>상태</th><th>알람</th><th>사용자</th></tr></thead>
+                    <tbody id="eventsBody"></tbody>
+                </table>
+            </div>
+            <div id="eventsEmpty" class="empty-msg">이벤트 없음</div>
+        </div>
+    </div>
+
+    <div class="wrap tab-panel" id="tab-ai" role="tabpanel" hidden>
+        <div class="ai-box">
+            <h2>모델 상태</h2>
+            <div id="aiStatus" class="ai-pre">불러오는 중…</div>
+        </div>
+        <div class="ai-box">
+            <h2>규칙 기반 이상 점수 (스텁)</h2>
+            <p class="log-toolbar">실시간 탭과 동일한 스냅샷을 주기적으로 POST 합니다. 실 모델 연결 시 교체합니다.</p>
+            <div id="aiPredict" class="ai-pre">-</div>
+        </div>
+    </div>
+
+    <footer class="note">
+        API: <code>GET /api/sensors</code> 스냅샷 · <code>GET /api/etch/history</code> 시계열 · <code>GET /api/etch/events</code> · <code>GET /api/etch/summary</code> 요약 · 센서 키 <code>압력</code>(kPa), <code>진동</code>(g) (구 <code>채광</code>/<code>토양습도</code> 호환은 서버 수신측에서 처리).
+    </footer>
+
+    <script>
+        const MAX_POINTS = 80;
+        const MAX_LOG_ROWS = 60;
+        const pollMs = 2000;
+
+        const history = { t: [], pressure: [], vib: [], temp: [], humi: [] };
+        const logRows = [];
+        let lastSnapshotForAi = {};
+
+        function pickSensor(sensors, names) {
+            const list = Array.isArray(names) ? names : [names];
+            for (const name of list) {
+                const s = (sensors || []).find(x => x.name === name);
+                if (s) return Number(s.rawValue);
+            }
+            return null;
+        }
+
+        function fmt(v, dec) {
+            if (v === null || v === undefined || Number.isNaN(v)) return '-';
+            return Number(v).toFixed(dec);
+        }
+
+        function stateClass(st) {
+            const u = (st || '').toUpperCase();
+            if (u.includes('RUNNING')) return 'state-running';
+            if (u.includes('READY')) return 'state-ready';
+            if (u.includes('WARNING')) return 'state-warning';
+            if (u.includes('ALARM')) return 'state-alarm';
+            if (u.includes('MAINT')) return 'state-maintenance';
+            if (u.includes('IDLE')) return 'state-idle';
+            return 'state-idle';
+        }
+
+        let chart;
+        function initChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: '압력 (kPa)', data: [], borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', tension: 0.25, yAxisID: 'y' },
+                        { label: '진동 (g)', data: [], borderColor: '#ea580c', backgroundColor: 'rgba(234,88,12,0.1)', tension: 0.25, yAxisID: 'y1' },
+                        { label: '온도 (℃)', data: [], borderColor: '#16a34a', borderDash: [4,2], tension: 0.25, yAxisID: 'y2' },
+                        { label: '습도 (%)', data: [], borderColor: '#7c3aed', borderDash: [2,2], tension: 0.25, yAxisID: 'y2' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'kPa' } },
+                        y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'g' } },
+                        y2: { type: 'linear', display: false }
+                    },
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        function pushHistory(label, pressure, vib, temp, humi) {
+            history.t.push(label);
+            history.pressure.push(pressure);
+            history.vib.push(vib);
+            history.temp.push(temp);
+            history.humi.push(humi);
+            while (history.t.length > MAX_POINTS) {
+                history.t.shift();
+                history.pressure.shift();
+                history.vib.shift();
+                history.temp.shift();
+                history.humi.shift();
+            }
+            chart.data.labels = history.t;
+            chart.data.datasets[0].data = history.pressure;
+            chart.data.datasets[1].data = history.vib;
+            chart.data.datasets[2].data = history.temp;
+            chart.data.datasets[3].data = history.humi;
+            chart.update('none');
+        }
+
+        function prependLog(row) {
+            logRows.unshift(row);
+            if (logRows.length > MAX_LOG_ROWS) logRows.pop();
+            const tb = document.getElementById('logBody');
+            tb.innerHTML = logRows.map(r =>
+                '<tr>' +
+                '<td>' + r.time + '</td>' +
+                '<td>' + r.state + '</td>' +
+                '<td>' + r.alarm + '</td>' +
+                '<td>' + r.interlock + '</td>' +
+                '<td>' + r.pressure + '</td>' +
+                '<td>' + r.vib + '</td>' +
+                '<td>' + r.temp + '</td>' +
+                '<td>' + r.humi + '</td>' +
+                '<td>' + r.access + '</td>' +
+                '</tr>'
+            ).join('');
+            document.getElementById('logEmpty').style.display = logRows.length ? 'none' : 'block';
+        }
+
+        let lastKey = '';
+        function poll() {
+            fetch('/api/sensors')
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+                .then(data => {
+                    const sensors = data.sensors || [];
+                    const temp = pickSensor(sensors, ['온도']);
+                    const humi = pickSensor(sensors, ['습도']);
+                    const pressure = pickSensor(sensors, ['압력', '채광']);
+                    const vib = pickSensor(sensors, ['진동', '토양습도']);
+
+                    document.getElementById('cTemp').textContent = fmt(temp, 2);
+                    document.getElementById('cHumi').textContent = fmt(humi, 2);
+                    document.getElementById('cPressure').textContent = fmt(pressure, 2);
+                    document.getElementById('cVib').textContent = fmt(vib, 2);
+
+                    const safe = data.accessSafe;
+                    const accEl = document.getElementById('cAccess');
+                    const cardAcc = document.getElementById('cardAccess');
+                    if (typeof safe === 'boolean') {
+                        accEl.textContent = safe ? 'SAFE' : 'DETECTED';
+                        cardAcc.className = 'card ' + (safe ? 'access-ok' : 'access-bad');
+                    } else {
+                        accEl.textContent = '-';
+                        cardAcc.className = 'card';
+                    }
+
+                    const st = data.equipmentState || '-';
+                    const al = data.alarmCode || '-';
+                    const ilOk = data.interlockOk;
+                    const user = data.username || '-';
+
+                    document.getElementById('hdrUser').textContent = '사용자: ' + user;
+                    const hs = document.getElementById('hdrState');
+                    hs.textContent = '상태: ' + st;
+                    hs.className = 'pill ' + stateClass(st);
+                    const ha = document.getElementById('hdrAlarm');
+                    if (al && al !== '-') {
+                        ha.textContent = '알람: ' + al;
+                        ha.className = 'pill alarm-code';
+                    } else {
+                        ha.textContent = '알람: 없음';
+                        ha.className = 'pill alarm-none';
+                    }
+                    const hi = document.getElementById('hdrInterlock');
+                    if (typeof ilOk === 'boolean') {
+                        hi.textContent = ilOk ? '인터록: OK' : '인터록: NG';
+                        hi.className = 'pill ' + (ilOk ? 'state-running' : 'alarm-code');
+                    } else {
+                        hi.textContent = '인터록: -';
+                        hi.className = 'pill alarm-none';
+                    }
+                    document.getElementById('hdrTime').textContent = '마지막 수신: ' + (data.lastUpdate || '-');
+
+                    const pressOk = pressure != null && pressure >= 95 && pressure <= 100;
+                    document.getElementById('llAccess').textContent = (typeof safe === 'boolean')
+                        ? (safe ? '정상 (SAFE)' : '감지 (DETECTED)')
+                        : '-';
+                    document.getElementById('llPress').textContent = (pressure != null)
+                        ? (pressOk ? '목표 대역 내' : '편차·점검 필요')
+                        : '-';
+                    document.getElementById('llInterlock').textContent = (typeof ilOk === 'boolean') ? (ilOk ? '충족' : '미충족') : '-';
+
+                    document.getElementById('chEnv').textContent =
+                        (temp != null && humi != null) ? (fmt(temp, 1) + '℃ / ' + fmt(humi, 1) + '%') : '-';
+                    document.getElementById('chPv').textContent =
+                        (pressure != null && vib != null) ? (fmt(pressure, 2) + ' kPa / ' + fmt(vib, 2) + ' g') : '-';
+                    document.getElementById('chState').textContent = st;
+
+                    lastSnapshotForAi = {
+                        equipmentState: st,
+                        alarmCode: al !== '-' ? al : null,
+                        interlockOk: ilOk,
+                        temperature: temp,
+                        humidity: humi,
+                        pressure: pressure,
+                        vibration: vib
+                    };
+
+                    const tlabel = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+                    if (pressure != null && vib != null && temp != null && humi != null) {
+                        pushHistory(tlabel, pressure, vib, temp, humi);
+                    }
+
+                    const key = [data.lastUpdate, st, al, pressure, vib].join('|');
+                    if (key !== lastKey && sensors.length > 0) {
+                        lastKey = key;
+                        prependLog({
+                            time: tlabel,
+                            state: st,
+                            alarm: al,
+                            interlock: (typeof ilOk === 'boolean') ? (ilOk ? 'OK' : 'NG') : '-',
+                            pressure: fmt(pressure, 2),
+                            vib: fmt(vib, 2),
+                            temp: fmt(temp, 2),
+                            humi: fmt(humi, 2),
+                            access: (typeof safe === 'boolean') ? (safe ? 'SAFE' : 'DET') : '-'
+                        });
+                    }
+
+                    if (!sensors.length) {
+                        document.getElementById('logEmpty').style.display = logRows.length ? 'none' : 'block';
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('hdrTime').textContent = '마지막 수신: 오류 (Flask 확인)';
+                });
+        }
+
+        /* ----- 탭 ----- */
+        document.querySelectorAll('.tabs button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-tab');
+                document.querySelectorAll('.tabs button').forEach(b => {
+                    b.classList.toggle('active', b === btn);
+                    b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+                });
+                document.querySelectorAll('.tab-panel').forEach(p => {
+                    const on = p.id === 'tab-' + id;
+                    p.classList.toggle('active', on);
+                    p.hidden = !on;
+                });
+                if (id === 'history') refreshServerHistory();
+                if (id === 'events') refreshEvents();
+                if (id === 'ai') refreshAiTab();
+            });
+        });
+
+        let serverChart;
+        function initServerChart() {
+            const ctx = document.getElementById('serverTrendChart').getContext('2d');
+            serverChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: '압력 kPa', data: [], borderColor: '#2563eb', tension: 0.15, yAxisID: 'y' },
+                        { label: '진동 g', data: [], borderColor: '#ea580c', tension: 0.15, yAxisID: 'y1' },
+                        { label: '온도 ℃', data: [], borderColor: '#16a34a', tension: 0.15, yAxisID: 'y2' },
+                        { label: '습도 %', data: [], borderColor: '#7c3aed', tension: 0.15, yAxisID: 'y2' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { position: 'left', title: { display: true, text: 'kPa' } },
+                        y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'g' } },
+                        y2: { display: false }
+                    },
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        function refreshServerHistory() {
+            fetch('/api/etch/summary')
+                .then(r => r.json())
+                .then(j => {
+                    if (!j.success || !j.summary) return;
+                    const s = j.summary;
+                    document.getElementById('kpiSamples').textContent = s.samples != null ? s.samples : '-';
+                    document.getElementById('kpiRun').textContent = s.runningRatio != null ? (s.runningRatio * 100).toFixed(1) + '%' : '-';
+                    document.getElementById('kpiAlEv').textContent = s.alarmEvents != null ? s.alarmEvents : '-';
+                    document.getElementById('kpiIlEv').textContent = s.interlockEvents != null ? s.interlockEvents : '-';
+                })
+                .catch(() => {});
+
+            fetch('/api/etch/history?limit=600')
+                .then(r => r.json())
+                .then(j => {
+                    if (!j.success || !Array.isArray(j.items)) return;
+                    const items = j.items;
+                    const labels = items.map(x => {
+                        try {
+                            const d = new Date(x.timestamp);
+                            return isNaN(d.getTime()) ? String(x.timestamp).slice(11, 19) : d.toLocaleTimeString('ko-KR', { hour12: false });
+                        } catch (_) { return '-'; }
+                    });
+                    const pr = items.map(x => x.pressure_kpa);
+                    const vi = items.map(x => x.vibration_g);
+                    const te = items.map(x => x.temperature);
+                    const hu = items.map(x => x.humidity);
+                    if (!serverChart) return;
+                    serverChart.data.labels = labels;
+                    serverChart.data.datasets[0].data = pr;
+                    serverChart.data.datasets[1].data = vi;
+                    serverChart.data.datasets[2].data = te;
+                    serverChart.data.datasets[3].data = hu;
+                    serverChart.update();
+                })
+                .catch(() => {});
+        }
+
+        document.getElementById('btnRefreshHistory').addEventListener('click', refreshServerHistory);
+
+        function refreshEvents() {
+            fetch('/api/etch/events?limit=100')
+                .then(r => r.json())
+                .then(j => {
+                    const tb = document.getElementById('eventsBody');
+                    const empty = document.getElementById('eventsEmpty');
+                    if (!j.success || !Array.isArray(j.items) || !j.items.length) {
+                        tb.innerHTML = '';
+                        empty.style.display = 'block';
+                        return;
+                    }
+                    empty.style.display = 'none';
+                    tb.innerHTML = j.items.map(e => {
+                        const tt = e.time || '-';
+                        return '<tr><td>' + tt + '</td><td>' + (e.kind || '-') + '</td><td>' + (e.message || '') + '</td><td>' + (e.equipmentState || '-') + '</td><td>' + (e.alarmCode || '-') + '</td><td>' + (e.username || '-') + '</td></tr>';
+                    }).join('');
+                })
+                .catch(() => {});
+        }
+
+        function refreshAiTab() {
+            fetch('/api/etch/ai/status')
+                .then(r => r.json())
+                .then(x => {
+                    document.getElementById('aiStatus').textContent = JSON.stringify(x, null, 2);
+                })
+                .catch(() => { document.getElementById('aiStatus').textContent = '상태 조회 실패'; });
+
+            fetch('/api/etch/ai/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(lastSnapshotForAi)
+            })
+                .then(r => r.json())
+                .then(x => {
+                    document.getElementById('aiPredict').textContent = JSON.stringify(x, null, 2);
+                })
+                .catch(() => { document.getElementById('aiPredict').textContent = '예측 호출 실패'; });
+        }
+
+        initChart();
+        initServerChart();
+        poll();
+        setInterval(poll, pollMs);
+        setInterval(() => {
+            if (document.getElementById('tab-ai').classList.contains('active')) refreshAiTab();
+        }, 8000);
+    </script>
+</body>
+</html>
