@@ -17,11 +17,18 @@ export type DsaoCharacterColor =
 export type DsaoCharacter = {
   code: string;
   name: string;
+  title: string;
+  animal: string;
   characterName: string;
   emoji: string;
   color: DsaoCharacterColor;
   imagePath?: string;
   oneLiner: string;
+  shortDescription: string;
+  strengths: string[];
+  cautions: string[];
+  recommendedAction: string[];
+  accentColor: string;
   tags: string[];
   attention: string;
   recovery: string;
@@ -29,7 +36,12 @@ export type DsaoCharacter = {
   consumptionPattern: string;
 };
 
-export const dsaoCharacters: Record<string, DsaoCharacter> = {
+type BaseDsaoCharacter = Omit<
+  DsaoCharacter,
+  "title" | "animal" | "shortDescription" | "strengths" | "cautions" | "recommendedAction" | "accentColor"
+>;
+
+const baseDsaoCharacters: Record<string, BaseDsaoCharacter> = {
   DWSF: {
     code: "DWSF",
     name: "다채로운 숏폼 탐색형",
@@ -255,6 +267,70 @@ export const dsaoCharacters: Record<string, DsaoCharacter> = {
     consumptionPattern: "추천되는 긴 교양, 음악, 취미 채널에 머물며 자동재생 흐름을 따라갑니다."
   }
 };
+
+const characterAnimals: Record<string, string> = {
+  DWSF: "불꽃 여우",
+  DWSL: "질주 토끼",
+  DWMF: "구름 다람쥐",
+  DWML: "숲길 사슴",
+  DNSF: "스파크 고슴도치",
+  DNSL: "급류 수달",
+  DNMF: "포근 강아지",
+  DNML: "달빛 부엉이",
+  PWSF: "트렌드 오리",
+  PWSL: "와이드 곰",
+  PWMF: "포근 양",
+  PWML: "숲속 코알라",
+  PNSF: "클릭 고양이",
+  PNSL: "집중 판다",
+  PNMF: "쿠션 물개",
+  PNML: "서재 거북이"
+};
+
+const accentColors: Record<DsaoCharacterColor, string> = {
+  amber: "#d97706",
+  blue: "#2563eb",
+  cyan: "#0891b2",
+  emerald: "#059669",
+  fuchsia: "#c026d3",
+  indigo: "#4f46e5",
+  lime: "#65a30d",
+  orange: "#ea580c",
+  pink: "#db2777",
+  purple: "#7c3aed",
+  rose: "#e11d48",
+  sky: "#0284c7",
+  teal: "#0f766e",
+  violet: "#7c3aed"
+};
+
+export const dsaoCharacters = Object.fromEntries(
+  Object.entries(baseDsaoCharacters).map(([code, character]) => [
+    code,
+    {
+      ...character,
+      title: character.name,
+      animal: characterAnimals[code] || "미디어 마스코트",
+      shortDescription: character.oneLiner,
+      strengths: [
+        character.tags[0]?.replace("#", "") || "관심 패턴이 선명함",
+        character.tags[1]?.replace("#", "") || "콘텐츠 선택 기준이 뚜렷함",
+        "나에게 맞는 시청 리듬을 만들기 좋음"
+      ],
+      cautions: [
+        character.attention,
+        "추천 흐름과 직접 탐색을 구분해보면 더 선명해집니다.",
+        "가끔은 다른 관점의 콘텐츠를 섞어보는 것이 좋습니다."
+      ],
+      recommendedAction: [
+        character.recovery,
+        "오늘 본 영상 중 기억나는 키워드 하나를 직접 검색해보세요.",
+        "시청 후 남는 생각을 한 줄로 적어 알고리즘 흐름을 잠깐 끊어보세요."
+      ],
+      accentColor: accentColors[character.color]
+    }
+  ])
+) as Record<string, DsaoCharacter>;
 
 export const dsaoCharacterList = Object.values(dsaoCharacters);
 

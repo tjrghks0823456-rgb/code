@@ -1,108 +1,183 @@
 import React from "react";
-import Link from "next/link";
+import { ArrowRight, Gauge, Map, RefreshCcw, Search, ShieldCheck, Sparkles } from "lucide-react";
+import PageShell from "../components/PageShell";
+import { ButtonLink } from "../components/Button";
+import Card from "../components/Card";
+import CharacterAvatar from "../components/CharacterAvatar";
+import SectionTitle from "../components/SectionTitle";
+import ScoreCard from "../components/ScoreCard";
+import { categoryShares, reportInsights, resultPreviewStats, searchKeywords } from "../data/insightMock";
+
+const interestChips = ["쇼츠", "게임", "뉴스", "야구", "음악", "공부", "먹방", "AI", "자기계발", "이슈"];
+
+const featureCards = [
+  {
+    title: "관심사 지도",
+    desc: "검색어와 시청 기록을 분리해서 내가 직접 찾은 것과 피드가 밀어준 것을 보여줍니다.",
+    icon: <Map size={20} />
+  },
+  {
+    title: "알고리즘 속 나",
+    desc: "자가진단 결과와 실제 기록을 비교해 내 생각과 기록의 차이를 확인합니다.",
+    icon: <Sparkles size={20} />
+  },
+  {
+    title: "관심사 쏠림 정도",
+    desc: "특정 주제 반복 노출이 강한지, 새로운 관점이 충분히 섞였는지 요약합니다.",
+    icon: <Gauge size={20} />
+  },
+  {
+    title: "리셋 미션",
+    desc: "숙제처럼 무겁지 않은 작은 행동으로 오늘의 추천 흐름을 환기합니다.",
+    icon: <RefreshCcw size={20} />
+  }
+];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen flex flex-col justify-between p-6 md:p-12 relative overflow-hidden">
-      
-      {/* Navbar Header */}
-      <header className="w-full max-w-6xl mx-auto flex justify-between items-center z-20">
-        <div className="flex items-center gap-2">
-          <span className="text-xl font-black text-white tracking-widest uppercase">
-            SH.SON_<span className="text-purple-400">UNBELIEVABLE</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider hidden sm:inline">
-            v1.0.0 Prototype
-          </span>
-          <Link
-            href="/survey"
-            className="px-4 py-2 text-xs font-bold bg-slate-900 border border-slate-800 rounded-full text-slate-300 hover:text-white hover:border-slate-700 transition-all"
-          >
-            시작하기
-          </Link>
-        </div>
-      </header>
-
-      {/* Main Content Hero */}
-      <main className="w-full max-w-4xl mx-auto text-center my-auto py-12 md:py-24 z-20 flex flex-col items-center">
-        
-        {/* Glow badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/25 text-purple-300 text-xs font-semibold mb-8 animate-pulse shadow-neon-purple">
-          🧠 당신의 알고리즘 미디어 소비 진단
-        </div>
-
-        {/* Big Bold Headline */}
-        <h1 className="text-4xl md:text-7xl font-black tracking-tight text-white mb-6 leading-tight">
-          알고리즘이 숨긴<br />
-          <span className="text-gradient-neon">당신의 진짜 미디어 성향</span>
-        </h1>
-
-        <p className="text-base md:text-lg text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed font-body">
-          우리는 평소 자신이 매우 균형 있고 유익한 콘텐츠를 소비하고 있다고 생각합니다.<br className="hidden sm:inline" />
-          귀하의 YouTube 실제 시청 데이터를 정량 분석하여 사전 자가진단 결과와<br className="hidden sm:inline" />
-          실제 데이터 간의 <strong>'메타인지 격차(Meta-gap)'</strong>를 시각화합니다.
-        </p>
-
-        {/* CTA Button */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Link
-            href="/survey"
-            className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl transition-all shadow-lg hover:shadow-purple-500/35 transform hover:-translate-y-0.5"
-          >
-            🚀 3분 만에 내 편향성 측정하기
-          </Link>
-          <a
-            href="#features"
-            className="px-6 py-4 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-slate-300 hover:text-white font-semibold rounded-2xl transition-all"
-          >
-            기능 자세히 보기
-          </a>
-        </div>
-
-        {/* Dynamic Concept Highlights */}
-        <section id="features" className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl mt-24 text-left">
-          
-          <div className="glass-panel p-6 rounded-3xl transition-all hover:border-purple-500/30 group">
-            <div className="w-12 h-12 bg-purple-500/10 rounded-2xl flex items-center justify-center text-xl text-purple-400 mb-4 group-hover:scale-110 transition-all">
-              ⚡
-            </div>
-            <h3 className="text-lg font-bold text-white mb-2">무의식 노출 필터링</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              5초 미만의 무의식적 쇼츠/썸네일 탭 행위를 제외합니다. 의미 있는 관람 시간 위주로 당신의 실제 정보 노출 상태를 필터링합니다.
+    <PageShell active="home">
+      <section className="report-grid overflow-hidden rounded-[2rem] border border-slate-200 bg-white px-5 py-8 shadow-sm md:px-10 md:py-12">
+        <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr]">
+          <div>
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1.5 text-xs font-black text-teal-800 ring-1 ring-teal-100">
+              <Search size={14} /> 내 알고리즘 속 미디어 성향 테스트
             </p>
+            <h1 className="max-w-3xl text-4xl font-black leading-[1.08] text-slate-950 md:text-6xl">
+              유튜브가 보는 나는 어떤 사람일까?
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
+              최근 시청 기록과 자가진단을 비교해 내가 직접 찾은 관심사와 알고리즘이 보여준 관심사의 차이를 리포트로 정리합니다.
+            </p>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <ButtonLink href="/survey" icon={<ArrowRight size={18} />}>
+                내 알고리즘 진단하기
+              </ButtonLink>
+              <ButtonLink href="/types" tone="secondary" icon={<Sparkles size={18} />}>
+                유형 먼저 구경하기
+              </ButtonLink>
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-2">
+              {interestChips.map((chip) => (
+                <span key={chip} className="interest-chip rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm">
+                  {chip}
+                </span>
+              ))}
+            </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl transition-all hover:border-purple-500/30 group">
-            <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center text-xl text-blue-400 mb-4 group-hover:scale-110 transition-all">
-              📊
+          <div className="rounded-[2rem] border border-slate-200 bg-[#fbfaf7] p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">preview report</p>
+                <h2 className="mt-2 text-2xl font-black text-slate-950">내 알고리즘 리포트</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">자가진단 후 실제 기록 분석으로 더 정확해져요.</p>
+              </div>
+              <CharacterAvatar code="DWML" size="md" showName={false} />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">메타인지 갭 시각화</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              사전 자가진단(예측)과 실제 YouTube 소비 데이터(사후)의 6축 레이더 갭 오버레이 분석으로 당신의 알고리즘 인지 격차를 시각적으로 분석합니다.
-            </p>
-          </div>
 
-          <div className="glass-panel p-6 rounded-3xl transition-all hover:border-purple-500/30 group">
-            <div className="w-12 h-12 bg-pink-500/10 rounded-2xl flex items-center justify-center text-xl text-pink-400 mb-4 group-hover:scale-110 transition-all">
-              🎯
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              {resultPreviewStats.map((item) => (
+                <div key={item.label} className="rounded-3xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-bold text-slate-500">{item.label}</p>
+                  <p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p>
+                  <p className="mt-1 text-[11px] font-bold text-teal-700">{item.caption}</p>
+                </div>
+              ))}
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">생성형 디톡스 미션</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              편향 분석에 그치지 않고, Gemini 2.5 Flash를 이용해 부족한 인식을 완화할 대체 검색어(Reverse Query)와 맞춤형 미션을 자동 추천합니다.
-            </p>
+
+            <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-black text-slate-950">최근 관심 키워드 TOP5</p>
+                <ShieldCheck size={18} className="text-teal-700" />
+              </div>
+              <div className="space-y-3">
+                {searchKeywords.map((item, index) => (
+                  <div key={item.keyword} className="flex items-center gap-3">
+                    <span className="w-5 text-xs font-black text-slate-400">{index + 1}</span>
+                    <span className="flex-1 text-sm font-bold text-slate-700">{item.keyword}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500">
+                      {item.category}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-3xl border border-teal-100 bg-teal-50 p-4">
+              <p className="text-sm font-black text-slate-950">오늘의 리셋 미션</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
+                추천 영상 말고 직접 검색해서 하나 고르기
+              </p>
+            </div>
           </div>
+        </div>
+      </section>
 
-        </section>
+      <section className="mt-14">
+        <SectionTitle
+          eyebrow="what you get"
+          title="처음엔 테스트처럼 가볍게, 결과는 리포트처럼 선명하게"
+          description="딱딱한 분석 용어를 줄이고 사용자가 바로 이해할 수 있는 결과 중심 화면으로 정리했습니다."
+          align="center"
+        />
+        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {featureCards.map((item) => (
+            <Card key={item.title} className="min-h-48">
+              <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
+                {item.icon}
+              </div>
+              <h3 className="text-lg font-black text-slate-950">{item.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{item.desc}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
 
-      </main>
-
-      {/* Footer */}
-      <footer className="w-full max-w-6xl mx-auto border-t border-slate-900 pt-6 text-center text-xs text-slate-600 z-20">
-        <p>© 2026 SH.SON_UNBELIEVABLE Team. All rights reserved. 본 웹 서비스는 정량 점수 엔진과 생성형 보완 결합 프로토타입입니다.</p>
-      </footer>
-
-    </div>
+      <section className="mt-14 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <SectionTitle
+            eyebrow="interest map"
+            title="검색어 관심사 맵"
+            description="실제 검색 기록 연동 전에는 더미 데이터로 UI를 구성했습니다. 원문 전체를 노출하기보다 카테고리와 요약 중심으로 보여줍니다."
+          />
+          <div className="mt-6 space-y-3">
+            {reportInsights.map((text) => (
+              <p key={text} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold leading-6 text-slate-600">
+                {text}
+              </p>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-4">
+          <Card className="p-6">
+            <h3 className="text-lg font-black text-slate-950">검색어 비중 버블</h3>
+            <div className="mt-5 flex min-h-48 flex-wrap items-center justify-center gap-3">
+              {searchKeywords.map((item) => (
+                <span
+                  key={item.keyword}
+                  className="interest-chip rounded-full border border-slate-200 bg-white px-4 py-2 font-black text-slate-700 shadow-sm"
+                  style={{ fontSize: `${Math.max(13, item.count + 2)}px` }}
+                >
+                  {item.keyword}
+                </span>
+              ))}
+            </div>
+          </Card>
+          <div className="grid gap-4 md:grid-cols-2">
+            {categoryShares.map((item) => (
+              <ScoreCard
+                key={item.name}
+                label={item.name}
+                value={`${item.value}%`}
+                caption="최근 관심 카테고리 비중"
+                tone={`${item.tone} text-white`}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+    </PageShell>
   );
 }

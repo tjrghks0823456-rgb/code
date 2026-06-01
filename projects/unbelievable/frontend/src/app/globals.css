@@ -8,45 +8,59 @@
 }
 
 body {
-  background-color: #020617; /* slate-950 */
-  color: #f8fafc; /* slate-50 */
+  background-color: #f7f4ee;
+  color: #0f172a;
   font-family: var(--font-body);
 }
 
-/* Custom Premium Utilities */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.text-gradient-purple {
-  background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.report-grid {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
-.text-gradient-neon {
-  background: linear-gradient(135deg, #3b82f6 0%, #a855f7 50%, #ec4899 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+@keyframes interest-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
-/* Custom Scrollbar for dark theme */
+.interest-chip {
+  animation: interest-float 4.5s ease-in-out infinite;
+}
+
+.interest-chip:nth-child(2n) {
+  animation-delay: 0.8s;
+}
+
+.interest-chip:nth-child(3n) {
+  animation-delay: 1.4s;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #020617;
+  background: #f7f4ee;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #94a3b8;
 }

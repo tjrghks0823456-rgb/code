@@ -1,34 +1,39 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { Suspense, useEffect, useState } from "react";
+import { ArrowLeft, Copy, RefreshCcw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "../../components/Button";
+import Card from "../../components/Card";
+import MissionCard from "../../components/MissionCard";
+import PageShell from "../../components/PageShell";
+import SectionTitle from "../../components/SectionTitle";
 
-// Static demo data — only rendered when ?demo=true is passed explicitly
 const DEMO_PLAN = {
   active: true,
   plan_id: "demo",
   reverse_queries: [
-    { query_text: "역사 및 세계사 핵심 정리 다큐", expected_topic: "History", why_this_helps: "IT 및 정보 위주의 관심사에서 인문학 교양으로 영역을 다양하게 넓혀 줍니다." },
-    { query_text: "현대 미술 쉽게 감상하는 법", expected_topic: "Arts", why_this_helps: "새로운 시각적 자극과 예술적 뇌 영역을 활성화시킵니다." },
-    { query_text: "미디어 소비 조절과 디지털 웰빙", expected_topic: "Lifestyle", why_this_helps: "수동적 추천 노출에서 주체적인 사용 패턴 개선 방향을 직접 인지하도록 돕습니다." }
+    { query_text: "쇼츠 줄이기", expected_topic: "휴식", why_this_helps: "짧은 추천 흐름을 잠깐 끊고 시청 속도를 늦추는 데 도움이 됩니다." },
+    { query_text: "긴 영상 추천", expected_topic: "롱폼", why_this_helps: "짧은 추천 흐름을 끊고 맥락을 천천히 따라갈 수 있습니다." },
+    { query_text: "디지털 휴식 루틴", expected_topic: "웰빙", why_this_helps: "내 알고리즘에 새 창을 열어 관심사 폭을 조금 넓혀줍니다." }
   ],
   missions: [
     {
       id: "m-1",
-      title: "영상 재생 전 '클릭 의도' 멈춤 및 선택",
-      description: "영상을 클릭하여 시청하기 전, 내가 이 영상을 왜 누르는지 이유를 가볍게 골라보세요.",
-      success_condition: "선택 즉시 완료",
+      title: "같은 이슈, 다른 제목 비교하기",
+      description: "최근 많이 본 주제 하나를 골라 제목이 다른 영상 두 개를 비교해보세요.",
+      success_condition: "비교 후 완료",
       effort_level: "low",
       input_type: "choice",
-      choices: ["정보 습득", "오락 및 기분전환", "무의식적 습관", "심심함"],
+      choices: ["뉴스", "스포츠", "IT", "엔터"],
       completed: false,
       log_id: "log-1"
     },
     {
       id: "m-2",
-      title: "오늘 본 최선/최악의 제목 한 줄 남기기",
-      description: "오늘 본 콘텐츠 중 가장 가치 있었던 영상 제목이나 가장 호기심만 유도했던 낚시성 제목 하나를 적어보세요.",
-      success_condition: "한 줄 작성 시 완료",
+      title: "오늘 본 영상 한 줄로 남기기",
+      description: "기억에 남은 영상 하나를 고르고 왜 눌렀는지 한 줄만 적어보세요.",
+      success_condition: "한 줄 작성",
       effort_level: "low",
       input_type: "text",
       completed: false,
@@ -36,12 +41,12 @@ const DEMO_PLAN = {
     },
     {
       id: "m-3",
-      title: "낯선 카테고리 하나 구경하기",
-      description: "평소 전혀 보지 않던 '교양/다큐' 섹션 영상을 하나 클릭하고 무엇에 관한 것인지 확인해 보세요.",
-      success_condition: "선택만 하면 완료",
+      title: "추천 영상 말고 직접 검색해서 하나 고르기",
+      description: "피드가 보여준 영상 대신 검색창에 새 키워드 하나를 입력해 직접 선택해보세요.",
+      success_condition: "검색 후 선택",
       effort_level: "low",
       input_type: "choice",
-      choices: ["역사/문학", "예술/디자인", "우주/자연과학", "경제/비즈니스"],
+      choices: ["교양", "음악", "운동", "학습"],
       completed: false,
       log_id: "log-3"
     }
@@ -61,7 +66,6 @@ function MissionContent() {
   const [inputs, setInputs] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    // demo=true: 정적 시연 데이터 즉시 로드, API 호출 없음
     if (isDemo) {
       setData(DEMO_PLAN);
       setLoading(false);
@@ -70,35 +74,29 @@ function MissionContent() {
 
     const fetchPlan = async () => {
       try {
-        // plan_id가 있으면 특정 플랜 조회, 없으면 최신 플랜 조회
         const url = planId
           ? `http://localhost:8000/api/v1/detox/plan?plan_id=${planId}&user_id=00000000-0000-0000-0000-000000000001`
           : `http://localhost:8000/api/v1/detox/plan?user_id=00000000-0000-0000-0000-000000000001`;
 
         const res = await fetch(url);
-
         if (!res.ok) {
           const errorText = await res.text();
           let detail = `HTTP ${res.status}`;
-          try { detail = JSON.parse(errorText).detail || detail; } catch (_) {}
+          try {
+            detail = JSON.parse(errorText).detail || detail;
+          } catch (_) {}
           throw new Error(detail);
         }
 
         const json = await res.json();
-
         if (json.active) {
           setData(json);
         } else {
-          // 활성화된 플랜 없음 — 에러 표시, 자동 mock 이동 금지
-          setFetchError("현재 활성화된 디톡스 미션 플랜이 없습니다. 대시보드에서 미션을 먼저 생성해주세요.");
+          setFetchError("현재 활성화된 미션 플랜이 없습니다. 대시보드에서 미션을 먼저 생성해주세요.");
         }
       } catch (err: any) {
         console.error("Mission plan fetch failed:", err);
-        setFetchError(
-          err.message?.includes("fetch")
-            ? "백엔드 서버(FastAPI: Port 8000)에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요."
-            : `플랜 조회 실패: ${err.message}`
-        );
+        setFetchError(err.message?.includes("fetch") ? "FastAPI 서버에 연결할 수 없습니다." : `플랜 조회 실패: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -109,16 +107,13 @@ function MissionContent() {
 
   const toggleMission = async (index: number, selectedInput?: string) => {
     if (!data) return;
-
     const targetMission = data.missions[index];
     const newStatus = selectedInput ? true : !targetMission.completed;
 
-    // Optimistic Update
     const updatedMissions = [...data.missions];
     updatedMissions[index] = { ...targetMission, completed: newStatus };
     setData({ ...data, missions: updatedMissions });
 
-    // Try PATCH API request — demo 모드에서는 스킵
     if (!isDemo) {
       try {
         await fetch(`http://localhost:8000/api/v1/detox/mission/${targetMission.log_id}`, {
@@ -127,7 +122,7 @@ function MissionContent() {
           body: JSON.stringify({ completed: newStatus })
         });
       } catch (err) {
-        console.warn("Failed to patch mission status to backend, running on local offline state.");
+        console.warn("Failed to patch mission status to backend.", err);
       }
     }
   };
@@ -135,7 +130,7 @@ function MissionContent() {
   const handleTextSubmit = (index: number) => {
     const targetMission = data.missions[index];
     const textVal = inputs[targetMission.id];
-    if (!textVal || !textVal.trim()) return;
+    if (!textVal?.trim()) return;
     toggleMission(index, textVal);
   };
 
@@ -147,260 +142,157 @@ function MissionContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
-        <span className="animate-spin text-3xl mb-4">⏳</span>
-        <p className="text-slate-400 font-semibold">추천 디톡스 루틴 설계안 구성 중...</p>
-      </div>
+      <PageShell active="mission" compact>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+          <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950" />
+          <p className="font-bold text-slate-600">오늘의 환기 미션을 준비하는 중입니다.</p>
+        </div>
+      </PageShell>
     );
   }
 
-  // API 조회 실패 — 에러 화면 표시
   if (fetchError) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100">
-        <div className="w-full max-w-md bg-slate-900/60 border border-red-500/20 rounded-3xl p-8 backdrop-blur-md shadow-2xl text-center space-y-6">
-          <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center text-2xl text-red-400 mx-auto">
-            ⚠️
+      <PageShell active="mission" compact>
+        <Card className="mx-auto max-w-lg p-8 text-center">
+          <h1 className="text-2xl font-black text-slate-950">미션 플랜을 불러오지 못했습니다</h1>
+          <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{fetchError}</p>
+          <div className="mt-5 flex flex-col gap-3">
+            <Button type="button" onClick={() => router.push("/dashboard")}>대시보드로 돌아가기</Button>
+            <Button type="button" tone="secondary" onClick={() => router.push("/mission?demo=true")}>예시 미션 보기</Button>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">미션 플랜을 불러올 수 없습니다</h2>
-            <p className="text-[10px] text-red-400 bg-red-950/20 border border-red-900/30 px-3 py-1.5 rounded-lg mt-3 break-words font-mono">
-              {fetchError}
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all text-xs"
-            >
-              대시보드로 돌아가 미션 생성하기
-            </button>
-            <button
-              onClick={() => router.push("/mission?demo=true")}
-              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-bold rounded-xl transition-all text-xs border border-slate-700"
-            >
-              시연용 데이터로 보기
-            </button>
-          </div>
-        </div>
-      </div>
+        </Card>
+      </PageShell>
     );
   }
 
-  // Progress computation
-  const completedCount = data.missions.filter((m: any) => m.completed).length;
+  const completedCount = data.missions.filter((mission: any) => mission.completed).length;
   const progressPercent = Math.round((completedCount / data.missions.length) * 100);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-8 font-body">
-      <div className="max-w-5xl mx-auto space-y-8">
-
-        {/* Demo mode banner */}
+    <PageShell active="mission">
+      <div className="space-y-8">
         {isDemo && (
-          <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl px-5 py-3 flex items-center gap-3">
-            <span className="text-amber-400 text-sm">🎭</span>
-            <p className="text-xs text-amber-300 font-semibold">
-              시연 모드 — 정적 예시 데이터가 표시됩니다. 실제 분석 후 생성된 플랜이 아닙니다.
-            </p>
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800">
+            예시 데이터로 보여주는 화면입니다. 실제 분석 후에는 맞춤 미션이 생성됩니다.
           </div>
         )}
 
-        {/* Top Navbar */}
-        <div className="flex justify-between items-center border-b border-slate-900 pb-6">
-          <div>
-            <h1 className="text-2xl font-extrabold text-white font-heading tracking-tight">🎯 DETOX MISSION CENTER</h1>
-            <p className="text-xs text-slate-400">의식적인 균형 시청을 돕는 대체 키워드 및 행동 설계 루틴 본부</p>
-          </div>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white font-bold rounded-xl transition-all text-xs"
-          >
-            ← 대시보드로 복귀
-          </button>
-        </div>
+        <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+          <SectionTitle
+            eyebrow="reset mission"
+            title="알고리즘 환기 미션"
+            description="완료율을 채우는 숙제가 아니라, 추천 흐름에 새 창을 여는 가벼운 루틴입니다."
+          />
+          <Button type="button" tone="secondary" icon={<ArrowLeft size={18} />} onClick={() => router.push("/dashboard")}>
+            대시보드로
+          </Button>
+        </section>
 
-        {/* Dashboard layout */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-
-          {/* Left Panel: Reverse Query Prescriptions */}
-          <div className="md:col-span-1 space-y-6">
-            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/5 rounded-full blur-2xl" />
-              <h3 className="text-sm font-bold text-white mb-1">🔄 대안 키워드 추천 (Reverse Query)</h3>
-              <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-                평소 시청 이력에서 노출이 적었던 분야의 테마를 도출한 추천 검색어 세트입니다. 해당 키워드를 유튜브 검색창에 직접 입력하여 시청하는 적극적인 정보 탐색을 권장합니다.
-              </p>
-
-              <div className="space-y-4">
-                {data.reverse_queries.map((item: any, idx: number) => (
-                  <div key={idx} className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl relative group hover:border-purple-500/30 transition-all">
-                    <span className="text-[10px] uppercase font-bold text-purple-400 tracking-wider">대안 검색어 {idx + 1}</span>
-                    <h4 className="text-sm font-bold text-white mt-1 break-words">{item.query_text}</h4>
-                    <p className="text-[10px] text-slate-500 mt-1">{item.why_this_helps}</p>
-
-                    <button
-                      onClick={() => copyToClipboard(item.query_text, idx)}
-                      className="mt-3 w-full py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 hover:text-white rounded-lg transition-all flex items-center justify-center gap-1.5"
-                    >
-                      {copiedIndex === idx ? "✓ 복사 완료!" : "📋 텍스트 복사하기"}
-                    </button>
-                  </div>
-                ))}
-              </div>
+        <Card className="p-6">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">this week</p>
+              <h2 className="mt-2 text-3xl font-black text-slate-950">이번 주 균형 회복 {progressPercent}%</h2>
             </div>
+            <RefreshCcw className="text-teal-700" size={34} />
           </div>
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: `${progressPercent}%` }} />
+          </div>
+        </Card>
 
-          {/* Right Panel: Active Missions & Progress */}
-          <div className="md:col-span-2 space-y-6">
-
-            {/* Progress Card */}
-            <div className="bg-gradient-to-r from-purple-950/20 to-indigo-950/20 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md relative overflow-hidden">
-              <div className="flex justify-between items-center mb-3">
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-purple-400 font-semibold">현재 추천 루틴 진척도</h3>
-                  <h2 className="text-2xl font-black text-white mt-0.5">{progressPercent}% 달성</h2>
-                </div>
-                <div className="text-3xl">🔋</div>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="w-full bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-800">
-                <div
-                  className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(168,85,247,0.5)]"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <p className="text-xs text-slate-400 mt-3 leading-relaxed font-body">
-                의무적인 인증 강제가 아닌, 클릭 전 잠시 멈춤을 갖거나 짧은 자기 성찰 기록을 통해 추천 알고리즘의 노출 흐름을 주체적으로 이끌어가는 메타인지 복원 과정입니다.
-              </p>
-            </div>
-
-            {/* Mission Checklists */}
-            <div className="space-y-4">
-              {data.missions.map((mission: any, idx: number) => {
-                const isChoice = mission.input_type === "choice";
-                const isText = mission.input_type === "text";
-
-                return (
-                  <div
-                    key={mission.id}
-                    className={`border rounded-2xl p-6 transition-all duration-350 flex flex-col gap-4 select-none ${
-                      mission.completed
-                        ? "bg-purple-950/10 border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.05)]"
-                        : "bg-slate-900/30 border-slate-800 hover:border-slate-700/80 hover:bg-slate-900/40"
-                    }`}
+        <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+          <Card className="p-6">
+            <h2 className="text-xl font-black text-slate-950">새 관점 검색어</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              피드가 보여준 영상 대신 직접 검색해볼 만한 가벼운 키워드입니다.
+            </p>
+            <div className="mt-5 space-y-3">
+              {data.reverse_queries.map((item: any, index: number) => (
+                <div key={`${item.query_text}-${index}`} className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">검색어 {index + 1}</p>
+                  <h3 className="mt-2 text-base font-black text-slate-950">{item.query_text}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{item.why_this_helps}</p>
+                  <Button
+                    type="button"
+                    tone="secondary"
+                    className="mt-4 w-full"
+                    icon={<Copy size={16} />}
+                    onClick={() => copyToClipboard(item.query_text, index)}
                   >
-                    <div className="flex items-start gap-4">
-                      <div
-                        onClick={() => !isChoice && !isText && toggleMission(idx)}
-                        className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center text-xs transition-all ${
-                          !isChoice && !isText ? "cursor-pointer" : ""
-                        } ${
-                          mission.completed
-                            ? "bg-purple-600 border-purple-500 text-white"
-                            : "border-slate-700 text-transparent"
-                        }`}
-                      >
-                        ✓
-                      </div>
+                    {copiedIndex === index ? "복사 완료" : "검색어 복사"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
 
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center gap-2">
-                          <h4 className={`text-base font-bold transition-all ${mission.completed ? "text-slate-400 line-through" : "text-white"}`}>
-                            {mission.title}
-                          </h4>
-                          <span className="text-[9px] font-semibold uppercase tracking-wider text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded shrink-0">
-                            가벼운 미션 {idx + 1}
-                          </span>
-                        </div>
-                        <p className={`text-xs mt-1.5 leading-relaxed transition-all ${mission.completed ? "text-slate-500" : "text-slate-400"}`}>
-                          {mission.description}
-                        </p>
-                      </div>
+          <div className="space-y-4">
+            {data.missions.map((mission: any, index: number) => {
+              const isChoice = mission.input_type === "choice";
+              const isText = mission.input_type === "text";
+
+              return (
+                <MissionCard
+                  key={mission.id}
+                  title={mission.title}
+                  description={mission.description}
+                  label={`오늘의 환기 ${index + 1}`}
+                  completed={mission.completed}
+                  onToggle={!isChoice && !isText ? () => toggleMission(index) : undefined}
+                >
+                  {!mission.completed && isChoice && mission.choices && (
+                    <div className="flex flex-wrap gap-2">
+                      {mission.choices.map((choice: string) => (
+                        <button
+                          key={choice}
+                          type="button"
+                          onClick={() => {
+                            setInputs((prev) => ({ ...prev, [mission.id]: choice }));
+                            toggleMission(index, choice);
+                          }}
+                          className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-400"
+                        >
+                          {choice}
+                        </button>
+                      ))}
                     </div>
+                  )}
 
-                    {!mission.completed && (
-                      <div className="mt-2 pl-10 border-l border-slate-800 space-y-3">
-                        {isChoice && mission.choices && (
-                          <div className="flex flex-wrap gap-2">
-                            {mission.choices.map((choice: string) => (
-                              <button
-                                key={choice}
-                                onClick={() => {
-                                  setInputs(prev => ({ ...prev, [mission.id]: choice }));
-                                  toggleMission(idx, choice);
-                                }}
-                                className="px-3.5 py-1.5 bg-slate-950 hover:bg-purple-950/20 border border-slate-800 hover:border-purple-500/50 rounded-xl text-xs text-slate-300 hover:text-purple-300 font-medium transition-all"
-                              >
-                                {choice}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {isText && (
-                          <div className="flex gap-2 max-w-md">
-                            <input
-                              type="text"
-                              value={inputs[mission.id] || ""}
-                              onChange={(e) => setInputs(prev => ({ ...prev, [mission.id]: e.target.value }))}
-                              placeholder="가벼운 성찰 소감을 입력해 보세요 (예: 생각 환기 완료)"
-                              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-300 focus:outline-none focus:border-purple-500/50"
-                            />
-                            <button
-                              onClick={() => handleTextSubmit(idx)}
-                              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 hover:text-white rounded-xl transition-all"
-                            >
-                              한 줄 남기기
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {mission.completed && (isChoice || isText) && (
-                      <div className="mt-1 pl-10 text-[10px] text-emerald-400 font-semibold flex items-center gap-1.5">
-                        <span>✓</span> 자율적 체크 기록 완료
-                        {inputs[mission.id] && (
-                          <span className="text-slate-500 font-normal">({inputs[mission.id]})</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Re-analyze CTA */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 text-center space-y-4 backdrop-blur-md">
-              <h4 className="text-sm font-bold text-white">행동을 무사히 관찰해 보셨나요?</h4>
-              <p className="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">
-                가벼운 미션과 대안 추천 검색어 시청을 며칠간 이행한 뒤, 다시 새로운 YouTube 데이터를 추출하여 재분석을 트리거하면, 이전 분석 결과 대비 변화 추이를 관찰해 볼 수 있습니다.
-              </p>
-              <button
-                onClick={() => router.push("/upload")}
-                className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/10 inline-flex items-center gap-1.5 text-xs"
-              >
-                🔄 루틴 적용 후 새로운 시청기록 대조하기
-              </button>
-            </div>
-
+                  {!mission.completed && isText && (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={inputs[mission.id] || ""}
+                        onChange={(e) => setInputs((prev) => ({ ...prev, [mission.id]: e.target.value }))}
+                        placeholder="한 줄만 적어도 충분해요"
+                        className="min-h-11 flex-1 rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 text-sm font-semibold text-slate-700 outline-none focus:border-slate-500"
+                      />
+                      <Button type="button" tone="secondary" onClick={() => handleTextSubmit(index)}>
+                        남기기
+                      </Button>
+                    </div>
+                  )}
+                </MissionCard>
+              );
+            })}
           </div>
-
         </div>
-
       </div>
-    </div>
+    </PageShell>
   );
 }
 
 export default function MissionPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
-        <span className="animate-spin text-3xl mb-4">⏳</span>
-        <p className="text-slate-400 font-semibold">추천 디톡스 루틴 설계안 구성 중...</p>
-      </div>
+      <PageShell active="mission" compact>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+          <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950" />
+          <p className="font-bold text-slate-600">미션 센터를 준비하는 중입니다.</p>
+        </div>
+      </PageShell>
     }>
       <MissionContent />
     </Suspense>

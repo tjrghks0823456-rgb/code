@@ -1,9 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import CharacterAvatar from "../../components/CharacterAvatar";
-import { dsaoCharacterList } from "../../data/dsaoCharacters";
+import { Button } from "../../components/Button";
+import Card from "../../components/Card";
+import PageShell from "../../components/PageShell";
+import PersonaCard from "../../components/PersonaCard";
+import SectionTitle from "../../components/SectionTitle";
+import { dsaoCharacterList, getDsaoCharacter } from "../../data/dsaoCharacters";
 import { loadSelfSurveyResult } from "../../utils/surveyStorage";
 
 export default function TypesPage() {
@@ -17,94 +22,48 @@ export default function TypesPage() {
     }
   }, []);
 
+  const selectedCharacter = getDsaoCharacter(myType || "DWML");
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-8 md:p-12 font-body relative">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[10%] right-[20%] w-[35%] h-[35%] rounded-full bg-slate-900/30 blur-[120px]" />
-      </div>
+    <PageShell active="types">
+      <div className="space-y-8">
+        <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+          <SectionTitle
+            eyebrow="persona guide"
+            title="16가지 미디어 성향 유형"
+            description="코드보다 캐릭터와 한 줄 설명이 먼저 보이도록 정리했습니다. 같은 구조의 카드로 비교하기 쉽게 맞췄습니다."
+          />
+          <Button type="button" tone="secondary" icon={<ArrowLeft size={18} />} onClick={() => router.back()}>
+            이전 화면
+          </Button>
+        </section>
 
-      <div className="max-w-6xl mx-auto space-y-8 relative z-10">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-900 pb-6">
-          <div>
-            <h1 className="text-3xl font-extrabold text-white font-heading tracking-tight">
-              DSAO 16유형 캐릭터 도감
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              시청 기록에서 관찰된 콘텐츠 소비 경향을 캐릭터 카드로 가볍게 비교해 보세요.
-            </p>
+        <Card className="p-6 md:p-8">
+          <div className="grid gap-5 md:grid-cols-[1fr_auto_1fr] md:items-center">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">나의 유형</p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">{selectedCharacter.characterName}</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{selectedCharacter.shortDescription}</p>
+            </div>
+            <div className="rounded-full border border-slate-200 bg-[#fbfaf7] px-4 py-2 text-sm font-black text-slate-500">
+              vs
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">평균 사용자</p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">추천 피드 유람형</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+                여러 주제를 둘러보지만 피드 흐름에 따라 관심사가 빠르게 바뀌는 경향이 있습니다.
+              </p>
+            </div>
           </div>
-          <button
-            onClick={() => router.back()}
-            className="px-5 py-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white font-bold rounded-xl transition-all text-xs"
-          >
-            이전 화면으로 복귀
-          </button>
-        </div>
+        </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {dsaoCharacterList.map((item) => {
-            const isMyType = item.code === myType;
-
-            return (
-              <div
-                key={item.code}
-                className={`rounded-2xl p-5 border transition-all duration-300 relative flex min-h-[380px] flex-col justify-between ${
-                  isMyType
-                    ? "bg-purple-900/10 border-purple-500/60 shadow-[0_0_20px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/25 scale-[1.02]"
-                    : "bg-slate-900/30 border-slate-800/80 hover:border-slate-700/80 hover:bg-slate-900/40"
-                }`}
-              >
-                {isMyType && (
-                  <span className="absolute top-4 right-4 text-[8px] font-black uppercase bg-purple-500/20 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded-full tracking-wider">
-                    My Type
-                  </span>
-                )}
-
-                <div>
-                  <div className="flex items-start gap-4">
-                    <CharacterAvatar code={item.code} size="md" showName={false} />
-                    <div className="min-w-0 pt-1">
-                      <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
-                        {item.code}
-                      </span>
-                      <h3 className="text-base font-bold text-white mt-1 font-heading leading-snug">
-                        {item.name}
-                      </h3>
-                      <p className="text-xs font-semibold text-purple-300 mt-1">
-                        캐릭터 {item.characterName}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5 mt-4">
-                    {item.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="text-[8px] bg-slate-950 border border-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-medium"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-
-                  <p className="text-[11px] text-slate-400 mt-4 leading-relaxed border-t border-slate-800/60 pt-3">
-                    {item.oneLiner}
-                  </p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-dashed border-slate-800/50 bg-slate-950/20 p-2.5 rounded-xl">
-                  <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider block">
-                    소비 양상 예시
-                  </span>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                    {item.consumptionPattern}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {dsaoCharacterList.map((item) => (
+            <PersonaCard key={item.code} character={item} selected={item.code === myType} />
+          ))}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

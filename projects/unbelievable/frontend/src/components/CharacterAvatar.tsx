@@ -32,20 +32,20 @@ const sizeClasses = {
 };
 
 const gradientClasses: Record<DsaoCharacterColor, string> = {
-  amber: "from-amber-300 via-orange-400 to-pink-500",
-  blue: "from-blue-300 via-sky-500 to-indigo-600",
-  cyan: "from-cyan-300 via-teal-400 to-blue-500",
-  emerald: "from-emerald-300 via-teal-500 to-slate-700",
-  fuchsia: "from-fuchsia-300 via-pink-500 to-purple-700",
-  indigo: "from-indigo-300 via-violet-500 to-slate-800",
-  lime: "from-lime-200 via-emerald-400 to-teal-600",
-  orange: "from-orange-200 via-amber-500 to-rose-500",
-  pink: "from-pink-300 via-rose-500 to-indigo-700",
-  purple: "from-purple-300 via-violet-600 to-indigo-800",
-  rose: "from-rose-300 via-pink-500 to-orange-500",
-  sky: "from-sky-200 via-cyan-400 to-blue-600",
-  teal: "from-teal-200 via-emerald-500 to-cyan-700",
-  violet: "from-violet-300 via-purple-600 to-slate-800"
+  amber: "from-amber-100 via-white to-orange-100",
+  blue: "from-blue-100 via-white to-sky-100",
+  cyan: "from-cyan-100 via-white to-teal-100",
+  emerald: "from-emerald-100 via-white to-teal-100",
+  fuchsia: "from-fuchsia-100 via-white to-pink-100",
+  indigo: "from-indigo-100 via-white to-slate-100",
+  lime: "from-lime-100 via-white to-emerald-100",
+  orange: "from-orange-100 via-white to-amber-100",
+  pink: "from-pink-100 via-white to-rose-100",
+  purple: "from-purple-100 via-white to-indigo-100",
+  rose: "from-rose-100 via-white to-orange-100",
+  sky: "from-sky-100 via-white to-cyan-100",
+  teal: "from-teal-100 via-white to-emerald-100",
+  violet: "from-violet-100 via-white to-purple-100"
 };
 
 export default function CharacterAvatar({
@@ -81,24 +81,23 @@ export default function CharacterAvatar({
   return (
     <div
       className={[
-        "relative shrink-0 overflow-hidden border border-white/15 bg-gradient-to-br shadow-xl shadow-slate-950/30",
+        "relative shrink-0 overflow-hidden border border-slate-200 bg-gradient-to-br shadow-sm",
         gradientClasses[character.color],
         selectedSize.shell,
         className
       ].join(" ")}
       aria-label={`${character.characterName} ${character.code} 캐릭터 아바타`}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),transparent_28%),linear-gradient(145deg,rgba(255,255,255,0.18),transparent_45%)]" />
-      <div className="absolute -bottom-6 -right-5 h-20 w-20 rounded-full bg-white/15 blur-xl" />
+      <div className="absolute inset-0 bg-white/45" />
 
-      <div className="relative z-10 flex h-full min-h-[inherit] flex-col items-center justify-center gap-1 text-center text-white">
-        <span className={["drop-shadow-lg", selectedSize.emoji].join(" ")}>{character.emoji}</span>
+      <div className="relative z-10 flex h-full min-h-[inherit] flex-col items-center justify-center gap-1 text-center text-slate-900">
+        <span className={selectedSize.emoji}>{character.emoji}</span>
         {showName && (
           <span className={["font-black leading-tight tracking-normal", selectedSize.name].join(" ")}>
             {character.characterName}
           </span>
         )}
-        <span className={["rounded-full border border-white/25 bg-slate-950/30 font-black leading-none text-white/90 backdrop-blur", selectedSize.code].join(" ")}>
+        <span className={["rounded-full border border-slate-200 bg-white/80 font-black leading-none text-slate-600 backdrop-blur", selectedSize.code].join(" ")}>
           {character.code}
         </span>
       </div>
@@ -107,7 +106,7 @@ export default function CharacterAvatar({
         <img
           src={imagePath}
           alt={`${character.characterName} 캐릭터`}
-          className="absolute inset-0 z-20 h-full w-full object-cover"
+          className="absolute inset-0 z-20 h-full w-full object-contain p-1"
           onError={() => setImageLoaded(false)}
         />
       )}
