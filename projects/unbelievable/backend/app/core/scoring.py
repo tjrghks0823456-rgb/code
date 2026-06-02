@@ -123,10 +123,10 @@ def compute_6axis_scores(
         scores["UAS"] = min(100.0, search_ratio * 400.0)
         
     # --- 2. 출처균형 (Source Balance - SBS) ---
-    # Group by author_id / channel_name
+    # Group by real channel_name or channel_url, fall back to author_id/source_surface
     channel_counts = {}
     for e in events:
-        ch = normalize_source(e.get("author_id") or e.get("source_surface"))
+        ch = normalize_source(e.get("channel_name") or e.get("channel_url") or e.get("author_id") or e.get("source_surface"))
         channel_counts[ch] = channel_counts.get(ch, 0) + 1
         
     valid_sources = [source for source in channel_counts.keys() if is_known_source(source)]

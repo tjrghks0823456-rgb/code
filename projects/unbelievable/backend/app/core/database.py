@@ -109,21 +109,34 @@ class DatabaseClient:
     def save_data(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Saves a row of data into Supabase (upsert) or falls back to local MockDB."""
         if self.is_mock or not self.client:
-            return mock_db.insert(table, data)
+            logger.info(f"[Storage] Saved {table} to MockDB (In-memory).")
+            result = mock_db.insert(table, data)
+            result["__storage"] = "MockDB"
+            return result
         try:
             res = self.client.table(table).upsert(data).execute()
-            # Supabase response object has data field
             if hasattr(res, "data") and res.data:
-                return res.data[0]
+                logger.info(f"[Storage] Successfully saved {table} to Supabase Cloud.")
+                result = res.data[0]
+                result["__storage"] = "Supabase"
+                return result
+            logger.info(f"[Storage] Saved {table} to Supabase Cloud (no returned data).")
+            data["__storage"] = "Supabase"
             return data
         except Exception as e:
-            logger.warning(f"Supabase write (upsert) failed on {table}: {e}. Saving to local memory instead.")
-            return mock_db.insert(table, data)
+            logger.error(f"[Storage] SUPABASE WRITE FAILED on {table}: {e}. Falling back to local MockDB!")
+            result = mock_db.insert(table, data)
+            result["__storage"] = "MockDB-Fallback"
+            return result
 
     def fetch_data(self, table: str, query_filter: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """Fetches rows of data from Supabase or falls back to local MockDB."""
         if self.is_mock or not self.client:
-            return mock_db.select(table, query_filter)
+            results = mock_db.select(table, query_filter)
+            for r in results:
+                if isinstance(r, dict):
+                    r["__storage"] = "MockDB"
+            return results
         try:
             q = self.client.table(table).select("*")
             if query_filter:
@@ -131,10 +144,18 @@ class DatabaseClient:
                     q = q.eq(k, v)
             res = q.execute()
             if hasattr(res, "data"):
-                return res.data
+                results = res.data
+                for r in results:
+                    if isinstance(r, dict):
+                        r["__storage"] = "Supabase"
+                return results
             return []
         except Exception as e:
             logger.warning(f"Supabase select failed on {table}: {e}. Reading from local memory instead.")
-            return mock_db.select(table, query_filter)
+            results = mock_db.select(table, query_filter)
+            for r in results:
+                if isinstance(r, dict):
+                    r["__storage"] = "MockDB-Fallback"
+            return results
 
 db_client = DatabaseClient()

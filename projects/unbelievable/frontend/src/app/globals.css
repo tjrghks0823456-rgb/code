@@ -48,6 +48,45 @@ body {
   animation-delay: 1.4s;
 }
 
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fade-in-up 0.35s ease-out both;
+}
+
+@keyframes soft-shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+.animate-shake {
+  animation: soft-shake 0.24s ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interest-chip,
+  .animate-fadeIn,
+  .animate-shake {
+    animation: none;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }

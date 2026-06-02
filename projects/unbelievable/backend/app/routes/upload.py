@@ -1,31 +1,441 @@
 import uuid
 import json
 import logging
+import zipfile
+import urllib.parse
+from io import BytesIO
 from datetime import datetime
-from typing import List
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from bs4 import BeautifulSoup
 from app.core.database import db_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+YOUTUBE_HINTS = [
+    "youtube",
+    "youtube and youtube music",
+    "watch-history",
+    "search-history",
+    "history",
+    "subscriptions",
+    "playlists",
+    "comments",
+    "live_chat",
+]
+
+MAX_ZIP_FILE_COUNT = 3000
+MAX_SINGLE_FILE_SIZE = 30 * 1024 * 1024  # 30MB
+MAX_TOTAL_EXTRACT_SIZE = 150 * 1024 * 1024  # 150MB
+
+def extract_video_id(url: str) -> Optional[str]:
+    if not url:
+        return None
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if "youtube.com" in parsed.netloc:
+            query = urllib.parse.parse_qs(parsed.query)
+            v = query.get("v")
+            if v:
+                return v[0]
+        elif "youtu.be" in parsed.netloc:
+            parts = parsed.path.strip("/").split("/")
+            if parts:
+                return parts[0]
+    except Exception:
+        pass
+    return None
+
+def classify_takeout_file(path: str) -> str:
+    lower = path.lower()
+    if "watch-history" in lower:
+        return "watch_history"
+    if "search-history" in lower:
+        return "search_history"
+    if "subscriptions" in lower:
+        return "subscription"
+    if "playlists" in lower:
+        return "playlist"
+    if "comments" in lower:
+        return "comment"
+    if "live_chat" in lower or "live chat" in lower:
+        return "live_chat"
+    # The parent folder is often named "YouTube and YouTube Music", so only
+    # classify explicit music-only exports as music noise.
+    music_markers = [
+        "music-library",
+        "music_library",
+        "music uploads",
+        "music-uploads",
+        "music_uploads",
+        "youtube music/",
+        "youtube music\\",
+    ]
+    if any(marker in lower for marker in music_markers):
+        return "music"
+    return "unknown"
+
+def is_supported_takeout_file(path: str) -> bool:
+    lower = path.lower()
+    if not (lower.endswith(".json") or lower.endswith(".html")):
+        return False
+    kind = classify_takeout_file(lower)
+    return kind != "unknown" and kind != "music"
+
+def scan_youtube_files_from_zip(zip_bytes: bytes):
+    results = []
+    ignored_sources = []
+    skipped_sources_with_reason = {}
+    total_size = 0
+
+    try:
+        with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
+            infos = zf.infolist()
+
+            if len(infos) > MAX_ZIP_FILE_COUNT:
+                raise ValueError("ZIP 내부 파일 개수가 너무 많습니다.")
+
+            for info in infos:
+                if info.is_dir():
+                    continue
+
+                # ZIP Slip 방지
+                if ".." in info.filename or info.filename.startswith("/"):
+                    continue
+
+                kind = classify_takeout_file(info.filename)
+
+                if kind == "music":
+                    ignored_sources.append(info.filename)
+                    skipped_sources_with_reason[info.filename] = "Excluded in MVP configuration (Music library/uploads)"
+                    continue
+
+                if not is_supported_takeout_file(info.filename):
+                    continue
+
+                if info.file_size > MAX_SINGLE_FILE_SIZE:
+                    raise ValueError(f"ZIP 내 파일 '{info.filename}'의 용량이 제한(30MB)을 초과했습니다.")
+
+                total_size += info.file_size
+                if total_size > MAX_TOTAL_EXTRACT_SIZE:
+                    raise ValueError(f"ZIP 내 대상 파일들의 총 용량이 제한(150MB)을 초과했습니다.")
+
+                results.append({
+                    "filename": info.filename,
+                    "content": zf.read(info),
+                    "kind": kind
+                })
+    except Exception as e:
+        logger.error(f"Failed to scan ZIP file: {e}")
+        raise ValueError(str(e))
+
+    return results, ignored_sources, skipped_sources_with_reason
+
+def parse_takeout_html_timestamp(timestamp_str: str) -> Optional[str]:
+    timestamp_str = timestamp_str.strip()
+    if not timestamp_str:
+        return None
+
+    # Handle Korean format: "2023. 10. 27. 오후 8:15:30 KST"
+    if "오후" in timestamp_str or "오전" in timestamp_str:
+        try:
+            parts = [p.strip() for p in timestamp_str.split() if p.strip()]
+            year = parts[0].replace(".", "")
+            month = parts[1].replace(".", "").zfill(2)
+            day = parts[2].replace(".", "").zfill(2)
+            ampm = parts[3]
+            time_part = parts[4]
+
+            hour_str, minute_str, second_str = time_part.split(":")
+            hour = int(hour_str)
+            if ampm == "오후" and hour < 12:
+                hour += 12
+            elif ampm == "오전" and hour == 12:
+                hour = 0
+
+            return f"{year}-{month}-{day} {str(hour).zfill(2)}:{minute_str.zfill(2)}:{second_str.zfill(2)}"
+        except Exception as e:
+            logger.warning(f"Failed to parse Korean timestamp '{timestamp_str}': {e}")
+
+    # Handle English format: "Oct 27, 2023, 8:15:30 PM UTC"
+    months = {
+        "jan": "01", "feb": "02", "mar": "03", "apr": "04", "may": "05", "jun": "06",
+        "jul": "07", "aug": "08", "sep": "09", "oct": "10", "nov": "11", "dec": "12"
+    }
+
+    try:
+        lower_str = timestamp_str.lower()
+        for m_name, m_num in months.items():
+            if m_name in lower_str:
+                clean_str = timestamp_str.replace(",", " ")
+                parts = [p.strip() for p in clean_str.split() if p.strip()]
+                month_num = m_num
+                day = parts[1].zfill(2)
+                year = parts[2]
+                time_part = parts[3]
+                ampm = parts[4].upper()
+
+                hour_str, minute_str, second_str = time_part.split(":")
+                hour = int(hour_str)
+                if ampm == "PM" and hour < 12:
+                    hour += 12
+                elif ampm == "AM" and hour == 12:
+                    hour = 0
+
+                return f"{year}-{month_num}-{day} {str(hour).zfill(2)}:{minute_str.zfill(2)}:{second_str.zfill(2)}"
+    except Exception as e:
+        logger.warning(f"Failed to parse English timestamp '{timestamp_str}': {e}")
+
+    try:
+        clean_time = timestamp_str.replace("Z", "")
+        if "T" in clean_time:
+            if "." in clean_time:
+                clean_time = clean_time.split(".")[0]
+            parsed_time = datetime.fromisoformat(clean_time)
+            return parsed_time.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        pass
+
+    return None
+
+def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
+    # Extremely fast extraction of the first 300 cells to prevent BeautifulSoup hanging on 10MB-100MB files
+    cells_html = []
+    start_pos = 0
+    for _ in range(300):
+        pos = html_content.find('class="content-cell', start_pos)
+        if pos == -1:
+            break
+        div_start = html_content.rfind('<div', 0, pos)
+        if div_start == -1:
+            break
+        div_end = html_content.find('</div>', pos)
+        if div_end == -1:
+            break
+        cells_html.append(html_content[div_start:div_end+6])
+        start_pos = div_end + 6
+
+    tiny_html = "<html><body>" + "".join(cells_html) + "</body></html>"
+
+    soup = BeautifulSoup(tiny_html, "html.parser")
+    cells = soup.find_all(class_="content-cell")
+    parsed_items = []
+
+    for cell in cells:
+        text = cell.get_text()
+        title_text = ""
+        action_type = "view"
+        video_id = None
+        channel_name = None
+        channel_url = None
+
+        a_tags = cell.find_all("a")
+
+        if "Watched " in text:
+            action_type = "view"
+            if len(a_tags) >= 1:
+                title_text = a_tags[0].get_text().strip()
+                video_id = extract_video_id(a_tags[0].get("href", ""))
+            if len(a_tags) >= 2:
+                channel_name = a_tags[1].get_text().strip()
+                channel_url = a_tags[1].get("href", "")
+        elif "Searched for " in text:
+            action_type = "search"
+            if len(a_tags) >= 1:
+                title_text = a_tags[0].get_text().strip()
+                video_id = extract_video_id(a_tags[0].get("href", ""))
+
+        if not title_text:
+            if text.startswith("Watched "):
+                title_text = text[len("Watched "):].split("\n")[0].strip()
+                action_type = "view"
+            elif text.startswith("Searched for "):
+                title_text = text[len("Searched for "):].split("\n")[0].strip()
+                action_type = "search"
+
+        lines = [line.strip() for line in cell.stripped_strings if line.strip()]
+        timestamp_str = ""
+        if len(lines) >= 3:
+            timestamp_str = lines[-1]
+        elif len(lines) == 2:
+            timestamp_str = lines[-1]
+
+        parsed_time_str = parse_takeout_html_timestamp(timestamp_str) if timestamp_str else None
+        if not parsed_time_str:
+            parsed_time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+        parsed_items.append({
+            "title_text": title_text or "알 수 없는 비디오",
+            "action_type": action_type,
+            "event_time": parsed_time_str,
+            "video_id": video_id,
+            "title_url": a_tags[0].get("href", "") if len(a_tags) >= 1 else None,
+            "channel_name": channel_name,
+            "channel_url": channel_url
+        })
+
+    return parsed_items
+
+def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
+    raw_items = json.loads(json_content)
+    parsed_items = []
+
+    if not isinstance(raw_items, list):
+        return []
+
+    for item in raw_items[:300]:
+        if not isinstance(item, dict):
+            continue
+
+        raw_title = item.get("title", "")
+        if not raw_title:
+            continue
+
+        title_text = raw_title
+        action_type = "view"
+        if raw_title.startswith("Watched "):
+            title_text = raw_title[len("Watched "):]
+            action_type = "view"
+        elif raw_title.startswith("Searched for "):
+            title_text = raw_title[len("Searched for "):]
+            action_type = "search"
+        else:
+            if file_kind == "search":
+                action_type = "search"
+
+        # Extract video_id from titleUrl
+        title_url = item.get("titleUrl", "")
+        video_id = extract_video_id(title_url)
+
+        # Channel metadata
+        subtitles = item.get("subtitles", [])
+        channel_name = None
+        channel_url = None
+        if subtitles and isinstance(subtitles, list):
+            channel_name = subtitles[0].get("name", "")
+            channel_url = subtitles[0].get("url", "")
+
+        item_time = item.get("time", "")
+        parsed_time_str = None
+        if item_time:
+            try:
+                clean_time = item_time.replace("Z", "")
+                if "." in clean_time:
+                    clean_time = clean_time.split(".")[0]
+                parsed_time = datetime.fromisoformat(clean_time)
+                parsed_time_str = parsed_time.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+
+        if not parsed_time_str:
+            parsed_time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+        parsed_items.append({
+            "title_text": title_text,
+            "action_type": action_type,
+            "event_time": parsed_time_str,
+            "video_id": video_id,
+            "title_url": title_url,
+            "channel_name": channel_name,
+            "channel_url": channel_url
+        })
+
+    return parsed_items
+
+def parse_youtube_subscription(content: str, is_json: bool) -> List[dict]:
+    parsed_items = []
+    if is_json:
+        try:
+            data = json.loads(content)
+            if isinstance(data, list):
+                for item in data:
+                    snippet = item.get("snippet", {})
+                    title = snippet.get("title", "")
+                    resource = snippet.get("resourceId", {})
+                    channel_id = resource.get("channelId", "")
+                    channel_url = f"https://www.youtube.com/channel/{channel_id}" if channel_id else ""
+                    published_at = snippet.get("publishedAt", "")
+                    parsed_items.append({
+                        "title_text": title,
+                        "action_type": "subscription",
+                        "event_time": published_at.replace("Z", "").replace("T", " ").split(".")[0] if published_at else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                        "channel_name": title,
+                        "channel_url": channel_url
+                    })
+        except Exception:
+            pass
+    else:
+        try:
+            soup = BeautifulSoup(content, "html.parser")
+            links = soup.find_all("a")
+            for link in links[:300]:
+                name = link.get_text().strip()
+                url = link.get("href", "")
+                parsed_items.append({
+                    "title_text": name,
+                    "action_type": "subscription",
+                    "event_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "channel_name": name,
+                    "channel_url": url
+                })
+        except Exception:
+            pass
+    return parsed_items
+
+def parse_youtube_playlist(content: str, is_json: bool) -> List[dict]:
+    parsed_items = []
+    if is_json:
+        try:
+            data = json.loads(content)
+            playlist_title = data.get("title", "재생목록")
+            items = data.get("items", [])
+            if isinstance(items, list):
+                for item in items:
+                    title = item.get("title", "")
+                    url = item.get("videoUrl", "")
+                    added_date = item.get("addedDate", "")
+                    video_id = extract_video_id(url)
+                    parsed_items.append({
+                        "title_text": title,
+                        "action_type": "playlist",
+                        "event_time": added_date.replace("Z", "").replace("T", " ").split(".")[0] if added_date else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                        "title_url": url,
+                        "video_id": video_id,
+                        "channel_name": playlist_title
+                    })
+        except Exception:
+            pass
+    else:
+        try:
+            soup = BeautifulSoup(content, "html.parser")
+            links = soup.find_all("a")
+            for link in links[:300]:
+                title = link.get_text().strip()
+                url = link.get("href", "")
+                video_id = extract_video_id(url)
+                parsed_items.append({
+                    "title_text": title,
+                    "action_type": "playlist",
+                    "event_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "title_url": url,
+                    "video_id": video_id
+                })
+        except Exception:
+            pass
+    return parsed_items
+
 @router.post("/upload")
 async def upload_file(
-    user_id: str = "00000000-0000-0000-0000-000000000001", # Defaults to standardized UUID for MVP
+    user_id: str = "00000000-0000-0000-0000-000000000001",
     platform: str = "youtube",
     action_type: str = "view",
     file: UploadFile = File(...)
 ):
-    """
-    Uploads a YouTube watch or search history file.
-    Parses events and applies the 'Fake Dopamine Filter' (skipping views < 5 seconds).
-    Supports Google Takeout JSON watch-history parsing and line-by-line fallbacks.
-    """
     try:
         content = await file.read()
         text_content = content.decode("utf-8", errors="ignore")
-        
-        # 1. Save raw file metadata
+
         file_id = str(uuid.uuid4())
         raw_file_entry = {
             "id": file_id,
@@ -34,14 +444,13 @@ async def upload_file(
             "upload_status": "PROCESSING"
         }
         db_client.save_data("raw_file", raw_file_entry)
-        
-        # 2. Parse raw events based on platform and file format
+
         parsed_events = []
         file_extension = file.filename.split(".")[-1].lower() if file.filename else ""
-        
+
         is_json = False
         raw_items = []
-        
+
         if file_extension == "json":
             try:
                 raw_items = json.loads(text_content)
@@ -49,18 +458,16 @@ async def upload_file(
             except Exception as e:
                 logger.warning(f"Failed to parse JSON file {file.filename}: {e}. Falling back to line-by-line.")
                 is_json = False
-                
+
         if is_json and isinstance(raw_items, list):
-            # Parse Google Takeout watch-history array
-            for i, item in enumerate(raw_items[:200]): # Limit to first 200 items for prototype performance
+            for i, item in enumerate(raw_items[:200]):
                 if not isinstance(item, dict):
                     continue
-                    
+
                 raw_title = item.get("title", "")
                 if not raw_title:
                     continue
-                
-                # Identify action and strip "Watched " or "Searched for "
+
                 title_text = raw_title
                 current_action_type = action_type
                 if raw_title.startswith("Watched "):
@@ -69,8 +476,7 @@ async def upload_file(
                 elif raw_title.startswith("Searched for "):
                     title_text = raw_title[len("Searched for "):]
                     current_action_type = "search"
-                    
-                # Parse timestamp from takeout format (ISO: "2023-10-27T08:15:30.000Z")
+
                 item_time = item.get("time", "")
                 parsed_time_str = None
                 if item_time:
@@ -82,20 +488,16 @@ async def upload_file(
                         parsed_time_str = parsed_time.strftime("%Y-%m-%d %H:%M:%S")
                     except Exception as time_err:
                         logger.warning(f"Could not parse timestamp {item_time}: {time_err}")
-                        
+
                 if not parsed_time_str:
                     parsed_time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                # Simulate realistic durations to preserve dopamine filter & long-form ratios
-                # If index is divisible by 10, simulate a 3-second rapid click (will be filtered!)
-                # If index is divisible by 4, simulate a 45-second short-form
-                # Otherwise, simulate a 300-second long-form watch time
+
                 simulated_duration = 300
                 if i % 10 == 0:
-                    simulated_duration = 3 
+                    simulated_duration = 3
                 elif i % 4 == 0:
                     simulated_duration = 45
-                    
+
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
                     "file_id": file_id,
@@ -107,29 +509,25 @@ async def upload_file(
                     "source_surface": "home_feed" if i % 2 == 0 else "search_results"
                 })
         else:
-            # Fallback line-by-line parsing for CSV or TXT
             lines = text_content.split("\n")
             base_time = datetime.utcnow()
-            for i, line in enumerate(lines[:100]): # Limit to first 100
+            for i, line in enumerate(lines[:100]):
                 cleaned_line = line.strip()
                 if not cleaned_line:
                     continue
-                
-                # Check for comma delimiters in case it's CSV
+
                 title_text = cleaned_line
                 if "," in cleaned_line:
                     parts = cleaned_line.split(",")
                     if len(parts) > 1:
-                        # Attempt to use first text part as title
                         title_text = parts[0].strip("\" ")
-                
-                # Simulate durations
+
                 simulated_duration = 300
                 if i % 10 == 0:
                     simulated_duration = 3
                 elif i % 4 == 0:
                     simulated_duration = 45
-                    
+
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
                     "file_id": file_id,
@@ -140,30 +538,24 @@ async def upload_file(
                     "action_type": action_type,
                     "source_surface": "home_feed" if i % 2 == 0 else "search_results"
                 })
-                
-        # 3. Apply Fake Dopamine Filter (FEAT_02)
-        # Exclude watch events with time_delta_sec < 5 seconds
+
         filtered_events = []
         skipped_count = 0
-        
+
         for event in parsed_events:
             if event["action_type"] == "view" and event["time_delta_sec"] is not None and event["time_delta_sec"] < 5:
                 skipped_count += 1
                 continue
             filtered_events.append(event)
-            
-        # 4. Save normalized events
+
         for event in filtered_events:
             db_client.save_data("norm_event", event)
-            
-        # 5. Update raw file status to SUCCESS (Using upsert in DatabaseClient resolves duplication)
+
         raw_file_entry["upload_status"] = "SUCCESS"
         db_client.save_data("raw_file", raw_file_entry)
-        
-        # 6. Create sessionized text segments (FEAT_03)
-        # Combine consecutive titles within 30 minutes to make session texts
+
         session_id = str(uuid.uuid4())
-        aggregated_titles = " | ".join([e["text_base"] for e in filtered_events[:15]]) # merge top 15
+        aggregated_titles = " | ".join([e["text_base"] for e in filtered_events[:15]])
         session_text_entry = {
             "id": session_id,
             "file_id": file_id,
@@ -173,7 +565,7 @@ async def upload_file(
             "end_time": filtered_events[0]["event_time"] if filtered_events else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         }
         db_client.save_data("session_text", session_text_entry)
-        
+
         return {
             "success": True,
             "file_id": file_id,
@@ -186,3 +578,347 @@ async def upload_file(
     except Exception as e:
         logger.error(f"Upload processing crash: {e}")
         raise HTTPException(status_code=500, detail=f"File upload and parsing failed: {str(e)}")
+
+@router.post("/upload/takeout")
+async def upload_takeout(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+    files: List[UploadFile] = File(default=None),
+    paths: List[str] = Form(default=None),
+    zip_file: UploadFile = File(default=None),
+    survey_scores: Optional[str] = Form(default=None)
+):
+    """
+    Handles refined multi-file folder and ZIP Google Takeout uploads.
+    Integrates surveys, ignores music paths, extracts channel info, and divides chronological sessions.
+    """
+    try:
+        # 1. Merge-update survey scores
+        if survey_scores:
+            try:
+                survey_data = json.loads(survey_scores)
+                existing_profiles = db_client.fetch_data("profiles", {"id": user_id})
+                existing_scores = {}
+                if existing_profiles:
+                    existing_scores = existing_profiles[0].get("survey_scores", {})
+                    if not isinstance(existing_scores, dict):
+                        existing_scores = {}
+
+                merged_scores = {**existing_scores, **survey_data}
+                profile_entry = {
+                    "id": user_id,
+                    "survey_scores": merged_scores
+                }
+                if existing_profiles:
+                    profile_entry["email"] = existing_profiles[0].get("email", "seokhwan.son@gmail.com")
+                    profile_entry["nickname"] = existing_profiles[0].get("nickname", "손석환")
+                    profile_entry["birth_year"] = existing_profiles[0].get("birth_year", 1999)
+                else:
+                    profile_entry["email"] = "seokhwan.son@gmail.com"
+                    profile_entry["nickname"] = "손석환"
+                    profile_entry["birth_year"] = 1999
+
+                db_client.save_data("profiles", profile_entry)
+                logger.info(f"Successfully merge-updated survey scores for user {user_id}")
+            except Exception as e:
+                logger.error(f"Failed to merge-update survey scores: {e}", exc_info=True)
+
+        files_to_parse = []
+        ignored_sources = []
+        skipped_sources_with_reason = {}
+
+        # 2. Gather candidates
+        if zip_file:
+            zip_content = await zip_file.read()
+            zip_files, ignored_sources, skipped_sources_with_reason = scan_youtube_files_from_zip(zip_content)
+            for zf in zip_files:
+                files_to_parse.append({
+                    "name": zf["filename"],
+                    "content": zf["content"].decode("utf-8", errors="ignore"),
+                    "kind": zf["kind"]
+                })
+        elif files:
+            for idx, file in enumerate(files):
+                rel_path = paths[idx] if (paths and idx < len(paths)) else file.filename
+                kind = classify_takeout_file(rel_path)
+
+                if kind == "music":
+                    ignored_sources.append(rel_path)
+                    skipped_sources_with_reason[rel_path] = "Excluded in MVP configuration (Music library/uploads)"
+                    continue
+
+                if not is_supported_takeout_file(rel_path):
+                    continue
+
+                content = await file.read()
+                files_to_parse.append({
+                    "name": rel_path,
+                    "content": content.decode("utf-8", errors="ignore"),
+                    "kind": kind
+                })
+
+        if not files_to_parse:
+            raise HTTPException(
+                status_code=400,
+                detail="YouTube 시청/검색 기록 파일(watch-history.json/html, search-history.json/html)을 발견하지 못했습니다."
+            )
+
+        # 3. Parse all files and normalize
+        parsed_events = []
+        file_id = str(uuid.uuid4())
+        raw_file_entry = {
+            "id": file_id,
+            "user_id": user_id,
+            "storage_path": f"uploads/{file_id}_takeout_upload",
+            "upload_status": "PROCESSING"
+        }
+        db_client.save_data("raw_file", raw_file_entry)
+
+        parsed_source_counts = {
+            "watch_history": 0,
+            "search_history": 0,
+            "subscription": 0,
+            "playlist": 0,
+            "comment": 0,
+            "live_chat": 0
+        }
+
+        for file_info in files_to_parse:
+            name = file_info["name"]
+            content = file_info["content"]
+            kind = file_info["kind"]
+
+            items = []
+            is_json = name.lower().endswith(".json")
+
+            if kind in ["watch_history", "search_history"]:
+                if is_json:
+                    items = parse_youtube_json(content, "watch" if "watch" in name.lower() else "search")
+                else:
+                    items = parse_youtube_html(content, "watch" if "watch" in name.lower() else "search")
+            elif kind == "subscription":
+                items = parse_youtube_subscription(content, is_json)
+            elif kind == "playlist":
+                items = parse_youtube_playlist(content, is_json)
+
+            parsed_source_counts[kind] = parsed_source_counts.get(kind, 0) + len(items)
+
+            for idx, item in enumerate(items):
+                # Context-aware duration estimation
+                title_lower = item["title_text"].lower()
+                is_shorts = "shorts" in title_lower or "#shorts" in title_lower or "쇼츠" in title_lower
+                estimated_duration_sec = 45 if is_shorts else 300
+                duration_confidence = "medium" if is_shorts else "low"
+
+                parsed_events.append({
+                    "id": str(uuid.uuid4()),
+                    "file_id": file_id,
+                    "event_time": item["event_time"],
+                    "time_delta_sec": None, # Removed simulated mock values
+                    "text_base": item["title_text"],
+                    "platform": "youtube",
+                    "action_type": item["action_type"],
+                    "source_surface": "home_feed" if idx % 2 == 0 else "search_results",
+                    "source_type": kind,
+                    "channel_name": item.get("channel_name"),
+                    "channel_url": item.get("channel_url"),
+                    "title_url": item.get("title_url"),
+                    "video_id": item.get("video_id"),
+                    "estimated_duration_sec": estimated_duration_sec,
+                    "duration_confidence": duration_confidence
+                })
+
+        # 4. Filter watch history views for dopamine filter & sessions
+        # (Exclude playlist/subscription from standard watch filters)
+        watch_search_events = [e for e in parsed_events if e["source_type"] in ["watch_history", "search_history"]]
+
+        timed_events = []
+        for event in watch_search_events:
+            try:
+                timed_events.append((datetime.strptime(event["event_time"], "%Y-%m-%d %H:%M:%S"), event))
+            except Exception:
+                continue
+
+        timed_events.sort(key=lambda pair: pair[0])
+        for idx, (event_time, event) in enumerate(timed_events[:-1]):
+            if event["action_type"] != "view":
+                continue
+
+            next_event_time = timed_events[idx + 1][0]
+            gap_sec = int((next_event_time - event_time).total_seconds())
+            if 0 < gap_sec <= 6 * 60 * 60:
+                event["time_delta_sec"] = gap_sec
+                if gap_sec < event.get("estimated_duration_sec", 300):
+                    event["estimated_duration_sec"] = max(1, gap_sec)
+                    event["duration_confidence"] = "timeline"
+
+        filtered_events = []
+        skipped_count = 0
+
+        for event in watch_search_events:
+            # Fake dopamine filter only checks watch/view events
+            duration_for_filter = event.get("time_delta_sec")
+            if duration_for_filter is None:
+                duration_for_filter = event.get("estimated_duration_sec")
+
+            if event["action_type"] == "view" and duration_for_filter is not None and duration_for_filter < 5:
+                skipped_count += 1
+                continue
+            filtered_events.append(event)
+
+        # Add playlist/subscription events to final events directly (Auxiliary features)
+        aux_events = [e for e in parsed_events if e["source_type"] not in ["watch_history", "search_history"]]
+        final_events = filtered_events + aux_events
+
+        if not final_events:
+            raise HTTPException(
+                status_code=400,
+                detail="파싱된 이벤트가 없거나 모든 시청 기록이 생략되었습니다."
+            )
+
+        # 5. Save normalized events
+        for event in final_events:
+            db_client.save_data("norm_event", event)
+
+        # 6. Update raw file status to SUCCESS
+        raw_file_entry["upload_status"] = "SUCCESS"
+        db_client.save_data("raw_file", raw_file_entry)
+
+        # 7. Chronological Time-based and Count-based Multi-session Generator
+        session_events = [e for e in filtered_events if e["action_type"] in ["view", "search"]]
+        session_events_sorted = sorted(session_events, key=lambda x: x["event_time"])
+
+        sessions_list = []
+        current_session = []
+
+        for e in session_events_sorted:
+            if not current_session:
+                current_session.append(e)
+                continue
+
+            try:
+                t1 = datetime.strptime(current_session[-1]["event_time"], "%Y-%m-%d %H:%M:%S")
+                t2 = datetime.strptime(e["event_time"], "%Y-%m-%d %H:%M:%S")
+                gap_hours = abs((t2 - t1).total_seconds()) / 3600.0
+            except Exception:
+                gap_hours = 0.0
+
+            if gap_hours > 6.0 or len(current_session) >= 100:
+                sessions_list.append(current_session)
+                current_session = [e]
+            else:
+                current_session.append(e)
+
+        if current_session:
+            sessions_list.append(current_session)
+
+        # Limit the number of generated session entries to 10 for prototype performance
+        for idx, sess in enumerate(sessions_list[:10]):
+            session_id = str(uuid.uuid4())
+            aggregated_titles = " | ".join([e["text_base"] for e in sess[:15]])
+            session_text_entry = {
+                "id": session_id,
+                "file_id": file_id,
+                "aggregated_text": aggregated_titles,
+                "token_count": len(aggregated_titles.split()),
+                "start_time": sess[0]["event_time"],
+                "end_time": sess[-1]["event_time"]
+            }
+            db_client.save_data("session_text", session_text_entry)
+
+        return {
+            "success": True,
+            "file_id": file_id,
+            "parsed_source_counts": parsed_source_counts,
+            "ignored_sources": ignored_sources[:50], # Limit response size
+            "skipped_sources_with_reason": skipped_sources_with_reason,
+            "session_count": len(sessions_list),
+            "total_parsed": len(parsed_events),
+            "total_saved": len(final_events),
+            "skipped_fake_dopamine": skipped_count
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Takeout upload processing crash: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"File upload and parsing failed: {str(e)}")
+
+@router.post("/upload/youtube-takeout")
+async def upload_youtube_takeout(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+    files: List[UploadFile] = File(default=None),
+    paths: List[str] = Form(default=None),
+    zip_file: UploadFile = File(default=None)
+):
+    # Forward deprecated endpoint to new /upload/takeout for backward compatibility
+    res = await upload_takeout(user_id=user_id, files=files, paths=paths, zip_file=zip_file)
+    return res
+
+@router.get("/youtube-test")
+async def test_youtube_api(video_id: str = "dQw4w9WgXcQ"):
+    """
+    Tests the YouTube Data API connection by fetching metadata for a video.
+    """
+    from app.core.config import settings
+    import httpx
+
+    api_key = settings.YOUTUBE_API_KEY
+    if not api_key or api_key == "mock-youtube-api-key":
+        logger.error("YouTube API key is missing or not configured.")
+        raise HTTPException(
+            status_code=400,
+            detail="YouTube API Key가 설정되지 않았거나 유효하지 않습니다."
+        )
+
+    try:
+        url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "snippet",
+            "id": video_id,
+            "key": api_key
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=5.0)
+
+        if response.status_code != 200:
+            logger.error(f"YouTube Data API test failed with HTTP {response.status_code}: {response.text}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"YouTube API 호출 실패 (HTTP {response.status_code})"
+            )
+
+        data = response.json()
+        items = data.get("items", [])
+        if not items:
+            logger.warning(f"YouTube video {video_id} not found in test API call.")
+            return {
+                "success": False,
+                "message": f"YouTube video ID '{video_id}' not found",
+                "data": None
+            }
+
+        snippet = items[0].get("snippet", {})
+        thumbnails = snippet.get("thumbnails", {})
+        thumbnail_url = thumbnails.get("high", {}).get("url", "") or thumbnails.get("default", {}).get("url", "")
+
+        return {
+            "success": True,
+            "message": "YouTube API connection successful",
+            "data": {
+                "video_id": video_id,
+                "title": snippet.get("title", ""),
+                "channel_title": snippet.get("channelTitle", ""),
+                "category_id": snippet.get("categoryId", ""),
+                "published_at": snippet.get("publishedAt", ""),
+                "thumbnail_url": thumbnail_url
+            }
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"YouTube Data API connection test crashed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="YouTube API 연결 테스트 중 서버 내부 에러가 발생했습니다."
+        )
