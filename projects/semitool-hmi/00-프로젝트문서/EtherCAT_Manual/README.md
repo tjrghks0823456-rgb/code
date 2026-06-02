@@ -83,13 +83,13 @@ SemiToolHMI는 반도체 장비의 웨이퍼 이송 및 공정 상태를 모니�
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0001.bmp)
+![SemiToolHMI Manual Image](./images/BIN0001.png)
 
 
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0002.bmp)
+![SemiToolHMI Manual Image](./images/BIN0002.png)
 
 
 
@@ -101,7 +101,7 @@ SemiToolHMI는 반도체 장비의 웨이퍼 이송 및 공정 상태를 모니�
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0003.bmp)
+![SemiToolHMI Manual Image](./images/BIN0003.png)
 
 
 
@@ -110,7 +110,7 @@ Login
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0004.bmp)
+![SemiToolHMI Manual Image](./images/BIN0004.png)
 
 
  버튼 클릭
@@ -119,13 +119,13 @@ Login
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0005.bmp)
+![SemiToolHMI Manual Image](./images/BIN0005.png)
 
 
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0006.bmp)
+![SemiToolHMI Manual Image](./images/BIN0006.png)
 
 
 
@@ -152,7 +152,7 @@ Login
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0007.bmp)
+![SemiToolHMI Manual Image](./images/BIN0007.png)
 
 
 
@@ -198,13 +198,13 @@ ERR: 오류/정지
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0009.bmp)
+![SemiToolHMI Manual Image](./images/BIN0009.png)
 
 
 
 
 
-![SemiToolHMI Manual Image](./images/BIN000A.bmp)
+![SemiToolHMI Manual Image](./images/BIN000A.png)
 
 
 
@@ -216,7 +216,7 @@ ERR: 오류/정지
 
 
 
-![SemiToolHMI Manual Image](./images/BIN000C.bmp)
+![SemiToolHMI Manual Image](./images/BIN000C.png)
 
 
 
@@ -246,7 +246,7 @@ ERR: 오류/정지
 
 
 
-![SemiToolHMI Manual Image](./images/BIN000D.bmp)
+![SemiToolHMI Manual Image](./images/BIN000D.png)
 
 
 
@@ -265,7 +265,7 @@ FOUP Detail: FOUP A/B의 현재 웨이퍼 수량 카운트 (예: 3 / 5).
 
 
 
-![SemiToolHMI Manual Image](./images/BIN000E.bmp)
+![SemiToolHMI Manual Image](./images/BIN000E.png)
 
 
 
@@ -275,13 +275,13 @@ FOUP Detail: FOUP A/B의 현재 웨이퍼 수량 카운트 (예: 3 / 5).
 
 
 
-![SemiToolHMI Manual Image](./images/BIN000F.bmp)
+![SemiToolHMI Manual Image](./images/BIN000F.png)
 
 
 시스템에서 발생하는 모든 이벤트, 알람, 오류 메시지가 실시간으로 기록됩니다.
 
 
-![SemiToolHMI Manual Image](./images/BIN0010.bmp)
+![SemiToolHMI Manual Image](./images/BIN0010.png)
 
 
 
@@ -307,7 +307,7 @@ FOUP Detail: FOUP A/B의 현재 웨이퍼 수량 카운트 (예: 3 / 5).
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0013.bmp)
+![SemiToolHMI Manual Image](./images/BIN0013.png)
 
 
 
@@ -340,7 +340,7 @@ TM을 움직이기 위함 서버 버튼
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0015.bmp)
+![SemiToolHMI Manual Image](./images/BIN0015.png)
 
 
 
@@ -358,7 +358,7 @@ TM을 움직이기 위함 서버 버튼
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0016.bmp)
+![SemiToolHMI Manual Image](./images/BIN0016.png)
 
 
 
@@ -366,7 +366,7 @@ TM을 움직이기 위함 서버 버튼
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0017.bmp)
+![SemiToolHMI Manual Image](./images/BIN0017.png)
 
 
 
@@ -394,13 +394,13 @@ Reset: 모든 상태를 초기화하고 대기 상태로 복귀합니다.
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0018.bmp)
+![SemiToolHMI Manual Image](./images/BIN0018.png)
 
 
 
 
 
-![SemiToolHMI Manual Image](./images/BIN0019.bmp)
+![SemiToolHMI Manual Image](./images/BIN0019.png)
 
 
 
