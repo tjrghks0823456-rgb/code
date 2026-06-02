@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
+<section class="container my-3">
+    <h2>수동 알람 등록</h2>
+
+    <form th:action="@{/alarm/create}" method="post" class="form-box">
+        <label class="form-label">장비명</label>
+        <input class="form-control" type="text" name="equipmentName" value="CVD-02">
+
+        <label class="form-label">알람 코드</label>
+        <input class="form-control" type="text" name="alarmCode" value="M-1001">
+
+        <label class="form-label">알람 등급</label>
+        <select class="form-select" name="alarmLevel">
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="CRITICAL">CRITICAL</option>
+        </select>
+
+        <label class="form-label">알람 내용</label>
+        <textarea class="form-control" name="message">수동으로 등록한 장비 점검 알람입니다.</textarea>
+
+        <button class="btn btn-primary" type="submit">저장하기</button>
+    </form>
+</section>
+</html>

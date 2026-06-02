@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36429.23
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WPF_Color", "색 변화 버튼\WPF_Color.csproj", "{337AFDEC-1E39-4D36-B4BD-9C57CE0DEFBC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{337AFDEC-1E39-4D36-B4BD-9C57CE0DEFBC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{337AFDEC-1E39-4D36-B4BD-9C57CE0DEFBC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{337AFDEC-1E39-4D36-B4BD-9C57CE0DEFBC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{337AFDEC-1E39-4D36-B4BD-9C57CE0DEFBC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C8CC6F3A-A8F8-41C9-A810-14F0550DFA2B}
+	EndGlobalSection
+EndGlobal

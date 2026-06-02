@@ -1,0 +1,35 @@
+<html th:replace="~{layout :: layout(~{::section})}" xmlns:th="http://www.thymeleaf.org">
+
+<section class="container my-3">
+
+    <h2 class="border-bottom py-2">질문 수정</h2>
+
+    <form th:action="@{|/question/modify/${question.id}|}" method="post">
+
+        <div class="mb-3">
+            <label for="subject" class="form-label">제목</label>
+            <input type="text"
+                   name="subject"
+                   id="subject"
+                   class="form-control"
+                   th:value="${question.subject}">
+        </div>
+
+        <div class="mb-3">
+            <label for="content" class="form-label">내용</label>
+            <textarea name="content"
+                      id="content"
+                      rows="10"
+                      class="form-control"
+                      th:text="${question.content}">
+            </textarea>
+        </div>
+
+        <input type="submit" value="수정하기" class="btn btn-primary">
+        <a th:href="@{|/question/detail/${question.id}|}" class="btn btn-secondary">취소</a>
+
+    </form>
+
+</section>
+
+</html>

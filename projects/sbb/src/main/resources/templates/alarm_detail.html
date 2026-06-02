@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
+<section class="container my-3">
+    <h2>장비 알람 상세</h2>
+
+    <table class="table table-bordered">
+        <tr>
+            <th>장비명</th>
+            <td th:text="${alarm.equipmentName}"></td>
+        </tr>
+        <tr>
+            <th>알람 코드</th>
+            <td th:text="${alarm.alarmCode}"></td>
+        </tr>
+        <tr>
+            <th>등급</th>
+            <td th:text="${alarm.alarmLevel}"></td>
+        </tr>
+        <tr>
+            <th>내용</th>
+            <td th:text="${alarm.message}"></td>
+        </tr>
+        <tr>
+            <th>추론 결과 ID</th>
+            <td th:text="${alarm.predictionResultId}"></td>
+        </tr>
+        <tr>
+            <th>발생 일시</th>
+            <td th:text="${#temporals.format(alarm.createDate, 'yyyy-MM-dd HH:mm')}"></td>
+        </tr>
+    </table>
+
+    <h3>조치 이력 등록</h3>
+
+    <form th:action="@{|/alarm/action/${alarm.id}|}" method="post" class="form-box">
+        <textarea class="form-control" name="actionMemo" placeholder="예: 챔버 압력 확인 후 밸브 상태 점검"></textarea>
+        <button class="btn btn-primary" type="submit">조치 이력 저장</button>
+    </form>
+
+    <div th:if="${alarm.actionMemo != null}" class="memo">
+        <strong>저장된 조치:</strong>
+        <span th:text="${alarm.actionMemo}"></span>
+    </div>
+</section>
+</html>

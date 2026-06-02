@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
+<section class="container my-3">
+    <h2>학습 결과</h2>
+
+    <div class="btn-area">
+        <a class="btn btn-warning" th:href="@{/model/train}">학습 다시 실행</a>
+        <a class="btn btn-primary" th:href="@{/predict/form}">추론하러 가기</a>
+    </div>
+
+    <div th:if="${modelInfo == null}" class="empty">
+        아직 학습된 모델이 없습니다. 학습 데이터를 만든 후 학습 실행을 눌러주세요.
+    </div>
+
+    <table class="table table-bordered" th:if="${modelInfo != null}">
+        <tr>
+            <th>정상 평균 온도</th>
+            <td th:text="${#numbers.formatDecimal(modelInfo.avgTemperature, 1, 2)}"></td>
+        </tr>
+        <tr>
+            <th>정상 평균 압력</th>
+            <td th:text="${#numbers.formatDecimal(modelInfo.avgPressure, 1, 2)}"></td>
+        </tr>
+        <tr>
+            <th>정상 평균 진동</th>
+            <td th:text="${#numbers.formatDecimal(modelInfo.avgVibration, 1, 2)}"></td>
+        </tr>
+        <tr>
+            <th>정상 평균 가스 유량</th>
+            <td th:text="${#numbers.formatDecimal(modelInfo.avgGasFlow, 1, 2)}"></td>
+        </tr>
+        <tr>
+            <th>학습 데이터 수</th>
+            <td th:text="${modelInfo.trainDataCount}"></td>
+        </tr>
+        <tr>
+            <th>학습 일시</th>
+            <td th:text="${#temporals.format(modelInfo.trainDate, 'yyyy-MM-dd HH:mm')}"></td>
+        </tr>
+    </table>
+</section>
+</html>

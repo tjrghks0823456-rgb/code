@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org"
+      th:fragment="layout(content)">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <link rel="stylesheet" type="text/css" th:href="@{/bootstrap.min.css}">
+
+    <link rel="stylesheet" type="text/css" th:href="@{/style.css}">
+
+    <title>Hello, sbb!</title>
+</head>
+<body>
+	  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+	       <div class="container-fluid">
+	           <a class="navbar-brand" th:href="@{/question/list}">SBB 게시판</a>
+	           <div class="navbar-nav">
+	               <a class="nav-link" th:href="@{/question/list}">게시판</a>
+	               <a class="nav-link" th:href="@{/sensor/list}">학습 데이터</a>
+	               <a class="nav-link" th:href="@{/model/info}">학습 결과</a>
+	               <a class="nav-link" th:href="@{/predict/form}">추론 실행</a>
+	               <a class="nav-link" th:href="@{/predict/list}">추론 이력</a>
+	               <a class="nav-link" th:href="@{/alarm/list}">알람</a>
+	               <a class="nav-link" th:href="@{/validation/result}">검증</a>
+	           </div>
+	       </div>
+	   </nav>
+<div th:replace="${content}"></div>
+
+
+</body>
+</html>

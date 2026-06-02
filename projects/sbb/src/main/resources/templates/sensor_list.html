@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(~{::section})}">
+<section class="container my-3">
+    <h2>학습 데이터 목록</h2>
+
+    <div class="btn-area">
+        <a class="btn btn-primary" th:href="@{/sensor/create}">학습 데이터 등록</a>
+        <a class="btn btn-secondary" th:href="@{/sensor/generate}">샘플 데이터 생성</a>
+        <a class="btn btn-warning" th:href="@{/model/train}">학습 실행</a>
+        <a class="btn btn-outline-primary" th:href="@{/model/info}">학습 결과 보기</a>
+    </div>
+
+    <table class="table table-bordered table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>번호</th>
+                <th>장비명</th>
+                <th>온도</th>
+                <th>압력</th>
+                <th>진동</th>
+                <th>가스 유량</th>
+                <th>라벨</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="data, loop : ${sensorDataList}">
+                <td th:text="${loop.count}"></td>
+                <td th:text="${data.equipmentName}"></td>
+                <td th:text="${#numbers.formatDecimal(data.temperature, 1, 2)}"></td>
+                <td th:text="${#numbers.formatDecimal(data.pressure, 1, 2)}"></td>
+                <td th:text="${#numbers.formatDecimal(data.vibration, 1, 2)}"></td>
+                <td th:text="${#numbers.formatDecimal(data.gasFlow, 1, 2)}"></td>
+                <td>
+                    <span class="badge"
+                          th:classappend="${data.label == 'NORMAL'} ? ' badge-normal' : ' badge-abnormal'"
+                          th:text="${data.label}">
+                    </span>
+                </td>
+            </tr>
+
+            <tr th:if="${#lists.size(sensorDataList) == 0}">
+                <td colspan="7">등록된 학습 데이터가 없습니다.</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+</html>

@@ -1,0 +1,17 @@
+## Build Results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Re]leases/
+x64/
+x86/
+build/
+bin/
+obj/
+
+## MSVC & VS files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
