@@ -8,6 +8,7 @@ import Card from "../../components/Card";
 import MissionCard from "../../components/MissionCard";
 import PageShell from "../../components/PageShell";
 import SectionTitle from "../../components/SectionTitle";
+import { API_BASE_URL, DEFAULT_USER_ID } from "../../utils/apiConfig";
 
 const DEMO_PLAN = {
   active: true,
@@ -75,8 +76,8 @@ function MissionContent() {
     const fetchPlan = async () => {
       try {
         const url = planId
-          ? `http://localhost:8000/api/v1/detox/plan?plan_id=${planId}&user_id=00000000-0000-0000-0000-000000000001`
-          : `http://localhost:8000/api/v1/detox/plan?user_id=00000000-0000-0000-0000-000000000001`;
+          ? `${API_BASE_URL}/api/v1/detox/plan?plan_id=${planId}&user_id=${DEFAULT_USER_ID}`
+          : `${API_BASE_URL}/api/v1/detox/plan?user_id=${DEFAULT_USER_ID}`;
 
         const res = await fetch(url);
         if (!res.ok) {
@@ -116,7 +117,7 @@ function MissionContent() {
 
     if (!isDemo) {
       try {
-        await fetch(`http://localhost:8000/api/v1/detox/mission/${targetMission.log_id}`, {
+        await fetch(`${API_BASE_URL}/api/v1/detox/mission/${targetMission.log_id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ completed: newStatus })

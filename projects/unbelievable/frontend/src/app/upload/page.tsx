@@ -7,6 +7,7 @@ import PageShell from "../../components/PageShell";
 import { Button } from "../../components/Button";
 import Card from "../../components/Card";
 import SectionTitle from "../../components/SectionTitle";
+import { API_BASE_URL, DEFAULT_USER_ID } from "../../utils/apiConfig";
 import { loadSelfSurveyResult } from "../../utils/surveyStorage";
 
 type YoutubeFileKind = "watch" | "search" | "subscription" | "playlist" | "comment" | "liveChat" | "channel" | "music" | "unknown";
@@ -264,7 +265,7 @@ export default function UploadPage() {
         formData.append("survey_scores", JSON.stringify(surveyResult));
       }
 
-      const uploadRes = await fetch("http://localhost:8000/api/v1/upload/takeout?user_id=00000000-0000-0000-0000-000000000001", {
+      const uploadRes = await fetch(`${API_BASE_URL}/api/v1/upload/takeout?user_id=${DEFAULT_USER_ID}`, {
         method: "POST",
         body: formData,
       });
@@ -296,7 +297,7 @@ export default function UploadPage() {
 
     try {
       // 2. Trigger Analysis Calculation
-      const analysisRes = await fetch(`http://localhost:8000/api/v1/analysis/run?file_id=${uploadSummary.file_id}&user_id=00000000-0000-0000-0000-000000000001`, {
+      const analysisRes = await fetch(`${API_BASE_URL}/api/v1/analysis/run?file_id=${uploadSummary.file_id}&user_id=${DEFAULT_USER_ID}`, {
         method: "POST",
       });
 

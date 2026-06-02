@@ -10,11 +10,13 @@ import RadarChart from "../../components/RadarChart";
 import ResultCard from "../../components/ResultCard";
 import ScoreCard from "../../components/ScoreCard";
 import SectionTitle from "../../components/SectionTitle";
-import { categoryShares, reportInsights, searchKeywords } from "../../data/insightMock";
 import { getDsaoCharacter } from "../../data/dsaoCharacters";
+import { API_BASE_URL, DEFAULT_USER_ID } from "../../utils/apiConfig";
 import { loadSelfSurveyResult, SelfSurveyResult } from "../../utils/surveyStorage";
 
 type ApiData = any;
+type SearchKeyword = { keyword: string; count: number; category?: string };
+type CategoryShare = { name: string; value: number; tone: string; count?: number };
 
 function getRiskLabel(score: number) {
   if (score < 20) return "안정";
@@ -65,7 +67,7 @@ function DashboardContent() {
 
     const fetchSummary = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/v1/dashboard/summary?run_id=${runId}&user_id=00000000-0000-0000-0000-000000000001`);
+        const res = await fetch(`${API_BASE_URL}/api/v1/dashboard/summary?run_id=${runId}&user_id=${DEFAULT_USER_ID}`);
         if (!res.ok) {
           throw new Error(`대시보드 조회 실패 (HTTP ${res.status})`);
         }
@@ -86,7 +88,7 @@ function DashboardContent() {
     setGeneratingPlan(true);
     setDetoxError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/detox/generate?run_id=${runId}&user_id=00000000-0000-0000-0000-000000000001`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/detox/generate?run_id=${runId}&user_id=${DEFAULT_USER_ID}`, {
         method: "POST"
       });
       if (res.ok) {
@@ -219,7 +221,13 @@ function DashboardContent() {
   const selfCharacter = getDsaoCharacter(selfSurvey?.resultCode || actualCode);
   const riskScore = Number(processedData.bias_risk_score || 0);
   const userAgency = Math.round(Number(metaGap.UAS?.actual || 0));
-  const diversity = Math.round(Number(metaGap.TDS?.actual || categoryShares.length * 10));
+  const insights = processedData.insights || {};
+  const searchKeywords: SearchKeyword[] = Array.isArray(insights.search_keywords) ? insights.search_keywords : [];
+  const categoryShares: CategoryShare[] = Array.isArray(insights.category_shares) ? insights.category_shares : [];
+  const reportInsights: string[] = Array.isArray(insights.report_insights) ? insights.report_insights : [];
+  const directInterestSummary = insights.direct_interest_summary || "검색 기록 부족";
+  const algorithmInterestSummary = insights.algorithm_interest_summary || "분류 데이터 부족";
+  const diversity = Math.round(Number(metaGap.TDS?.actual || 0));
   const misconceptionIndex = Math.round(Number(processedData.misconception?.index || 0));
 
   return (
@@ -291,49 +299,65 @@ function DashboardContent() {
               <Sparkles className="text-teal-700" size={24} />
             </div>
             <div className="mt-5 space-y-3">
-              {searchKeywords.map((item, index) => (
-                <div key={item.keyword} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
-                  <span className="text-xs font-black text-slate-400">{index + 1}</span>
-                  <span className="flex-1 text-sm font-black text-slate-800">{item.keyword}</span>
-                  <span className="text-xs font-bold text-slate-500">{item.count}회</span>
+              {searchKeywords.length > 0 ? (
+                searchKeywords.map((item, index) => (
+                  <div key={item.keyword} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
+                    <span className="text-xs font-black text-slate-400">{index + 1}</span>
+                    <span className="flex-1 text-sm font-black text-slate-800">{item.keyword}</span>
+                    <span className="text-xs font-bold text-slate-500">{item.count}회</span>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-5 text-sm font-bold text-slate-500">
+                  검색 기록이 부족해 키워드 맵을 계산하지 못했습니다.
                 </div>
-              ))}
+              )}
             </div>
             <div className="mt-5 rounded-3xl border border-slate-200 bg-[#fbfaf7] p-4">
               <p className="text-sm font-black text-slate-950">검색어 비중 버블</p>
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                {searchKeywords.map((item) => (
-                  <span
-                    key={item.keyword}
-                    className="rounded-full bg-white px-3 py-1.5 font-black text-slate-700 shadow-sm"
-                    style={{ fontSize: `${Math.max(12, item.count + 1)}px` }}
-                  >
-                    {item.keyword}
-                  </span>
-                ))}
+                {searchKeywords.length > 0 ? (
+                  searchKeywords.map((item) => (
+                    <span
+                      key={item.keyword}
+                      className="rounded-full bg-white px-3 py-1.5 font-black text-slate-700 shadow-sm"
+                      style={{ fontSize: `${Math.max(12, Math.min(24, item.count + 12))}px` }}
+                    >
+                      {item.keyword}
+                    </span>
+                  ))
+                ) : (
+                  <span className="rounded-full bg-white px-3 py-1.5 text-sm font-black text-slate-500 shadow-sm">검색 데이터 없음</span>
+                )}
               </div>
             </div>
             <div className="mt-5 space-y-3">
-              {categoryShares.map((item) => (
-                <div key={item.name}>
-                  <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
-                    <span>{item.name}</span>
-                    <span>{item.value}%</span>
+              {categoryShares.length > 0 ? (
+                categoryShares.map((item) => (
+                  <div key={item.name}>
+                    <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
+                      <span>{item.name}</span>
+                      <span>{Math.round(Number(item.value || 0))}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100">
+                      <div className={["h-full rounded-full", item.tone].join(" ")} style={{ width: `${Math.max(0, Math.min(100, Number(item.value || 0)))}%` }} />
+                    </div>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-100">
-                    <div className={["h-full rounded-full", item.tone].join(" ")} style={{ width: `${item.value}%` }} />
-                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm font-bold text-slate-500">
+                  NLP 주제 분류 결과가 부족합니다.
                 </div>
-              ))}
+              )}
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="rounded-3xl border border-slate-200 bg-white p-4">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">내가 직접 찾은 관심사</p>
-                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">자기계발 · 디지털 디톡스 · 노트북 추천</p>
+                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{directInterestSummary}</p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-4">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">알고리즘이 많이 보여준 관심사</p>
-                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">쇼츠 · 이슈 영상 · 자극형 콘텐츠</p>
+                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{algorithmInterestSummary}</p>
               </div>
             </div>
             <p className="mt-5 text-xs font-semibold leading-5 text-slate-500">

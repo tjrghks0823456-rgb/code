@@ -50,3 +50,10 @@
 - mock/fallback 처리: NLP와 YouTube mock 응답에 `mock_used`/`fallback_used` 플래그를 추가했다. 분석 라우터는 더 이상 fake NLP 기본 카테고리를 만들지 않고, 실패 시 낮은 confidence warning으로 처리한다.
 - 확인 방법: `backend`에서 `.\venv\Scripts\python.exe -m compileall app`를 실행해 문법 검사를 통과했고, 샘플 `norm_event` dict로 6축 상세 점수와 warning이 생성되는 것을 확인했다.
 - 다음 단계 TODO: 프론트 dashboard 연결, `insightMock` 제거, upload parser 300개 제한 설정화, YouTube duration API 연동은 이번 1차 범위에서 제외하고 다음 단계로 남겼다.
+
+### 10. 대시보드 실제 인사이트 연결
+- 무엇을 수정했나: `dashboard/summary` API가 `norm_event`와 `nlp_result`를 다시 읽어 검색어 상위 목록, NLP 카테고리 비중, 출처 비중, 짧은 해석 문장을 `insights`로 반환하도록 했다.
+- 왜 수정했나: 대시보드가 `insightMock`의 고정 검색어/카테고리/해석을 사용하고 있어 실제 업로드 결과와 화면 인사이트가 맞지 않았다.
+- 프론트 반영: `dashboard/page.tsx`에서 `insightMock` import를 제거하고 `processedData.insights`를 사용하도록 변경했다. 검색어나 NLP 주제가 부족하면 임시값 대신 데이터 부족 상태를 표시한다.
+- 설정 정리: `apiConfig.ts`를 추가해 `API_BASE_URL`과 `DEFAULT_USER_ID`를 공통 관리하고, dashboard/upload/mission의 하드코딩된 API 주소를 이 설정으로 교체했다.
+- 확인 방법: 백엔드 `compileall`, 프론트 TypeScript `tsc --noEmit`, 승인 권한의 Next production build를 모두 통과했다.

@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 from app.core.database import db_client
@@ -106,6 +107,139 @@ def build_score_warnings(exception_codes: List[str]) -> List[Dict[str, str]]:
 
     return warnings
 
+INSIGHT_TONES = [
+    "bg-rose-500",
+    "bg-emerald-500",
+    "bg-sky-500",
+    "bg-amber-500",
+    "bg-indigo-500",
+    "bg-teal-500",
+]
+
+UNKNOWN_SOURCE_VALUES = {"", "unknown", "none", "null", "n/a"}
+
+def clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+def is_known_value(value: Any) -> bool:
+    return clean_text(value).lower() not in UNKNOWN_SOURCE_VALUES
+
+def top_level_category(category: Any) -> str:
+    if isinstance(category, dict):
+        raw_name = category.get("name", "")
+    else:
+        raw_name = category
+    name = clean_text(raw_name)
+    if not name:
+        return ""
+    parts = [part.strip() for part in name.split("/") if part.strip()]
+    return parts[0] if parts else name
+
+def fetch_nlp_results_for_file(file_id: str) -> List[Dict[str, Any]]:
+    sessions = db_client.fetch_data("session_text", {"file_id": file_id})
+    results: List[Dict[str, Any]] = []
+    for session in sessions:
+        session_id = session.get("id")
+        if not session_id:
+            continue
+        results.extend(db_client.fetch_data("nlp_result", {"session_id": session_id}))
+    return results
+
+def build_distribution_shares(counter: Counter, top_limit: int = 6) -> List[Dict[str, Any]]:
+    total = sum(counter.values())
+    if total <= 0:
+        return []
+    shares = []
+    for index, (name, count) in enumerate(counter.most_common(top_limit)):
+        value = round((count / total) * 100.0, 1)
+        shares.append({
+            "name": name,
+            "value": value,
+            "count": count,
+            "tone": INSIGHT_TONES[index % len(INSIGHT_TONES)]
+        })
+    return shares
+
+def build_dashboard_insights(
+    events: List[Dict[str, Any]],
+    nlp_results: List[Dict[str, Any]],
+    axis_scores: Dict[str, float],
+    score_warnings: List[Dict[str, str]]
+) -> Dict[str, Any]:
+    search_counter: Counter = Counter()
+    topic_counter: Counter = Counter()
+    channel_counter: Counter = Counter()
+
+    for event in events:
+        action_type = clean_text(event.get("action_type")).lower()
+        source_type = clean_text(event.get("source_type")).lower()
+        title = clean_text(event.get("text_base"))
+
+        if (action_type == "search" or source_type == "search_history") and title:
+            search_counter[title] += 1
+
+        channel = clean_text(event.get("channel_name") or event.get("channel_url") or event.get("source_surface"))
+        if source_type != "search_history" and is_known_value(channel):
+            channel_counter[channel] += 1
+
+    for result in nlp_results:
+        categories = result.get("categories_json", [])
+        if not isinstance(categories, list):
+            continue
+        for category in categories:
+            topic = top_level_category(category)
+            if topic:
+                topic_counter[topic] += 1
+
+    topic_shares = build_distribution_shares(topic_counter)
+    channel_shares = build_distribution_shares(channel_counter, top_limit=5)
+    search_keywords = [
+        {
+            "keyword": keyword,
+            "count": count,
+            "category": topic_shares[0]["name"] if topic_shares else "검색"
+        }
+        for keyword, count in search_counter.most_common(8)
+    ]
+
+    report_insights: List[str] = []
+    if search_keywords:
+        top_search = search_keywords[0]
+        report_insights.append(f"가장 많이 반복된 검색어는 '{top_search['keyword']}'이며 {top_search['count']}회 감지되었습니다.")
+    else:
+        report_insights.append("검색 기록이 없거나 부족해 직접 탐색 관심사는 낮은 신뢰도로 해석됩니다.")
+
+    if topic_shares:
+        top_topic = topic_shares[0]
+        report_insights.append(f"NLP 기준 최상위 관심 주제는 '{top_topic['name']}'로 전체 주제 신호의 {top_topic['value']}%를 차지합니다.")
+    else:
+        report_insights.append("NLP 주제 분류 결과가 부족해 카테고리 비중은 아직 계산되지 않았습니다.")
+
+    if channel_shares:
+        top_channel = channel_shares[0]
+        report_insights.append(f"가장 많이 노출된 출처는 '{top_channel['name']}'이며 출처 균형 점수는 {round(float(axis_scores.get('SBS', 0.0)), 1)}점입니다.")
+
+    if score_warnings:
+        report_insights.append(f"{len(score_warnings)}개의 신뢰도 경고가 있어 일부 지표는 참고용으로 봐야 합니다.")
+
+    direct_interest_summary = " · ".join(item["keyword"] for item in search_keywords[:3]) if search_keywords else "검색 기록 부족"
+    algorithm_interest_summary = (
+        " · ".join(item["name"] for item in topic_shares[:3])
+        if topic_shares
+        else (" · ".join(item["name"] for item in channel_shares[:3]) if channel_shares else "분류 데이터 부족")
+    )
+
+    return {
+        "search_keywords": search_keywords,
+        "category_shares": topic_shares,
+        "channel_shares": channel_shares,
+        "report_insights": report_insights,
+        "direct_interest_summary": direct_interest_summary,
+        "algorithm_interest_summary": algorithm_interest_summary
+    }
+
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
     run_id: str,
@@ -177,6 +311,7 @@ async def get_dashboard_summary(
         # --- [NEW] Calculate Actual DSAO based on actual watch data ---
         file_id = run["file_id"]
         events = db_client.fetch_data("norm_event", {"file_id": file_id})
+        nlp_results = fetch_nlp_results_for_file(file_id)
         view_events = [e for e in events if e.get("action_type") == "view"]
         long_views = [e for e in view_events if e.get("time_delta_sec") is not None and e.get("time_delta_sec") >= 180]
         
@@ -212,6 +347,7 @@ async def get_dashboard_summary(
             "PNML": "자동재생 한우물형"
         }
         actual_dsao_name = DSAO_NAMES.get(actual_dsao_code, "미지의 미디어 탐험가")
+        insights = build_dashboard_insights(events, nlp_results, axis_scores, score_warnings)
         
         return {
             "run_id": run_id,
@@ -242,6 +378,7 @@ async def get_dashboard_summary(
             },
             "exception_codes": exception_codes,
             "score_warnings": score_warnings,
+            "insights": insights,
             "meta_gap": meta_gap,
             "misconception": {
                 "index": misconception_index,
