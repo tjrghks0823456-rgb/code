@@ -64,6 +64,8 @@ SENTIMENT_THRESHOLDS = {
 
 DURATION_CONFIDENCE_VALUES = {
     "timeline": 1.0,
+    "timeline_capped_api": 1.0,
+    "timeline_api": 1.0,
     "api": 1.0,
     "medium": 0.5,
     "estimated": 0.5,
@@ -100,8 +102,7 @@ TOXIC_CATEGORY_KEYWORDS = [
     "hate",
 ]
 
-# Next-phase TODOs requested by the implementation brief:
-# - Move upload parser 300-item caps into parser configuration.
-# - Replace upload duration estimates with YouTube API duration and richer
-#   chronological timeline inference.
-# - Keep frontend insightMock removal for the separate dashboard phase.
+# Completed hardcoding cleanup scope:
+# - Upload parser limits are centralized in upload_config.py.
+# - Watch duration now prefers YouTube API duration, then chronological timeline
+#   inference, then explicit heuristic defaults.

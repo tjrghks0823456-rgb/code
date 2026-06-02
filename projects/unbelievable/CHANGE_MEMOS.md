@@ -1,5 +1,14 @@
 # Change Memos
 
+## 2026-06-02 추가 메모
+
+### 11. 업로드 파서 제한값과 시청시간 계산식 정리
+- 무엇을 수정했나: `upload_config.py`를 추가해 ZIP 제한, HTML/JSON/CSV 파서 최대 처리량, 시청시간 추정 기본값, 타임라인 최대 간격, YouTube 메타데이터 조회 한도를 한 곳에서 관리하도록 바꿨다.
+- 왜 수정했나: `upload.py` 안에 흩어져 있던 `300개 제한`, `45초/300초 추정`, `5초 필터`, `6시간 타임라인 간격` 같은 값이 실제 계산 기준인지 임시값인지 구분하기 어려웠다.
+- 실제 계산 기준: 시청 이벤트는 먼저 YouTube Data API의 `contentDetails.duration`을 사용하고, API duration이 없으면 다음 이벤트까지의 시간 간격으로 상한을 잡으며, 그래도 부족하면 쇼츠/일반 영상 휴리스틱을 쓴다.
+- 분석 반영: `duration_source_counts`를 업로드 응답에 추가해 `youtube_api`, `timeline_capped_api`, `timeline_gap`, `shorts_heuristic`, `default_heuristic` 중 어떤 기준이 쓰였는지 확인할 수 있게 했다.
+- 확인 방법: 백엔드에서 `.\venv\Scripts\python.exe -m compileall app`를 통과했고, `parse_iso8601_duration('PT1H2M3S')`가 `3723`초로 계산되는 것을 확인했다.
+
 ## 2026-06-02
 
 ### 1. Google Takeout 분류 오류 수정

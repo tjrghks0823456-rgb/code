@@ -10,6 +10,8 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from bs4 import BeautifulSoup
 from app.core.database import db_client
+from app.core.upload_config import DURATION_LIMITS, PARSER_LIMITS, ZIP_LIMITS
+from app.core.youtube import parse_iso8601_duration, youtube_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,9 +40,9 @@ YOUTUBE_HINTS = [
     "채널",
 ]
 
-MAX_ZIP_FILE_COUNT = 3000
-MAX_SINGLE_FILE_SIZE = 30 * 1024 * 1024  # 30MB
-MAX_TOTAL_EXTRACT_SIZE = 150 * 1024 * 1024  # 150MB
+MAX_ZIP_FILE_COUNT = ZIP_LIMITS["max_file_count"]
+MAX_SINGLE_FILE_SIZE = ZIP_LIMITS["max_single_file_size"]
+MAX_TOTAL_EXTRACT_SIZE = ZIP_LIMITS["max_total_extract_size"]
 
 def extract_video_id(url: str) -> Optional[str]:
     if not url:
@@ -59,6 +61,103 @@ def extract_video_id(url: str) -> Optional[str]:
     except Exception:
         pass
     return None
+
+def is_shorts_item(item: Dict[str, Any]) -> bool:
+    title = (item.get("title_text") or item.get("text_base") or "").lower()
+    url = (item.get("title_url") or "").lower()
+    return "shorts" in title or "#shorts" in title or "/shorts/" in url or "쇼츠" in title
+
+def estimate_default_duration(item: Dict[str, Any]) -> tuple:
+    if item.get("action_type") != "view":
+        return None, "unknown", "not_applicable"
+
+    if is_shorts_item(item):
+        return DURATION_LIMITS["shorts_default_sec"], "medium", "shorts_heuristic"
+
+    return DURATION_LIMITS["standard_default_sec"], "low", "default_heuristic"
+
+def count_duration_sources(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for event in events:
+        source = event.get("duration_source") or event.get("duration_confidence") or "unknown"
+        counts[source] = counts.get(source, 0) + 1
+    return counts
+
+def apply_youtube_duration_metadata(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    seen = set()
+    video_ids = []
+    for event in events:
+        if event.get("action_type") != "view":
+            continue
+        video_id = event.get("video_id")
+        if not video_id or video_id in seen:
+            continue
+        seen.add(video_id)
+        video_ids.append(video_id)
+
+    metadata_limit = DURATION_LIMITS["metadata_video_limit"]
+    metadata_by_id: Dict[str, Dict[str, Any]] = {}
+    for video_id in video_ids[:metadata_limit]:
+        metadata_by_id[video_id] = youtube_client.get_video_metadata(video_id)
+
+    for event in events:
+        video_id = event.get("video_id")
+        metadata = metadata_by_id.get(video_id)
+        if not metadata:
+            if video_id and len(video_ids) > metadata_limit:
+                event["duration_metadata_status"] = "metadata_limit_exceeded"
+            continue
+
+        event["youtube_metadata_api_success"] = bool(metadata.get("api_success"))
+        event["youtube_metadata_mock_used"] = bool(metadata.get("mock_used"))
+        event["youtube_metadata_fallback_used"] = bool(metadata.get("fallback_used"))
+
+        duration_sec = metadata.get("duration_sec")
+        if metadata.get("api_success") and duration_sec:
+            event["metadata_duration_sec"] = duration_sec
+            event["estimated_duration_sec"] = duration_sec
+            event["duration_confidence"] = "api"
+            event["duration_source"] = "youtube_api"
+        elif duration_sec:
+            event["mock_metadata_duration_sec"] = duration_sec
+
+    return count_duration_sources(events)
+
+def apply_timeline_duration_estimates(timed_events: List[tuple]) -> None:
+    max_gap_sec = DURATION_LIMITS["max_timeline_gap_sec"]
+    default_sec = DURATION_LIMITS["standard_default_sec"]
+
+    timed_events.sort(key=lambda pair: pair[0])
+    for idx, (event_time, event) in enumerate(timed_events[:-1]):
+        if event["action_type"] != "view":
+            continue
+
+        next_event_time = timed_events[idx + 1][0]
+        gap_sec = int((next_event_time - event_time).total_seconds())
+        if gap_sec <= 0 or gap_sec > max_gap_sec:
+            continue
+
+        event["timeline_gap_sec"] = gap_sec
+        metadata_duration = event.get("metadata_duration_sec")
+        current_estimate = event.get("estimated_duration_sec") or default_sec
+
+        if metadata_duration:
+            bounded_duration = max(1, min(gap_sec, metadata_duration))
+            event["time_delta_sec"] = bounded_duration
+            event["estimated_duration_sec"] = metadata_duration
+            if bounded_duration < metadata_duration:
+                event["duration_confidence"] = "timeline_capped_api"
+                event["duration_source"] = "timeline_capped_api"
+            else:
+                event["duration_confidence"] = "api"
+                event["duration_source"] = "youtube_api"
+            continue
+
+        bounded_duration = max(1, min(gap_sec, current_estimate))
+        event["time_delta_sec"] = bounded_duration
+        event["estimated_duration_sec"] = bounded_duration
+        event["duration_confidence"] = "timeline"
+        event["duration_source"] = "timeline_gap"
 
 def classify_takeout_file(path: str) -> str:
     lower = path.replace("\\", "/").lower()
@@ -218,10 +317,10 @@ def parse_takeout_html_timestamp(timestamp_str: str) -> Optional[str]:
     return None
 
 def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
-    # Extremely fast extraction of the first 300 cells to prevent BeautifulSoup hanging on 10MB-100MB files
+    # Fast extraction of bounded cells to prevent BeautifulSoup hanging on huge Takeout files.
     cells_html = []
     start_pos = 0
-    for _ in range(300):
+    for _ in range(PARSER_LIMITS["max_html_content_cells"]):
         pos = html_content.find('class="content-cell', start_pos)
         if pos == -1:
             break
@@ -314,7 +413,7 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
     if not isinstance(raw_items, list):
         return []
 
-    for item in raw_items[:300]:
+    for item in raw_items[:PARSER_LIMITS["max_json_history_items"]]:
         if not isinstance(item, dict):
             continue
 
@@ -397,7 +496,7 @@ def parse_youtube_subscription(content: str, is_json: bool) -> List[dict]:
         try:
             soup = BeautifulSoup(content, "html.parser")
             links = soup.find_all("a")
-            for link in links[:300]:
+            for link in links[:PARSER_LIMITS["max_html_links"]]:
                 name = link.get_text().strip()
                 url = link.get("href", "")
                 parsed_items.append({
@@ -440,7 +539,7 @@ def parse_youtube_playlist(content: str, is_json: bool) -> List[dict]:
         try:
             soup = BeautifulSoup(content, "html.parser")
             links = soup.find_all("a")
-            for link in links[:300]:
+            for link in links[:PARSER_LIMITS["max_html_links"]]:
                 title = link.get_text().strip()
                 url = link.get("href", "")
                 video_id = extract_video_id(url)
@@ -494,7 +593,7 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
         else:
             records = []
 
-        for item in records[:300]:
+        for item in records[:PARSER_LIMITS["max_auxiliary_records"]]:
             if not isinstance(item, dict):
                 continue
             snippet = item.get("snippet", {}) if isinstance(item.get("snippet", {}), dict) else {}
@@ -531,7 +630,7 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
 
     try:
         soup = BeautifulSoup(content, "html.parser")
-        for link in soup.find_all("a")[:300]:
+        for link in soup.find_all("a")[:PARSER_LIMITS["max_html_links"]]:
             append_item(link.get_text().strip(), link.get("href", ""))
     except Exception:
         pass
@@ -543,7 +642,7 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
         csv_text = StringIO(content)
         reader = csv.DictReader(csv_text)
         if reader.fieldnames:
-            for row in list(reader)[:300]:
+            for row in list(reader)[:PARSER_LIMITS["max_csv_rows"]]:
                 title = pick_first(row, [
                     "title", "Title", "name", "Name", "channel", "Channel", "comment", "Comment", "message", "Message",
                     "채널 제목", "채널 제목(원본)", "댓글 텍스트", "실시간 채팅 텍스트",
@@ -560,7 +659,7 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
                 append_item(title, url, channel_name, event_time)
         else:
             csv_text.seek(0)
-            for row in list(csv.reader(csv_text))[:300]:
+            for row in list(csv.reader(csv_text))[:PARSER_LIMITS["max_csv_rows"]]:
                 values = [cell.strip() for cell in row if cell.strip()]
                 if values:
                     append_item(" | ".join(values[:3]))
@@ -604,7 +703,7 @@ async def upload_file(
                 is_json = False
 
         if is_json and isinstance(raw_items, list):
-            for i, item in enumerate(raw_items[:200]):
+            for i, item in enumerate(raw_items[:PARSER_LIMITS["legacy_upload_json_items"]]):
                 if not isinstance(item, dict):
                     continue
 
@@ -621,6 +720,15 @@ async def upload_file(
                     title_text = raw_title[len("Searched for "):]
                     current_action_type = "search"
 
+                title_url = item.get("titleUrl", "")
+                video_id = extract_video_id(title_url)
+                duration_item = {
+                    "title_text": title_text,
+                    "title_url": title_url,
+                    "action_type": current_action_type,
+                }
+                estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
+
                 item_time = item.get("time", "")
                 parsed_time_str = None
                 if item_time:
@@ -636,26 +744,25 @@ async def upload_file(
                 if not parsed_time_str:
                     parsed_time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-                simulated_duration = 300
-                if i % 10 == 0:
-                    simulated_duration = 3
-                elif i % 4 == 0:
-                    simulated_duration = 45
-
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
                     "file_id": file_id,
                     "event_time": parsed_time_str,
-                    "time_delta_sec": simulated_duration,
+                    "time_delta_sec": None,
                     "text_base": title_text,
                     "platform": platform,
                     "action_type": current_action_type,
-                    "source_surface": "home_feed" if i % 2 == 0 else "search_results"
+                    "source_surface": "home_feed" if i % 2 == 0 else "search_results",
+                    "title_url": title_url,
+                    "video_id": video_id,
+                    "estimated_duration_sec": estimated_duration_sec,
+                    "duration_confidence": duration_confidence,
+                    "duration_source": duration_source
                 })
         else:
             lines = text_content.split("\n")
             base_time = datetime.utcnow()
-            for i, line in enumerate(lines[:100]):
+            for i, line in enumerate(lines[:PARSER_LIMITS["legacy_upload_text_lines"]]):
                 cleaned_line = line.strip()
                 if not cleaned_line:
                     continue
@@ -666,28 +773,45 @@ async def upload_file(
                     if len(parts) > 1:
                         title_text = parts[0].strip("\" ")
 
-                simulated_duration = 300
-                if i % 10 == 0:
-                    simulated_duration = 3
-                elif i % 4 == 0:
-                    simulated_duration = 45
+                duration_item = {
+                    "title_text": title_text,
+                    "action_type": action_type,
+                }
+                estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
 
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
                     "file_id": file_id,
                     "event_time": datetime.fromtimestamp(base_time.timestamp() - (i * 600)).strftime("%Y-%m-%d %H:%M:%S"),
-                    "time_delta_sec": simulated_duration,
+                    "time_delta_sec": None,
                     "text_base": title_text,
                     "platform": platform,
                     "action_type": action_type,
-                    "source_surface": "home_feed" if i % 2 == 0 else "search_results"
+                    "source_surface": "home_feed" if i % 2 == 0 else "search_results",
+                    "estimated_duration_sec": estimated_duration_sec,
+                    "duration_confidence": duration_confidence,
+                    "duration_source": duration_source
                 })
+
+        apply_youtube_duration_metadata(parsed_events)
+        timed_events = []
+        for event in parsed_events:
+            try:
+                timed_events.append((datetime.strptime(event["event_time"], "%Y-%m-%d %H:%M:%S"), event))
+            except Exception:
+                continue
+        apply_timeline_duration_estimates(timed_events)
+        duration_source_counts = count_duration_sources(parsed_events)
 
         filtered_events = []
         skipped_count = 0
 
         for event in parsed_events:
-            if event["action_type"] == "view" and event["time_delta_sec"] is not None and event["time_delta_sec"] < 5:
+            duration_for_filter = event.get("time_delta_sec")
+            if duration_for_filter is None:
+                duration_for_filter = event.get("estimated_duration_sec")
+
+            if event["action_type"] == "view" and duration_for_filter is not None and duration_for_filter < DURATION_LIMITS["min_watch_sec"]:
                 skipped_count += 1
                 continue
             filtered_events.append(event)
@@ -717,7 +841,8 @@ async def upload_file(
             "total_parsed": len(parsed_events),
             "total_saved": len(filtered_events),
             "skipped_fake_dopamine": skipped_count,
-            "message": f"Successfully parsed {len(parsed_events)} events. Filtered out {skipped_count} short-form dopamine loops (< 5s)."
+            "duration_source_counts": duration_source_counts,
+            "message": f"Successfully parsed {len(parsed_events)} events. Filtered out {skipped_count} short-form dopamine loops (< {DURATION_LIMITS['min_watch_sec']}s)."
         }
     except Exception as e:
         logger.error(f"Upload processing crash: {e}")
@@ -851,11 +976,7 @@ async def upload_takeout(
             parsed_source_counts[kind] = parsed_source_counts.get(kind, 0) + len(items)
 
             for idx, item in enumerate(items):
-                # Context-aware duration estimation
-                title_lower = item["title_text"].lower()
-                is_shorts = "shorts" in title_lower or "#shorts" in title_lower or "쇼츠" in title_lower
-                estimated_duration_sec = 45 if is_shorts else 300
-                duration_confidence = "medium" if is_shorts else "low"
+                estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(item)
 
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
@@ -872,8 +993,11 @@ async def upload_takeout(
                     "title_url": item.get("title_url"),
                     "video_id": item.get("video_id"),
                     "estimated_duration_sec": estimated_duration_sec,
-                    "duration_confidence": duration_confidence
+                    "duration_confidence": duration_confidence,
+                    "duration_source": duration_source
                 })
+
+        duration_source_counts = apply_youtube_duration_metadata(parsed_events)
 
         # 4. Filter watch history views for dopamine filter & sessions
         # (Exclude playlist/subscription from standard watch filters)
@@ -886,18 +1010,8 @@ async def upload_takeout(
             except Exception:
                 continue
 
-        timed_events.sort(key=lambda pair: pair[0])
-        for idx, (event_time, event) in enumerate(timed_events[:-1]):
-            if event["action_type"] != "view":
-                continue
-
-            next_event_time = timed_events[idx + 1][0]
-            gap_sec = int((next_event_time - event_time).total_seconds())
-            if 0 < gap_sec <= 6 * 60 * 60:
-                event["time_delta_sec"] = gap_sec
-                if gap_sec < event.get("estimated_duration_sec", 300):
-                    event["estimated_duration_sec"] = max(1, gap_sec)
-                    event["duration_confidence"] = "timeline"
+        apply_timeline_duration_estimates(timed_events)
+        duration_source_counts = count_duration_sources(parsed_events)
 
         filtered_events = []
         skipped_count = 0
@@ -908,7 +1022,7 @@ async def upload_takeout(
             if duration_for_filter is None:
                 duration_for_filter = event.get("estimated_duration_sec")
 
-            if event["action_type"] == "view" and duration_for_filter is not None and duration_for_filter < 5:
+            if event["action_type"] == "view" and duration_for_filter is not None and duration_for_filter < DURATION_LIMITS["min_watch_sec"]:
                 skipped_count += 1
                 continue
             filtered_events.append(event)
@@ -999,7 +1113,8 @@ async def upload_takeout(
             "aux_session_count": aux_session_count,
             "total_parsed": len(parsed_events),
             "total_saved": len(final_events),
-            "skipped_fake_dopamine": skipped_count
+            "skipped_fake_dopamine": skipped_count,
+            "duration_source_counts": duration_source_counts
         }
 
     except HTTPException as he:
@@ -1038,7 +1153,7 @@ async def test_youtube_api(video_id: str = "dQw4w9WgXcQ"):
     try:
         url = "https://www.googleapis.com/youtube/v3/videos"
         params = {
-            "part": "snippet",
+            "part": "snippet,contentDetails",
             "id": video_id,
             "key": api_key
         }
@@ -1064,6 +1179,7 @@ async def test_youtube_api(video_id: str = "dQw4w9WgXcQ"):
             }
 
         snippet = items[0].get("snippet", {})
+        content_details = items[0].get("contentDetails", {})
         thumbnails = snippet.get("thumbnails", {})
         thumbnail_url = thumbnails.get("high", {}).get("url", "") or thumbnails.get("default", {}).get("url", "")
 
@@ -1076,7 +1192,9 @@ async def test_youtube_api(video_id: str = "dQw4w9WgXcQ"):
                 "channel_title": snippet.get("channelTitle", ""),
                 "category_id": snippet.get("categoryId", ""),
                 "published_at": snippet.get("publishedAt", ""),
-                "thumbnail_url": thumbnail_url
+                "thumbnail_url": thumbnail_url,
+                "duration_iso8601": content_details.get("duration", ""),
+                "duration_sec": parse_iso8601_duration(content_details.get("duration", ""))
             }
         }
     except HTTPException as he:

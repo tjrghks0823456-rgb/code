@@ -1,8 +1,38 @@
 import logging
+import re
 from typing import Dict, Any, Optional
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+ISO8601_DURATION_RE = re.compile(
+    r"^P"
+    r"(?:(?P<days>\d+)D)?"
+    r"(?:T"
+    r"(?:(?P<hours>\d+)H)?"
+    r"(?:(?P<minutes>\d+)M)?"
+    r"(?:(?P<seconds>\d+)S)?"
+    r")?$"
+)
+
+
+def parse_iso8601_duration(duration: Optional[str]) -> Optional[int]:
+    if not duration:
+        return None
+
+    match = ISO8601_DURATION_RE.match(duration)
+    if not match:
+        return None
+
+    parts = {key: int(value or 0) for key, value in match.groupdict().items()}
+    total_seconds = (
+        parts["days"] * 24 * 60 * 60
+        + parts["hours"] * 60 * 60
+        + parts["minutes"] * 60
+        + parts["seconds"]
+    )
+    return total_seconds if total_seconds > 0 else None
+
 
 class YouTubeClient:
     def __init__(self):
@@ -23,7 +53,7 @@ class YouTubeClient:
             import httpx
             url = "https://www.googleapis.com/youtube/v3/videos"
             params = {
-                "part": "snippet,topicDetails",
+                "part": "snippet,contentDetails,topicDetails",
                 "id": video_id,
                 "key": self.api_key
             }
@@ -33,7 +63,9 @@ class YouTubeClient:
                 items = data.get("items", [])
                 if items:
                     snippet = items[0].get("snippet", {})
+                    content_details = items[0].get("contentDetails", {})
                     topic_details = items[0].get("topicDetails", {})
+                    duration_sec = parse_iso8601_duration(content_details.get("duration"))
                     
                     return {
                         "video_id": video_id,
@@ -43,6 +75,8 @@ class YouTubeClient:
                         "categoryId": snippet.get("categoryId", ""),
                         "channelId": snippet.get("channelId", ""),
                         "topicDetails": topic_details.get("topicIds", []) + topic_details.get("relevantTopicIds", []),
+                        "duration_iso8601": content_details.get("duration", ""),
+                        "duration_sec": duration_sec,
                         "api_success": True,
                         "mock_used": False,
                         "fallback_used": False
@@ -110,6 +144,8 @@ class YouTubeClient:
             "categoryId": "28", # Science & Technology
             "channelId": "UC_mock_semiconductor_channel",
             "topicDetails": ["/m/07g4xs", "/m/06lxs"],
+            "duration_iso8601": "PT8M30S",
+            "duration_sec": 510,
             "api_success": False,
             "mock_used": True,
             "fallback_used": False
