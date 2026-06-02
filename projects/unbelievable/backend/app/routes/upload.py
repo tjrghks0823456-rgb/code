@@ -3,7 +3,8 @@ import json
 import logging
 import zipfile
 import urllib.parse
-from io import BytesIO
+import csv
+from io import BytesIO, StringIO
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
@@ -23,6 +24,18 @@ YOUTUBE_HINTS = [
     "playlists",
     "comments",
     "live_chat",
+    "channels",
+    "channel",
+    "시청 기록",
+    "검색 기록",
+    "구독정보",
+    "구독 정보",
+    "재생목록",
+    "재생 목록",
+    "댓글",
+    "실시간 채팅",
+    "실시간채팅",
+    "채널",
 ]
 
 MAX_ZIP_FILE_COUNT = 3000
@@ -48,22 +61,27 @@ def extract_video_id(url: str) -> Optional[str]:
     return None
 
 def classify_takeout_file(path: str) -> str:
-    lower = path.lower()
-    if "watch-history" in lower:
-        return "watch_history"
-    if "search-history" in lower:
+    lower = path.replace("\\", "/").lower()
+    filename = lower.rsplit("/", 1)[-1]
+
+    if "search-history" in lower or "검색 기록" in filename:
         return "search_history"
-    if "subscriptions" in lower:
+    if "watch-history" in lower or "시청 기록" in filename or "/시청 기록/" in lower:
+        return "watch_history"
+    if "subscriptions" in lower or "subscription" in lower or "구독정보" in lower or "구독 정보" in lower:
         return "subscription"
-    if "playlists" in lower:
+    if "playlists" in lower or "playlist" in lower or "재생목록" in lower or "재생 목록" in lower:
         return "playlist"
-    if "comments" in lower:
+    if "comments" in lower or "comment" in lower or "댓글" in lower:
         return "comment"
-    if "live_chat" in lower or "live chat" in lower:
+    if "live_chat" in lower or "live chat" in lower or "실시간 채팅" in lower or "실시간채팅" in lower:
         return "live_chat"
+    if "channels" in lower or "channel" in lower or "채널" in lower:
+        return "channel"
     # The parent folder is often named "YouTube and YouTube Music", so only
     # classify explicit music-only exports as music noise.
     music_markers = [
+        "music (library and uploads)",
         "music-library",
         "music_library",
         "music uploads",
@@ -78,7 +96,7 @@ def classify_takeout_file(path: str) -> str:
 
 def is_supported_takeout_file(path: str) -> bool:
     lower = path.lower()
-    if not (lower.endswith(".json") or lower.endswith(".html")):
+    if not (lower.endswith(".json") or lower.endswith(".html") or lower.endswith(".csv") or lower.endswith(".txt")):
         return False
     kind = classify_takeout_file(lower)
     return kind != "unknown" and kind != "music"
@@ -381,6 +399,8 @@ def parse_youtube_subscription(content: str, is_json: bool) -> List[dict]:
                 })
         except Exception:
             pass
+        if not parsed_items:
+            parsed_items = parse_youtube_auxiliary(content, "subscription")
     return parsed_items
 
 def parse_youtube_playlist(content: str, is_json: bool) -> List[dict]:
@@ -423,6 +443,95 @@ def parse_youtube_playlist(content: str, is_json: bool) -> List[dict]:
                 })
         except Exception:
             pass
+        if not parsed_items:
+            parsed_items = parse_youtube_auxiliary(content, "playlist")
+    return parsed_items
+
+def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
+    parsed_items = []
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+    def append_item(title: str, url: Optional[str] = None, channel_name: Optional[str] = None, event_time: Optional[str] = None):
+        clean_title = (title or "").strip()
+        clean_url = (url or "").strip()
+        if not clean_title and clean_url:
+            clean_title = clean_url
+        if not clean_title:
+            return
+        parsed_items.append({
+            "title_text": clean_title[:500],
+            "action_type": action_type,
+            "event_time": event_time or now_str,
+            "title_url": clean_url or None,
+            "video_id": extract_video_id(clean_url),
+            "channel_name": channel_name or clean_title,
+            "channel_url": clean_url or None
+        })
+
+    def pick_first(data: Dict[str, Any], keys: List[str]) -> str:
+        for key in keys:
+            value = data.get(key)
+            if value:
+                return str(value)
+        return ""
+
+    try:
+        data = json.loads(content)
+        if isinstance(data, dict):
+            records = data.get("items") or data.get("comments") or data.get("messages") or data.get("channels") or [data]
+        elif isinstance(data, list):
+            records = data
+        else:
+            records = []
+
+        for item in records[:300]:
+            if not isinstance(item, dict):
+                continue
+            snippet = item.get("snippet", {}) if isinstance(item.get("snippet", {}), dict) else {}
+            title = (
+                pick_first(item, ["title", "name", "channelTitle", "text", "comment", "message", "content"])
+                or pick_first(snippet, ["title", "channelTitle", "textDisplay", "textOriginal", "description"])
+            )
+            url = pick_first(item, ["url", "channelUrl", "videoUrl", "titleUrl"])
+            channel_name = pick_first(item, ["channelName", "channelTitle", "author", "authorName"]) or pick_first(snippet, ["channelTitle", "authorDisplayName"])
+            raw_time = pick_first(item, ["time", "publishedAt", "createdAt", "timestamp"]) or pick_first(snippet, ["publishedAt"])
+            event_time = None
+            if raw_time:
+                event_time = raw_time.replace("Z", "").replace("T", " ").split(".")[0]
+            append_item(title, url, channel_name, event_time)
+    except Exception:
+        pass
+
+    if parsed_items:
+        return parsed_items
+
+    try:
+        soup = BeautifulSoup(content, "html.parser")
+        for link in soup.find_all("a")[:300]:
+            append_item(link.get_text().strip(), link.get("href", ""))
+    except Exception:
+        pass
+
+    if parsed_items:
+        return parsed_items
+
+    try:
+        csv_text = StringIO(content)
+        reader = csv.DictReader(csv_text)
+        if reader.fieldnames:
+            for row in list(reader)[:300]:
+                title = pick_first(row, ["title", "Title", "name", "Name", "channel", "Channel", "comment", "Comment", "message", "Message"])
+                url = pick_first(row, ["url", "URL", "channel_url", "Channel URL", "video_url", "Video URL"])
+                append_item(title, url)
+        else:
+            csv_text.seek(0)
+            for row in list(csv.reader(csv_text))[:300]:
+                values = [cell.strip() for cell in row if cell.strip()]
+                if values:
+                    append_item(" | ".join(values[:3]))
+    except Exception:
+        pass
+
     return parsed_items
 
 @router.post("/upload")
@@ -679,7 +788,8 @@ async def upload_takeout(
             "subscription": 0,
             "playlist": 0,
             "comment": 0,
-            "live_chat": 0
+            "live_chat": 0,
+            "channel": 0
         }
 
         for file_info in files_to_parse:
@@ -691,14 +801,17 @@ async def upload_takeout(
             is_json = name.lower().endswith(".json")
 
             if kind in ["watch_history", "search_history"]:
+                file_kind = "search" if kind == "search_history" else "watch"
                 if is_json:
-                    items = parse_youtube_json(content, "watch" if "watch" in name.lower() else "search")
+                    items = parse_youtube_json(content, file_kind)
                 else:
-                    items = parse_youtube_html(content, "watch" if "watch" in name.lower() else "search")
+                    items = parse_youtube_html(content, file_kind)
             elif kind == "subscription":
                 items = parse_youtube_subscription(content, is_json)
             elif kind == "playlist":
                 items = parse_youtube_playlist(content, is_json)
+            elif kind in ["comment", "live_chat", "channel"]:
+                items = parse_youtube_auxiliary(content, kind)
 
             parsed_source_counts[kind] = parsed_source_counts.get(kind, 0) + len(items)
 

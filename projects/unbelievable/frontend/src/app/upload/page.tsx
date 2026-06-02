@@ -9,11 +9,13 @@ import Card from "../../components/Card";
 import SectionTitle from "../../components/SectionTitle";
 import { loadSelfSurveyResult } from "../../utils/surveyStorage";
 
+type YoutubeFileKind = "watch" | "search" | "subscription" | "playlist" | "comment" | "liveChat" | "channel" | "music" | "unknown";
+
 type DetectedYoutubeFile = {
   file: File;
   name: string;
   relativePath: string;
-  kind: "watch" | "search" | "unknown";
+  kind: YoutubeFileKind;
 };
 
 const YOUTUBE_HINTS = [
@@ -22,16 +24,61 @@ const YOUTUBE_HINTS = [
   "watch-history",
   "search-history",
   "history",
+  "subscriptions",
+  "subscription",
+  "playlists",
+  "playlist",
+  "comments",
+  "comment",
+  "live_chat",
+  "live chat",
+  "channels",
+  "channel",
+  "시청 기록",
+  "검색 기록",
+  "구독정보",
+  "구독 정보",
+  "재생목록",
+  "재생 목록",
+  "댓글",
+  "실시간 채팅",
+  "실시간채팅",
+  "채널",
+  "music (library and uploads)",
 ];
+
+const kindMeta: Record<YoutubeFileKind, { label: string; dot: string; badge: string }> = {
+  watch: { label: "시청 기록", dot: "bg-rose-500", badge: "text-rose-700 bg-rose-50 border-rose-100" },
+  search: { label: "검색 기록", dot: "bg-blue-500", badge: "text-blue-700 bg-blue-50 border-blue-100" },
+  subscription: { label: "구독 정보", dot: "bg-teal-500", badge: "text-teal-700 bg-teal-50 border-teal-100" },
+  playlist: { label: "재생목록", dot: "bg-violet-500", badge: "text-violet-700 bg-violet-50 border-violet-100" },
+  comment: { label: "댓글", dot: "bg-amber-500", badge: "text-amber-700 bg-amber-50 border-amber-100" },
+  liveChat: { label: "실시간 채팅", dot: "bg-emerald-500", badge: "text-emerald-700 bg-emerald-50 border-emerald-100" },
+  channel: { label: "채널", dot: "bg-cyan-500", badge: "text-cyan-700 bg-cyan-50 border-cyan-100" },
+  music: { label: "음악 제외", dot: "bg-slate-300", badge: "text-slate-500 bg-slate-50 border-slate-100" },
+  unknown: { label: "후보 파일", dot: "bg-slate-400", badge: "text-slate-600 bg-slate-50 border-slate-100" },
+};
+
+function isUploadableKind(kind: YoutubeFileKind): boolean {
+  return kind !== "music" && kind !== "unknown";
+}
 
 function getRelativePath(file: File): string {
   return (file as any).webkitRelativePath || file.name;
 }
 
-function detectYoutubeKind(path: string): "watch" | "search" | "unknown" {
-  const lower = path.toLowerCase();
-  if (lower.includes("watch-history")) return "watch";
-  if (lower.includes("search-history")) return "search";
+function detectYoutubeKind(path: string): YoutubeFileKind {
+  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  const fileName = normalized.split("/").pop() ?? normalized;
+
+  if (normalized.includes("search-history") || fileName.includes("검색 기록")) return "search";
+  if (normalized.includes("watch-history") || fileName.includes("시청 기록") || normalized.includes("/시청 기록/")) return "watch";
+  if (normalized.includes("subscriptions") || normalized.includes("subscription") || normalized.includes("구독정보") || normalized.includes("구독 정보")) return "subscription";
+  if (normalized.includes("playlists") || normalized.includes("playlist") || normalized.includes("재생목록") || normalized.includes("재생 목록")) return "playlist";
+  if (normalized.includes("comments") || normalized.includes("comment") || normalized.includes("댓글")) return "comment";
+  if (normalized.includes("live_chat") || normalized.includes("live chat") || normalized.includes("실시간 채팅") || normalized.includes("실시간채팅")) return "liveChat";
+  if (normalized.includes("channels") || normalized.includes("channel") || normalized.includes("채널")) return "channel";
+  if (normalized.includes("music (library and uploads)") || normalized.includes("music-library") || normalized.includes("music_uploads") || normalized.includes("music uploads")) return "music";
   return "unknown";
 }
 
@@ -42,6 +89,8 @@ function isYoutubeCandidate(file: File): boolean {
   const isSupported =
     name.endsWith(".json") ||
     name.endsWith(".html") ||
+    name.endsWith(".csv") ||
+    name.endsWith(".txt") ||
     name.endsWith(".zip");
 
   if (!isSupported) return false;
@@ -96,6 +145,7 @@ export default function UploadPage() {
     if (selected.length === 0) return;
 
     const detected = detectYoutubeFiles(selected);
+    const uploadable = detected.filter((item) => isUploadableKind(item.kind));
     setSelectedFiles(selected);
     setDetectedFiles(detected);
     setZipFile(null); // Clear zip if folder uploaded
@@ -103,6 +153,13 @@ export default function UploadPage() {
     if (detected.length === 0) {
       setErrorMsg(
         "YouTube 시청 기록 파일을 찾지 못했습니다. Google Takeout에 YouTube 기록이 포함되어 있는지 확인해주세요."
+      );
+      return;
+    }
+
+    if (uploadable.length === 0) {
+      setErrorMsg(
+        "분석 가능한 YouTube 기록 파일을 찾지 못했습니다. 음악 폴더만 선택된 경우 시청 기록, 검색 기록, 댓글, 구독정보, 재생목록 폴더가 함께 포함되어야 합니다."
       );
       return;
     }
@@ -163,12 +220,17 @@ export default function UploadPage() {
       } else {
         // Treat as files drop
         const detected = detectYoutubeFiles(items);
+        const uploadable = detected.filter((item) => isUploadableKind(item.kind));
         setSelectedFiles(items);
         setDetectedFiles(detected);
         setZipFile(null);
 
         if (detected.length === 0) {
           setErrorMsg("YouTube 시청 기록 파일을 찾지 못했습니다. Google Takeout에 YouTube 기록이 포함되어 있는지 확인해주세요.");
+          return;
+        }
+        if (uploadable.length === 0) {
+          setErrorMsg("분석 가능한 YouTube 기록 파일을 찾지 못했습니다. 음악 폴더만 선택된 경우 다른 기록 폴더도 함께 포함해주세요.");
           return;
         }
         setErrorMsg(null);
@@ -178,7 +240,7 @@ export default function UploadPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!zipFile && detectedFiles.length === 0) return;
+    if (!zipFile && uploadableFiles.length === 0) return;
 
     setUploading(true);
     setErrorMsg(null);
@@ -190,7 +252,7 @@ export default function UploadPage() {
       if (zipFile) {
         formData.append("zip_file", zipFile);
       } else {
-        detectedFiles.forEach((item) => {
+        uploadableFiles.forEach((item) => {
           formData.append("files", item.file);
           formData.append("paths", item.relativePath);
         });
@@ -259,11 +321,8 @@ export default function UploadPage() {
     }
   };
 
-  const watchFiles = detectedFiles.filter(f => f.kind === "watch");
-  const searchFiles = detectedFiles.filter(f => f.kind === "search");
-  const unknownFiles = detectedFiles.filter(f => f.kind === "unknown");
-
-  const hasValidData = zipFile !== null || detectedFiles.length > 0;
+  const uploadableFiles = detectedFiles.filter((file) => isUploadableKind(file.kind));
+  const hasValidData = zipFile !== null || uploadableFiles.length > 0;
 
   return (
     <PageShell active="upload" compact>
@@ -409,7 +468,7 @@ export default function UploadPage() {
                       감지된 파일 결과
                     </h3>
                     <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                      분석 대상 파일: {zipFile ? 1 : detectedFiles.length}개
+                      분석 대상 파일: {zipFile ? 1 : uploadableFiles.length}개
                     </span>
                   </div>
 
@@ -430,50 +489,23 @@ export default function UploadPage() {
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                      {watchFiles.map((item, idx) => (
-                        <div key={`watch-${idx}`} className="flex items-center justify-between bg-[#fbfaf7] p-2.5 rounded-2xl border border-slate-100">
+                      {detectedFiles.map((item, idx) => {
+                        const meta = kindMeta[item.kind];
+                        return (
+                        <div key={`${item.kind}-${idx}`} className="flex items-center justify-between bg-[#fbfaf7] p-2.5 rounded-2xl border border-slate-100">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+                            <span className={`h-2 w-2 rounded-full ${meta.dot} shrink-0`} />
                             <div className="min-w-0">
                               <p className="text-xs font-black text-slate-950 truncate">{item.name}</p>
                               <p className="text-[10px] text-slate-500 truncate">{item.relativePath}</p>
                             </div>
                           </div>
-                          <span className="text-[9px] font-black text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full shrink-0">
-                            시청 기록
+                          <span className={`text-[9px] font-black border px-2 py-0.5 rounded-full shrink-0 ${meta.badge}`}>
+                            {meta.label}
                           </span>
                         </div>
-                      ))}
-
-                      {searchFiles.map((item, idx) => (
-                        <div key={`search-${idx}`} className="flex items-center justify-between bg-[#fbfaf7] p-2.5 rounded-2xl border border-slate-100">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-black text-slate-950 truncate">{item.name}</p>
-                              <p className="text-[10px] text-slate-500 truncate">{item.relativePath}</p>
-                            </div>
-                          </div>
-                          <span className="text-[9px] font-black text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full shrink-0">
-                            검색 기록
-                          </span>
-                        </div>
-                      ))}
-
-                      {unknownFiles.map((item, idx) => (
-                        <div key={`unknown-${idx}`} className="flex items-center justify-between bg-[#fbfaf7] p-2.5 rounded-2xl border border-slate-100">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-black text-slate-700 truncate">{item.name}</p>
-                              <p className="text-[10px] text-slate-500 truncate">{item.relativePath}</p>
-                            </div>
-                          </div>
-                          <span className="text-[9px] font-black text-slate-600 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full shrink-0">
-                            후보 파일
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -512,7 +544,7 @@ export default function UploadPage() {
                         <CheckCircle2 size={14} className="text-emerald-600" /> 개인정보 보안 및 수집 동의 완료
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-800 font-black">
-                        <CheckCircle2 size={14} className="text-emerald-600" /> {zipFile ? `ZIP 파일 대기 완료 (${zipFile.name})` : `YouTube 분석 파일 감지 완료 (${detectedFiles.length}개)`}
+                        <CheckCircle2 size={14} className="text-emerald-600" /> {zipFile ? `ZIP 파일 대기 완료 (${zipFile.name})` : `YouTube 분석 파일 감지 완료 (${uploadableFiles.length}개)`}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
                         <CheckCircle2 size={14} className="text-emerald-600" /> 짧은 노출 추정 필터 적용 대기 중
@@ -584,6 +616,24 @@ export default function UploadPage() {
                         <span className="text-[10px] font-bold text-slate-400 block">재생목록</span>
                         <span className="text-lg font-black mt-1 block text-violet-400">
                           {uploadSummary.parsed_source_counts?.playlist || 0}개
+                        </span>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 border border-white/10 p-3.5 hover:bg-white/10 transition-colors">
+                        <span className="text-[10px] font-bold text-slate-400 block">댓글</span>
+                        <span className="text-lg font-black mt-1 block text-amber-400">
+                          {uploadSummary.parsed_source_counts?.comment || 0}건
+                        </span>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 border border-white/10 p-3.5 hover:bg-white/10 transition-colors">
+                        <span className="text-[10px] font-bold text-slate-400 block">실시간 채팅</span>
+                        <span className="text-lg font-black mt-1 block text-emerald-400">
+                          {uploadSummary.parsed_source_counts?.live_chat || 0}건
+                        </span>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 border border-white/10 p-3.5 hover:bg-white/10 transition-colors">
+                        <span className="text-[10px] font-bold text-slate-400 block">채널</span>
+                        <span className="text-lg font-black mt-1 block text-cyan-400">
+                          {uploadSummary.parsed_source_counts?.channel || 0}개
                         </span>
                       </div>
                     </div>
