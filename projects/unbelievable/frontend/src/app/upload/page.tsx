@@ -639,6 +639,13 @@ export default function UploadPage() {
                       </div>
                     </div>
 
+                    <div className="mt-3 flex items-center justify-between rounded-2xl bg-orange-500/10 border border-orange-400/20 px-4 py-3">
+                      <span className="text-xs font-bold text-orange-100">광고 출처 제외</span>
+                      <span className="text-xs font-black text-orange-300">
+                        {uploadSummary.excluded_ad_count || 0}건 분석 제외
+                      </span>
+                    </div>
+
                     {/* Session Splitting Stats */}
                     <div className="mt-4 flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-4 py-3">
                       <div className="flex items-center gap-2">

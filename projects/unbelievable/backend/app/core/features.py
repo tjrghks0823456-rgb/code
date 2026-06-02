@@ -1,6 +1,7 @@
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.core.content_filters import detect_ad_event_reason
 from app.core.score_config import (
     CONFIDENCE_WEIGHTS,
     DURATION_CONFIDENCE_VALUES,
@@ -156,8 +157,12 @@ def extract_features(
 ) -> Dict[str, Any]:
     normalized_events: List[Dict[str, Any]] = []
     warnings: List[str] = []
+    excluded_ad_count = 0
 
     for event in events or []:
+        if detect_ad_event_reason(event):
+            excluded_ad_count += 1
+            continue
         normalized, event_warnings = normalize_event(event)
         if normalized:
             normalized_events.append(normalized)
@@ -267,6 +272,8 @@ def extract_features(
         warnings.append("fallback data used")
     if estimated_duration_count > 0:
         warnings.append("some watch durations are estimated")
+    if excluded_ad_count > 0:
+        warnings.append("ad events excluded from scoring")
 
     total_events = len(normalized_events)
     total_actions = max(total_events, 1)
@@ -344,4 +351,5 @@ def extract_features(
         "harmful_keyword_ratio": harmful_keyword_ratio,
         "repeated_short_exposure_ratio": repeated_short_exposure_ratio,
         "estimated_duration_count": estimated_duration_count,
+        "excluded_ad_count": excluded_ad_count,
     }

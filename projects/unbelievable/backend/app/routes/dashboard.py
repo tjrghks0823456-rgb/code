@@ -2,6 +2,7 @@ import logging
 from collections import Counter
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
+from app.core.content_filters import split_analysis_events
 from app.core.database import db_client
 from app.core.scoring import PERSONALITY_MAP
 
@@ -171,8 +172,9 @@ def build_dashboard_insights(
     search_counter: Counter = Counter()
     topic_counter: Counter = Counter()
     channel_counter: Counter = Counter()
+    analysis_events, excluded_ad_events = split_analysis_events(events)
 
-    for event in events:
+    for event in analysis_events:
         action_type = clean_text(event.get("action_type")).lower()
         source_type = clean_text(event.get("source_type")).lower()
         title = clean_text(event.get("text_base"))
@@ -221,6 +223,9 @@ def build_dashboard_insights(
         top_channel = channel_shares[0]
         report_insights.append(f"가장 많이 노출된 출처는 '{top_channel['name']}'이며 출처 균형 점수는 {round(float(axis_scores.get('SBS', 0.0)), 1)}점입니다.")
 
+    if excluded_ad_events:
+        report_insights.append(f"광고 출처로 감지된 {len(excluded_ad_events)}건은 관심사/점수 분석에서 제외했습니다.")
+
     if score_warnings:
         report_insights.append(f"{len(score_warnings)}개의 신뢰도 경고가 있어 일부 지표는 참고용으로 봐야 합니다.")
 
@@ -235,6 +240,7 @@ def build_dashboard_insights(
         "search_keywords": search_keywords,
         "category_shares": topic_shares,
         "channel_shares": channel_shares,
+        "excluded_ad_count": len(excluded_ad_events),
         "report_insights": report_insights,
         "direct_interest_summary": direct_interest_summary,
         "algorithm_interest_summary": algorithm_interest_summary
@@ -311,8 +317,9 @@ async def get_dashboard_summary(
         # --- [NEW] Calculate Actual DSAO based on actual watch data ---
         file_id = run["file_id"]
         events = db_client.fetch_data("norm_event", {"file_id": file_id})
+        analysis_events, excluded_ad_events = split_analysis_events(events)
         nlp_results = fetch_nlp_results_for_file(file_id)
-        view_events = [e for e in events if e.get("action_type") == "view"]
+        view_events = [e for e in analysis_events if e.get("action_type") == "view"]
         long_views = [e for e in view_events if e.get("time_delta_sec") is not None and e.get("time_delta_sec") >= 180]
         
         long_ratio = (len(long_views) / len(view_events)) * 100.0 if view_events else 100.0
@@ -348,6 +355,7 @@ async def get_dashboard_summary(
         }
         actual_dsao_name = DSAO_NAMES.get(actual_dsao_code, "미지의 미디어 탐험가")
         insights = build_dashboard_insights(events, nlp_results, axis_scores, score_warnings)
+        insights["excluded_ad_count"] = max(insights.get("excluded_ad_count", 0), len(excluded_ad_events))
         
         return {
             "run_id": run_id,

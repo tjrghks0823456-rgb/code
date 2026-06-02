@@ -2,6 +2,7 @@ import uuid
 import logging
 from typing import List
 from fastapi import APIRouter, HTTPException
+from app.core.content_filters import split_analysis_events
 from app.core.database import db_client
 from app.core.nlp import nlp_client
 from app.core.scoring import compute_6axis_score_details, classify_16_type
@@ -76,9 +77,13 @@ async def run_analysis(
 
         # 4. Fetch all normalized events for scoring
         events = db_client.fetch_data("norm_event", {"file_id": file_id})
+        analysis_events, excluded_ad_events = split_analysis_events(events)
+        if excluded_ad_events:
+            analysis_warnings.append(f"Excluded {len(excluded_ad_events)} ad-origin events before scoring.")
 
         # 5. Compute 6-axis scores using deterministic python scoring engine (FEAT_06)
-        score_details, exception_codes, feature_summary = compute_6axis_score_details(events, nlp_results)
+        score_details, exception_codes, feature_summary = compute_6axis_score_details(analysis_events, nlp_results)
+        feature_summary["excluded_ad_count"] = len(excluded_ad_events)
         axis_scores = {
             code: detail["score"]
             for code, detail in score_details.items()
@@ -153,9 +158,11 @@ async def run_analysis(
                     "data_confidence",
                     "mock_used",
                     "fallback_used",
+                    "excluded_ad_count",
                     "data_quality_warnings"
                 ]
             },
+            "excluded_ad_count": len(excluded_ad_events),
             "exception_codes": exception_codes,
             "analysis_warnings": analysis_warnings + score_quality_warnings
         }

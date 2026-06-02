@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from bs4 import BeautifulSoup
+from app.core.content_filters import detect_ad_event_reason, split_analysis_events
 from app.core.database import db_client
 from app.core.upload_config import DURATION_LIMITS, PARSER_LIMITS, ZIP_LIMITS
 from app.core.youtube import parse_iso8601_duration, youtube_client
@@ -81,6 +82,22 @@ def count_duration_sources(events: List[Dict[str, Any]]) -> Dict[str, int]:
     for event in events:
         source = event.get("duration_source") or event.get("duration_confidence") or "unknown"
         counts[source] = counts.get(source, 0) + 1
+    return counts
+
+def count_source_types(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {
+        "watch_history": 0,
+        "search_history": 0,
+        "subscription": 0,
+        "playlist": 0,
+        "comment": 0,
+        "live_chat": 0,
+        "channel": 0
+    }
+    for event in events:
+        source_type = event.get("source_type")
+        if source_type:
+            counts[source_type] = counts.get(source_type, 0) + 1
     return counts
 
 def apply_youtube_duration_metadata(events: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -394,7 +411,7 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
         if not parsed_time_str:
             parsed_time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-        parsed_items.append({
+        parsed_item = {
             "title_text": title_text or "알 수 없는 비디오",
             "action_type": action_type,
             "event_time": parsed_time_str,
@@ -402,7 +419,12 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
             "title_url": a_tags[0].get("href", "") if len(a_tags) >= 1 else None,
             "channel_name": channel_name,
             "channel_url": channel_url
-        })
+        }
+        ad_reason = detect_ad_event_reason({**parsed_item, "raw_takeout_text": text})
+        if ad_reason:
+            parsed_item["is_ad_event"] = True
+            parsed_item["ad_filter_reason"] = ad_reason
+        parsed_items.append(parsed_item)
 
     return parsed_items
 
@@ -458,7 +480,7 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
         if not parsed_time_str:
             parsed_time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-        parsed_items.append({
+        parsed_item = {
             "title_text": title_text,
             "action_type": action_type,
             "event_time": parsed_time_str,
@@ -466,7 +488,12 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
             "title_url": title_url,
             "channel_name": channel_name,
             "channel_url": channel_url
-        })
+        }
+        ad_reason = detect_ad_event_reason({**item, **parsed_item})
+        if ad_reason:
+            parsed_item["is_ad_event"] = True
+            parsed_item["ad_filter_reason"] = ad_reason
+        parsed_items.append(parsed_item)
 
     return parsed_items
 
@@ -728,6 +755,7 @@ async def upload_file(
                     "action_type": current_action_type,
                 }
                 estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
+                ad_reason = detect_ad_event_reason({**item, **duration_item})
 
                 item_time = item.get("time", "")
                 parsed_time_str = None
@@ -757,7 +785,9 @@ async def upload_file(
                     "video_id": video_id,
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
-                    "duration_source": duration_source
+                    "duration_source": duration_source,
+                    "is_ad_event": bool(ad_reason),
+                    "ad_filter_reason": ad_reason
                 })
         else:
             lines = text_content.split("\n")
@@ -778,6 +808,7 @@ async def upload_file(
                     "action_type": action_type,
                 }
                 estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
+                ad_reason = detect_ad_event_reason({**duration_item, "raw_line": cleaned_line})
 
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
@@ -790,23 +821,26 @@ async def upload_file(
                     "source_surface": "home_feed" if i % 2 == 0 else "search_results",
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
-                    "duration_source": duration_source
+                    "duration_source": duration_source,
+                    "is_ad_event": bool(ad_reason),
+                    "ad_filter_reason": ad_reason
                 })
 
-        apply_youtube_duration_metadata(parsed_events)
+        analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
+        apply_youtube_duration_metadata(analysis_events)
         timed_events = []
-        for event in parsed_events:
+        for event in analysis_events:
             try:
                 timed_events.append((datetime.strptime(event["event_time"], "%Y-%m-%d %H:%M:%S"), event))
             except Exception:
                 continue
         apply_timeline_duration_estimates(timed_events)
-        duration_source_counts = count_duration_sources(parsed_events)
+        duration_source_counts = count_duration_sources(analysis_events)
 
         filtered_events = []
         skipped_count = 0
 
-        for event in parsed_events:
+        for event in analysis_events:
             duration_for_filter = event.get("time_delta_sec")
             if duration_for_filter is None:
                 duration_for_filter = event.get("estimated_duration_sec")
@@ -841,6 +875,7 @@ async def upload_file(
             "total_parsed": len(parsed_events),
             "total_saved": len(filtered_events),
             "skipped_fake_dopamine": skipped_count,
+            "excluded_ad_count": len(excluded_ad_events),
             "duration_source_counts": duration_source_counts,
             "message": f"Successfully parsed {len(parsed_events)} events. Filtered out {skipped_count} short-form dopamine loops (< {DURATION_LIMITS['min_watch_sec']}s)."
         }
@@ -977,6 +1012,7 @@ async def upload_takeout(
 
             for idx, item in enumerate(items):
                 estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(item)
+                ad_reason = detect_ad_event_reason(item)
 
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
@@ -994,14 +1030,18 @@ async def upload_takeout(
                     "video_id": item.get("video_id"),
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
-                    "duration_source": duration_source
+                    "duration_source": duration_source,
+                    "is_ad_event": bool(ad_reason),
+                    "ad_filter_reason": ad_reason
                 })
 
-        duration_source_counts = apply_youtube_duration_metadata(parsed_events)
+        analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
+        analysis_source_counts = count_source_types(analysis_events)
+        duration_source_counts = apply_youtube_duration_metadata(analysis_events)
 
         # 4. Filter watch history views for dopamine filter & sessions
         # (Exclude playlist/subscription from standard watch filters)
-        watch_search_events = [e for e in parsed_events if e["source_type"] in ["watch_history", "search_history"]]
+        watch_search_events = [e for e in analysis_events if e["source_type"] in ["watch_history", "search_history"]]
 
         timed_events = []
         for event in watch_search_events:
@@ -1011,7 +1051,7 @@ async def upload_takeout(
                 continue
 
         apply_timeline_duration_estimates(timed_events)
-        duration_source_counts = count_duration_sources(parsed_events)
+        duration_source_counts = count_duration_sources(analysis_events)
 
         filtered_events = []
         skipped_count = 0
@@ -1028,7 +1068,7 @@ async def upload_takeout(
             filtered_events.append(event)
 
         # Add playlist/subscription events to final events directly (Auxiliary features)
-        aux_events = [e for e in parsed_events if e["source_type"] not in ["watch_history", "search_history"]]
+        aux_events = [e for e in analysis_events if e["source_type"] not in ["watch_history", "search_history"]]
         final_events = filtered_events + aux_events
 
         if not final_events:
@@ -1107,6 +1147,7 @@ async def upload_takeout(
             "success": True,
             "file_id": file_id,
             "parsed_source_counts": parsed_source_counts,
+            "analysis_source_counts": analysis_source_counts,
             "ignored_sources": ignored_sources[:50], # Limit response size
             "skipped_sources_with_reason": skipped_sources_with_reason,
             "session_count": len(sessions_list) + aux_session_count,
@@ -1114,6 +1155,7 @@ async def upload_takeout(
             "total_parsed": len(parsed_events),
             "total_saved": len(final_events),
             "skipped_fake_dopamine": skipped_count,
+            "excluded_ad_count": len(excluded_ad_events),
             "duration_source_counts": duration_source_counts
         }
 
