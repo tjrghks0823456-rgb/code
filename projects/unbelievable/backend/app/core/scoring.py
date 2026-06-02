@@ -104,7 +104,20 @@ def compute_6axis_scores(
     if len(events) < 10:
         add_exception("P01_DATA_SHORT")
         return scores, exception_codes
-        
+
+    source_type_counts: Dict[str, int] = {}
+    for event in events:
+        source_type = str(event.get("source_type") or "unknown")
+        source_type_counts[source_type] = source_type_counts.get(source_type, 0) + 1
+
+    curation_events = (
+        source_type_counts.get("subscription", 0)
+        + source_type_counts.get("playlist", 0)
+        + source_type_counts.get("channel", 0)
+    )
+    participation_events = source_type_counts.get("comment", 0) + source_type_counts.get("live_chat", 0)
+    auxiliary_events = curation_events + participation_events
+
     # --- 1. 사용자주도성 (User Agency - UAS) ---
     # Formula: 100 * (search_events) / (search_events + watch_events)
     # If no searches exist, the Takeout export may not include search history.
@@ -121,6 +134,17 @@ def compute_6axis_scores(
         search_ratio = search_events / total_actions
         # Apply a scaling factor to make it practical (e.g. 5% ratio mapped to 50 score)
         scores["UAS"] = min(100.0, search_ratio * 400.0)
+
+    # Auxiliary agency: subscriptions/playlists/channels indicate deliberate curation,
+    # while comments/live chats indicate active participation rather than passive feed watching.
+    agency_denominator = max(total_actions, len(events), 1)
+    auxiliary_agency_bonus = min(
+        25.0,
+        (curation_events / agency_denominator) * 12.0
+        + (participation_events / agency_denominator) * 25.0
+    )
+    if auxiliary_agency_bonus > 0:
+        scores["UAS"] = min(100.0, scores["UAS"] + auxiliary_agency_bonus)
         
     # --- 2. 출처균형 (Source Balance - SBS) ---
     # Group by real channel_name or channel_url, fall back to author_id/source_surface
@@ -158,6 +182,19 @@ def compute_6axis_scores(
         entropy = calculate_shannon_entropy(probs)
         # Max entropy for 10 categories is ~3.32 bits. Normalize against 3.5 bits max.
         scores["TDS"] = min(100.0, (entropy / 3.5) * 100.0)
+
+    auxiliary_type_counts = {
+        key: source_type_counts.get(key, 0)
+        for key in ["subscription", "playlist", "comment", "live_chat", "channel"]
+        if source_type_counts.get(key, 0) > 0
+    }
+    if len(auxiliary_type_counts) >= 2:
+        aux_total = sum(auxiliary_type_counts.values())
+        aux_probs = [count / aux_total for count in auxiliary_type_counts.values()]
+        aux_entropy = calculate_shannon_entropy(aux_probs)
+        aux_max_entropy = math.log2(min(5, max(len(auxiliary_type_counts), 2)))
+        auxiliary_diversity_score = min(100.0, (aux_entropy / aux_max_entropy) * 100.0) if aux_max_entropy > 0 else 0.0
+        scores["TDS"] = (scores["TDS"] * 0.75) + (auxiliary_diversity_score * 0.25)
         
     # --- 4. 감정균형 (Emotion Balance - EBS) ---
     # Distribute sentiment_scores (-1.0 to 1.0) into Positive/Neutral/Negative
@@ -204,6 +241,14 @@ def compute_6axis_scores(
         max_topic_count = max(topic_counts.values())
         dom_ratio = max_topic_count / total_topics
         scores["VOS"] = max(0.0, (1.0 - dom_ratio) * 100.0)
+
+    if auxiliary_events > 0:
+        auxiliary_openness_score = min(
+            100.0,
+            (len(auxiliary_type_counts) / 5.0) * 70.0
+            + min(30.0, (auxiliary_events / max(len(events), 1)) * 60.0)
+        )
+        scores["VOS"] = (scores["VOS"] * 0.7) + (auxiliary_openness_score * 0.3)
         
     # Make sure all scores are clamped and rounded cleanly.
     for k in scores:

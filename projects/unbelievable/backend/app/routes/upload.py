@@ -243,12 +243,24 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
     for cell in cells:
         text = cell.get_text()
         title_text = ""
-        action_type = "view"
+        action_type = "search" if file_kind == "search" else "view"
         video_id = None
         channel_name = None
         channel_url = None
 
         a_tags = cell.find_all("a")
+
+        if file_kind == "search":
+            action_type = "search"
+            if len(a_tags) >= 1:
+                title_text = a_tags[0].get_text().strip()
+                video_id = extract_video_id(a_tags[0].get("href", ""))
+        elif len(a_tags) >= 1:
+            title_text = a_tags[0].get_text().strip()
+            video_id = extract_video_id(a_tags[0].get("href", ""))
+            if len(a_tags) >= 2:
+                channel_name = a_tags[1].get_text().strip()
+                channel_url = a_tags[1].get("href", "")
 
         if "Watched " in text:
             action_type = "view"
@@ -311,16 +323,14 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
             continue
 
         title_text = raw_title
-        action_type = "view"
+        action_type = "search" if file_kind == "search" else "view"
         if raw_title.startswith("Watched "):
             title_text = raw_title[len("Watched "):]
-            action_type = "view"
+            if file_kind != "search":
+                action_type = "view"
         elif raw_title.startswith("Searched for "):
             title_text = raw_title[len("Searched for "):]
             action_type = "search"
-        else:
-            if file_kind == "search":
-                action_type = "search"
 
         # Extract video_id from titleUrl
         title_url = item.get("titleUrl", "")
@@ -489,12 +499,26 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
                 continue
             snippet = item.get("snippet", {}) if isinstance(item.get("snippet", {}), dict) else {}
             title = (
-                pick_first(item, ["title", "name", "channelTitle", "text", "comment", "message", "content"])
+                pick_first(item, [
+                    "title", "name", "channelTitle", "text", "comment", "message", "content",
+                    "채널 제목", "채널 제목(원본)", "댓글 텍스트", "실시간 채팅 텍스트",
+                    "재생목록 제목(원본)", "재생목록 ID", "동영상 ID", "댓글 ID", "실시간 채팅 ID"
+                ])
                 or pick_first(snippet, ["title", "channelTitle", "textDisplay", "textOriginal", "description"])
             )
-            url = pick_first(item, ["url", "channelUrl", "videoUrl", "titleUrl"])
-            channel_name = pick_first(item, ["channelName", "channelTitle", "author", "authorName"]) or pick_first(snippet, ["channelTitle", "authorDisplayName"])
-            raw_time = pick_first(item, ["time", "publishedAt", "createdAt", "timestamp"]) or pick_first(snippet, ["publishedAt"])
+            url = pick_first(item, ["url", "URL", "channelUrl", "videoUrl", "titleUrl", "채널 URL"])
+            channel_name = (
+                pick_first(item, ["channelName", "channelTitle", "author", "authorName", "채널 제목", "채널 제목(원본)", "채널 ID"])
+                or pick_first(snippet, ["channelTitle", "authorDisplayName"])
+            )
+            raw_time = (
+                pick_first(item, [
+                    "time", "publishedAt", "createdAt", "timestamp",
+                    "댓글 생성 타임스탬프", "실시간 채팅 생성 타임스탬프",
+                    "재생목록 생성 타임스탬프", "재생목록 업데이트 타임스탬프", "재생목록 동영상 생성 타임스탬프"
+                ])
+                or pick_first(snippet, ["publishedAt"])
+            )
             event_time = None
             if raw_time:
                 event_time = raw_time.replace("Z", "").replace("T", " ").split(".")[0]
@@ -520,9 +544,20 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
         reader = csv.DictReader(csv_text)
         if reader.fieldnames:
             for row in list(reader)[:300]:
-                title = pick_first(row, ["title", "Title", "name", "Name", "channel", "Channel", "comment", "Comment", "message", "Message"])
-                url = pick_first(row, ["url", "URL", "channel_url", "Channel URL", "video_url", "Video URL"])
-                append_item(title, url)
+                title = pick_first(row, [
+                    "title", "Title", "name", "Name", "channel", "Channel", "comment", "Comment", "message", "Message",
+                    "채널 제목", "채널 제목(원본)", "댓글 텍스트", "실시간 채팅 텍스트",
+                    "재생목록 제목(원본)", "재생목록 ID", "동영상 ID", "댓글 ID", "실시간 채팅 ID"
+                ])
+                url = pick_first(row, ["url", "URL", "channel_url", "Channel URL", "video_url", "Video URL", "채널 URL"])
+                channel_name = pick_first(row, ["channelName", "Channel Name", "채널 제목", "채널 제목(원본)", "채널 ID"])
+                raw_time = pick_first(row, [
+                    "time", "Time", "publishedAt", "createdAt", "timestamp",
+                    "댓글 생성 타임스탬프", "실시간 채팅 생성 타임스탬프",
+                    "재생목록 생성 타임스탬프", "재생목록 업데이트 타임스탬프", "재생목록 동영상 생성 타임스탬프"
+                ])
+                event_time = raw_time.replace("Z", "").replace("T", " ").split(".")[0] if raw_time else None
+                append_item(title, url, channel_name, event_time)
         else:
             csv_text.seek(0)
             for row in list(csv.reader(csv_text))[:300]:
@@ -938,13 +973,30 @@ async def upload_takeout(
             }
             db_client.save_data("session_text", session_text_entry)
 
+        aux_text_events = [e for e in aux_events if e.get("text_base")]
+        aux_session_count = 0
+        if aux_text_events:
+            aux_session_id = str(uuid.uuid4())
+            aux_titles = " | ".join([e["text_base"] for e in aux_text_events[:40]])
+            aux_session_entry = {
+                "id": aux_session_id,
+                "file_id": file_id,
+                "aggregated_text": aux_titles,
+                "token_count": len(aux_titles.split()),
+                "start_time": aux_text_events[0]["event_time"],
+                "end_time": aux_text_events[-1]["event_time"]
+            }
+            db_client.save_data("session_text", aux_session_entry)
+            aux_session_count = 1
+
         return {
             "success": True,
             "file_id": file_id,
             "parsed_source_counts": parsed_source_counts,
             "ignored_sources": ignored_sources[:50], # Limit response size
             "skipped_sources_with_reason": skipped_sources_with_reason,
-            "session_count": len(sessions_list),
+            "session_count": len(sessions_list) + aux_session_count,
+            "aux_session_count": aux_session_count,
             "total_parsed": len(parsed_events),
             "total_saved": len(final_events),
             "skipped_fake_dopamine": skipped_count
