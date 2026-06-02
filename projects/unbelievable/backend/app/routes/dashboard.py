@@ -56,6 +56,21 @@ SCORE_WARNING_MAP: Dict[str, Dict[str, str]] = {
     }
 }
 
+SCORE_WARNING_MAP.update({
+    "P08_MOCK_DATA_USED": {
+        "axis": "ALL",
+        "message": "Mock analysis data was detected, so related scores should be read as low-confidence references."
+    },
+    "P09_FALLBACK_DATA_USED": {
+        "axis": "ALL",
+        "message": "Fallback analysis data was detected, so related scores should be read as low-confidence references."
+    },
+    "P10_DIRECT_SELECTION_UNAVAILABLE": {
+        "axis": "UAS",
+        "message": "Direct selection ratio is not available in the current normalized event schema."
+    }
+})
+
 def normalize_exception_codes(raw_codes: Any) -> List[str]:
     if not raw_codes:
         return []

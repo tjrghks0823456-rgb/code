@@ -42,3 +42,11 @@
 - 왜 수정했나: 구독정보/재생목록/댓글/실시간채팅/채널 카운트가 0으로 표시되고, 점수 계산도 시청/검색 기록 중심으로만 돌아가 실제 사용자의 큐레이션과 참여 행동이 빠졌다.
 - 확인 방법: 실제 Takeout 폴더 업로드 후 `parsed_source_counts`에 보조 카테고리가 0보다 크게 나오고, 분석 응답의 `axis_scores`가 예외 코드 없이 계산되는지 확인한다.
 - 점수 기준: 구독정보/재생목록/채널은 의도적 큐레이션, 댓글/실시간채팅은 능동 참여 신호로 보고 `UAS`를 보정한다. 보조 카테고리 종류의 다양성은 `TDS`와 `VOS`에 일부 반영한다.
+
+### 9. 하드코딩 제거 1차 계산 기반 정리
+- 무엇을 수정했나: `features.py`를 추가해 현재 `norm_event` dict를 feature 구조로 변환하고, `score_config.py`로 점수 범위, 최소 데이터 기준, 축별 가중치, confidence 기준을 분리했다.
+- 왜 수정했나: `scoring.py`에 있던 `search_ratio * 400.0`, `toxic_ratio * 300.0`, 고정 entropy 기준 `3.5` 같은 임의 배수/상수를 실제 비율, HHI, entropy, 가중합 기반 계산으로 바꾸기 위해서다.
+- 반환 호환성: 기존 `compute_6axis_scores(events, nlp_results)`는 `{axis: float}`와 exception code list를 계속 반환한다. 새 상세 함수 `calculate_scores_v2()`와 `compute_6axis_score_details()`는 score/confidence/reason/warnings를 제공한다.
+- mock/fallback 처리: NLP와 YouTube mock 응답에 `mock_used`/`fallback_used` 플래그를 추가했다. 분석 라우터는 더 이상 fake NLP 기본 카테고리를 만들지 않고, 실패 시 낮은 confidence warning으로 처리한다.
+- 확인 방법: `backend`에서 `.\venv\Scripts\python.exe -m compileall app`를 실행해 문법 검사를 통과했고, 샘플 `norm_event` dict로 6축 상세 점수와 warning이 생성되는 것을 확인했다.
+- 다음 단계 TODO: 프론트 dashboard 연결, `insightMock` 제거, upload parser 300개 제한 설정화, YouTube duration API 연동은 이번 1차 범위에서 제외하고 다음 단계로 남겼다.

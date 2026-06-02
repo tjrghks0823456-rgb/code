@@ -15,7 +15,9 @@ class YouTubeClient:
         Gracefully falls back to high-quality mock data if API key is not configured.
         """
         if self.is_mock or not video_id:
-            return self._get_mock_video(video_id)
+            result = self._get_mock_video(video_id)
+            result["fallback_used"] = False
+            return result
             
         try:
             import httpx
@@ -41,13 +43,19 @@ class YouTubeClient:
                         "categoryId": snippet.get("categoryId", ""),
                         "channelId": snippet.get("channelId", ""),
                         "topicDetails": topic_details.get("topicIds", []) + topic_details.get("relevantTopicIds", []),
-                        "api_success": True
+                        "api_success": True,
+                        "mock_used": False,
+                        "fallback_used": False
                     }
             logger.warning(f"YouTube videos.list returned code {response.status_code}")
-            return self._get_mock_video(video_id)
+            result = self._get_mock_video(video_id)
+            result["fallback_used"] = True
+            return result
         except Exception as e:
             logger.error(f"Failed to fetch YouTube video metadata: {e}")
-            return self._get_mock_video(video_id)
+            result = self._get_mock_video(video_id)
+            result["fallback_used"] = True
+            return result
             
     def get_channel_metadata(self, channel_id: str) -> Dict[str, Any]:
         """
@@ -55,7 +63,9 @@ class YouTubeClient:
         Falls back to mock data if API key is not configured.
         """
         if self.is_mock or not channel_id:
-            return self._get_mock_channel(channel_id)
+            result = self._get_mock_channel(channel_id)
+            result["fallback_used"] = False
+            return result
             
         try:
             import httpx
@@ -77,12 +87,18 @@ class YouTubeClient:
                         "title": snippet.get("title", ""),
                         "customUrl": snippet.get("customUrl", ""),
                         "topicDetails": topic_details.get("topicIds", []),
-                        "api_success": True
+                        "api_success": True,
+                        "mock_used": False,
+                        "fallback_used": False
                     }
-            return self._get_mock_channel(channel_id)
+            result = self._get_mock_channel(channel_id)
+            result["fallback_used"] = True
+            return result
         except Exception as e:
             logger.error(f"Failed to fetch YouTube channel metadata: {e}")
-            return self._get_mock_channel(channel_id)
+            result = self._get_mock_channel(channel_id)
+            result["fallback_used"] = True
+            return result
 
     def _get_mock_video(self, video_id: str) -> Dict[str, Any]:
         """Generates realistic mock video details."""
@@ -94,7 +110,9 @@ class YouTubeClient:
             "categoryId": "28", # Science & Technology
             "channelId": "UC_mock_semiconductor_channel",
             "topicDetails": ["/m/07g4xs", "/m/06lxs"],
-            "api_success": False
+            "api_success": False,
+            "mock_used": True,
+            "fallback_used": False
         }
         
     def _get_mock_channel(self, channel_id: str) -> Dict[str, Any]:
@@ -104,7 +122,9 @@ class YouTubeClient:
             "title": "반도체 장비 통신 아카데미",
             "customUrl": "@semitool_hmi",
             "topicDetails": ["/m/06lxs"],
-            "api_success": False
+            "api_success": False,
+            "mock_used": True,
+            "fallback_used": False
         }
 
 youtube_client = YouTubeClient()

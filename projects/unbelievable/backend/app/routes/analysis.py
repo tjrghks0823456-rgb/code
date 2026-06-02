@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException
 from app.core.database import db_client
 from app.core.nlp import nlp_client
-from app.core.scoring import compute_6axis_scores, classify_16_type
+from app.core.scoring import compute_6axis_score_details, classify_16_type
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -58,7 +58,9 @@ async def run_analysis(
                     "categories_json": nlp_response.get("categories_json", []),
                     "sentiment_score": nlp_response.get("documentSentiment", {}).get("score", 0.0),
                     "sentiment_magnitude": nlp_response.get("documentSentiment", {}).get("magnitude", 0.0),
-                    "language_code": nlp_response.get("language_code", "ko")
+                    "language_code": nlp_response.get("language_code", "ko"),
+                    "mock_used": bool(nlp_response.get("mock_used", False)),
+                    "fallback_used": bool(nlp_response.get("fallback_used", False))
                 }
                 db_client.save_data("nlp_result", nlp_entry)
                 nlp_results.append(nlp_entry)
@@ -70,28 +72,35 @@ async def run_analysis(
 
         # Handle case where all sessions fail
         if not nlp_results:
-            default_nlp = {
-                "id": str(uuid.uuid4()),
-                "session_id": selected_sessions[0]["id"],
-                "categories_json": [{"name": "/Computers & Electronics/Software", "confidence": 0.95}],
-                "sentiment_score": 0.1,
-                "sentiment_magnitude": 0.15,
-                "language_code": "ko"
-            }
-            nlp_results.append(default_nlp)
-            analysis_warnings.append("모든 세션 분석 실패로 인해 기본 NLP 분석 설정으로 폴백 적용되었습니다.")
+            analysis_warnings.append("All NLP sessions failed; scoring will use low-confidence feature warnings instead of fake default NLP data.")
 
         # 4. Fetch all normalized events for scoring
         events = db_client.fetch_data("norm_event", {"file_id": file_id})
 
         # 5. Compute 6-axis scores using deterministic python scoring engine (FEAT_06)
-        axis_scores, exception_codes = compute_6axis_scores(events, nlp_results)
+        score_details, exception_codes, feature_summary = compute_6axis_score_details(events, nlp_results)
+        axis_scores = {
+            code: detail["score"]
+            for code, detail in score_details.items()
+        }
+        score_quality_warnings = sorted({
+            warning
+            for detail in score_details.values()
+            for warning in detail.get("warnings", [])
+        })
 
         # 6. Classify into one of 16 types (FEAT_08)
         type_code, type_name, tags = classify_16_type(axis_scores)
 
-        # Calculate Weighted Health & Bias Risk Score (FEAT_06)
-        weighted_health = sum(axis_scores.values()) / len(axis_scores)
+        # Calculate confidence-weighted health while preserving a numeric fallback.
+        confidence_total = sum(detail.get("confidence", 0.0) for detail in score_details.values())
+        if confidence_total > 0:
+            weighted_health = sum(
+                detail["score"] * detail.get("confidence", 0.0)
+                for detail in score_details.values()
+            ) / confidence_total
+        else:
+            weighted_health = sum(axis_scores.values()) / len(axis_scores)
         bias_risk_score = round(100.0 - weighted_health, 1)
         weighted_health = round(weighted_health, 1)
 
@@ -105,7 +114,7 @@ async def run_analysis(
             "weighted_health": weighted_health,
             "mbti_type": type_code, # e.g. "HHHH"
             "exception_codes": exception_codes,
-            "score_warnings": analysis_warnings # Saved in warnings JSONB
+            "score_warnings": analysis_warnings + score_quality_warnings # Saved in warnings JSONB
         }
         db_client.save_data("score_run", score_run_entry)
 
@@ -129,8 +138,26 @@ async def run_analysis(
             "mbti_name": type_name,
             "mbti_tags": tags,
             "axis_scores": axis_scores,
+            "score_details": score_details,
+            "feature_summary": {
+                key: feature_summary.get(key)
+                for key in [
+                    "watch_count",
+                    "search_count",
+                    "comment_count",
+                    "playlist_count",
+                    "subscription_count",
+                    "channel_count",
+                    "live_chat_count",
+                    "duration_confidence",
+                    "data_confidence",
+                    "mock_used",
+                    "fallback_used",
+                    "data_quality_warnings"
+                ]
+            },
             "exception_codes": exception_codes,
-            "analysis_warnings": analysis_warnings
+            "analysis_warnings": analysis_warnings + score_quality_warnings
         }
     except HTTPException:
         raise

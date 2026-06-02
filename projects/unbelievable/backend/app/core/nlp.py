@@ -15,7 +15,10 @@ class NLPClient:
         If using mock credentials, returns high-quality realistic mock results.
         """
         if self.is_mock:
-            return self._get_mock_analysis(text)
+            result = self._get_mock_analysis(text)
+            result["mock_used"] = True
+            result["fallback_used"] = False
+            return result
             
         try:
             # Placeholder for actual Google Cloud Natural Language API request
@@ -36,13 +39,22 @@ class NLPClient:
             }
             response = httpx.post(url, json=payload, timeout=10.0)
             if response.status_code == 200:
-                return response.json()
+                result = response.json()
+                result["mock_used"] = False
+                result["fallback_used"] = False
+                return result
             else:
                 logger.warning(f"NL API error {response.status_code}: {response.text}")
-                return self._get_mock_analysis(text)
+                result = self._get_mock_analysis(text)
+                result["mock_used"] = True
+                result["fallback_used"] = True
+                return result
         except Exception as e:
             logger.error(f"Failed to call Google NL API: {e}")
-            return self._get_mock_analysis(text)
+            result = self._get_mock_analysis(text)
+            result["mock_used"] = True
+            result["fallback_used"] = True
+            return result
             
     def _get_mock_analysis(self, text: str) -> Dict[str, Any]:
         """Generates rich, realistic mock NLP responses based on text keywords."""
