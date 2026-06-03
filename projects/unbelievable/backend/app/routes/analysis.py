@@ -130,6 +130,15 @@ async def run_analysis(
 
         # 7. Save score run summary
         run_id = str(uuid.uuid4())
+        data_coverage = {
+            "excluded_ad_count": excluded_ad_count,
+            "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
+            "ad_skip_summary": ad_skip_summary,
+            "parsed_source_counts": raw_file.get("parsed_source_counts", {}),
+            "analysis_source_counts": raw_file.get("analysis_source_counts", {}),
+            "content_format_counts": raw_file.get("content_format_counts", {}),
+            "duration_source_counts": raw_file.get("duration_source_counts", {}),
+        }
         score_run_entry = {
             "run_id": run_id,
             "user_id": user_id,
@@ -140,11 +149,7 @@ async def run_analysis(
             "shorts_stimulation_risk": risk_overall["shorts_stimulation_risk"],
             "final_detox_risk": risk_overall["final_detox_risk"],
             "shorts_analysis": feature_summary.get("shorts_analysis", {}),
-            "data_coverage": {
-                "excluded_ad_count": excluded_ad_count,
-                "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
-                "ad_skip_summary": ad_skip_summary,
-            },
+            "data_coverage": data_coverage,
             "mbti_type": type_code, # e.g. "HHHH"
             "exception_codes": exception_codes,
             "score_warnings": analysis_warnings + score_quality_warnings # Saved in warnings JSONB
@@ -200,11 +205,7 @@ async def run_analysis(
                 ]
             },
             "excluded_ad_count": excluded_ad_count,
-            "data_coverage": {
-                "excluded_ad_count": excluded_ad_count,
-                "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
-                "ad_skip_summary": ad_skip_summary,
-            },
+            "data_coverage": data_coverage,
             "exception_codes": exception_codes,
             "analysis_warnings": analysis_warnings + score_quality_warnings
         }

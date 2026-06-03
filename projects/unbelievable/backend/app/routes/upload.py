@@ -931,6 +931,14 @@ async def upload_file(
         raw_file_entry["upload_status"] = "SUCCESS"
         raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
         raw_file_entry["ad_skip_summary"] = ad_skip_summary
+        raw_file_entry["content_format_counts"] = content_format_counts
+        raw_file_entry["duration_source_counts"] = duration_source_counts
+        raw_file_entry["data_coverage"] = {
+            "excluded_ad_count": len(excluded_ad_events),
+            "ad_skip_summary": ad_skip_summary,
+            "content_format_counts": content_format_counts,
+            "duration_source_counts": duration_source_counts,
+        }
         db_client.save_data("raw_file", raw_file_entry)
 
         session_id = str(uuid.uuid4())
@@ -1180,6 +1188,19 @@ async def upload_takeout(
         raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
         raw_file_entry["skipped_sources_with_reason"] = response_skipped_sources
         raw_file_entry["ad_skip_summary"] = ad_skip_summary
+        raw_file_entry["parsed_source_counts"] = parsed_source_counts
+        raw_file_entry["analysis_source_counts"] = analysis_source_counts
+        raw_file_entry["content_format_counts"] = content_format_counts
+        raw_file_entry["duration_source_counts"] = duration_source_counts
+        raw_file_entry["data_coverage"] = {
+            "parsed_source_counts": parsed_source_counts,
+            "analysis_source_counts": analysis_source_counts,
+            "skipped_sources_with_reason": response_skipped_sources,
+            "excluded_ad_count": len(excluded_ad_events),
+            "ad_skip_summary": ad_skip_summary,
+            "content_format_counts": content_format_counts,
+            "duration_source_counts": duration_source_counts,
+        }
         db_client.save_data("raw_file", raw_file_entry)
 
         # 7. Chronological Time-based and Count-based Multi-session Generator

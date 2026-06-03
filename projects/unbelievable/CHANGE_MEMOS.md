@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-03 Interest map category gap note
+- Added `backend/app/core/interest_maps.py` so ad-safe search, standard-video, and shorts events each build separate rule-based interest maps with major/minor categories.
+- Search interest maps now call the shared ad filter and `is_valid_search_event()` before extracting queries, so campaign titles and watch-history titles cannot become direct search interests.
+- Dashboard summary now returns `search_interest_map`, `standard_video_interest_map`, `shorts_interest_map`, `interest_gap_report`, and richer `data_coverage` while preserving existing response fields.
+- Source-balance scoring now prefers `channel_url`, then `channel_name`, then `author_id`, then `source_surface`, and counts only standard video watch events for the channel distribution.
+- Dashboard UI now shows a compact comparison card for active search, standard video, shorts, and the interest mismatch score.
+
 ## 2026-06-03 Ad filtering hardening note
 - Rebuilt the shared ad filter around Google Ads details, ad/tracking URL markers, and campaign-creative title patterns such as `_KR_R1`, `6s`, `ver.2`, `1080x1920`, and Korean creative labels like `가로형`.
 - Search interest maps now use only valid `search_history`/`active_search` events after search-query cleanup, so watch history, shorts, subscriptions, playlists, comments, and detected ad/promotional events cannot appear as direct search interests.

@@ -133,8 +133,8 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         warnings.append("text_base missing")
 
     channel_key = _clean_text(
-        event.get("channel_name")
-        or event.get("channel_url")
+        event.get("channel_url")
+        or event.get("channel_name")
         or event.get("author_id")
         or event.get("source_surface")
     )
@@ -245,7 +245,7 @@ def extract_features(
                 search_keyword_distribution[keyword] = search_keyword_distribution.get(keyword, 0) + 1
 
         channel_key = event.get("channel_key")
-        if channel_key and not is_search and content_format != "shorts":
+        if channel_key and is_watch and content_format == "standard_video":
             channel_distribution[channel_key] = channel_distribution.get(channel_key, 0) + 1
 
         text_lower = _lower(event.get("text_base"))

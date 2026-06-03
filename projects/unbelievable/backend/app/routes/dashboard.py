@@ -10,6 +10,12 @@ from app.core.content_filters import (
     split_analysis_events,
 )
 from app.core.database import db_client
+from app.core.interest_maps import (
+    build_interest_gap_report,
+    build_search_interest_map,
+    build_shorts_interest_map,
+    build_standard_video_interest_map,
+)
 from app.core.scoring import PERSONALITY_MAP
 from app.core.shorts_analysis import build_overall_risk, build_shorts_analysis
 
@@ -197,7 +203,7 @@ def build_dashboard_insights(
         if is_shorts_video_event(event) and title:
             shorts_counter[title] += 1
 
-        channel = clean_text(event.get("channel_name") or event.get("channel_url") or event.get("source_surface"))
+        channel = clean_text(event.get("channel_url") or event.get("channel_name") or event.get("author_id") or event.get("source_surface"))
         if is_standard_video_event(event) and is_known_value(channel):
             channel_counter[channel] += 1
 
@@ -229,6 +235,29 @@ def build_dashboard_insights(
         for keyword, count in shorts_counter.most_common(8)
     ]
     shorts_analysis = build_shorts_analysis(analysis_events)
+    search_interest_map = build_search_interest_map(events)
+    standard_video_interest_map = build_standard_video_interest_map(events)
+    shorts_interest_map = build_shorts_interest_map(events)
+    interest_gap_report = build_interest_gap_report(
+        search_interest_map,
+        standard_video_interest_map,
+        shorts_interest_map,
+    )
+
+    search_keywords = search_interest_map.get("top_keywords", [])[:8] or search_keywords
+    standard_video_keywords = standard_video_interest_map.get("top_keywords", [])[:8] or standard_video_keywords
+    shorts_keywords = shorts_interest_map.get("top_shorts_keywords", [])[:8] or shorts_keywords
+
+    rule_topic_shares = []
+    for index, item in enumerate(standard_video_interest_map.get("category_distribution", [])[:6]):
+        rule_topic_shares.append({
+            "name": item.get("category") or item.get("name"),
+            "value": item.get("value", 0),
+            "count": item.get("count", 0),
+            "tone": INSIGHT_TONES[index % len(INSIGHT_TONES)]
+        })
+    if not topic_shares:
+        topic_shares = rule_topic_shares
 
     report_insights: List[str] = []
     if search_keywords:
@@ -262,25 +291,10 @@ def build_dashboard_insights(
 
     return {
         "search_keywords": search_keywords,
-        "search_interest_map": {
-            "total_search_count": sum(search_counter.values()),
-            "keywords": search_keywords,
-            "excluded_ad_count": len(excluded_ad_events),
-            "warnings": []
-        },
-        "standard_video_interest_map": {
-            "total_video_count": sum(standard_video_counter.values()),
-            "top_keywords": standard_video_keywords,
-            "top_channels": channel_shares,
-            "warnings": []
-        },
-        "shorts_interest_map": {
-            "total_shorts_count": sum(shorts_counter.values()),
-            "top_shorts_keywords": shorts_keywords,
-            "warnings": [
-                "Shorts interest map is based on repeated exposure patterns, not direct search intent."
-            ] if shorts_keywords else []
-        },
+        "search_interest_map": search_interest_map,
+        "standard_video_interest_map": standard_video_interest_map,
+        "shorts_interest_map": shorts_interest_map,
+        "interest_gap_report": interest_gap_report,
         "category_shares": topic_shares,
         "channel_shares": channel_shares,
         "excluded_ad_count": len(excluded_ad_events),
@@ -414,6 +428,22 @@ async def get_dashboard_summary(
             "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
             "ad_skip_summary": raw_file.get("ad_skip_summary", []),
         }
+        raw_data_coverage = raw_file.get("data_coverage") or {}
+        for key in [
+            "parsed_source_counts",
+            "analysis_source_counts",
+            "content_format_counts",
+            "duration_source_counts",
+            "skipped_sources_with_reason",
+            "ad_skip_summary",
+        ]:
+            value = data_coverage.get(key) or raw_data_coverage.get(key) or raw_file.get(key)
+            if value is not None:
+                data_coverage[key] = value
+        data_coverage["excluded_ad_count"] = max(
+            int(data_coverage.get("excluded_ad_count") or 0),
+            total_excluded_ad_count,
+        )
         risk_overall = build_overall_risk(run["bias_risk_score"], insights.get("shorts_analysis", {}))
         
         return {

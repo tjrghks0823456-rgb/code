@@ -17,6 +17,7 @@ import { loadSelfSurveyResult, SelfSurveyResult } from "../../utils/surveyStorag
 type ApiData = any;
 type SearchKeyword = { keyword: string; count: number; category?: string };
 type CategoryShare = { name: string; value: number; tone: string; count?: number };
+type InterestCategory = { category?: string; name?: string; value?: number; count?: number };
 
 function getRiskLabel(score: number) {
   if (score < 20) return "안정";
@@ -224,6 +225,18 @@ function DashboardContent() {
   const insights = processedData.insights || {};
   const searchKeywords: SearchKeyword[] = Array.isArray(insights.search_keywords) ? insights.search_keywords : [];
   const excludedAdCount = Number(insights.excluded_ad_count || processedData.data_coverage?.excluded_ad_count || 0);
+  const searchInterestMap = insights.search_interest_map || {};
+  const standardVideoInterestMap = insights.standard_video_interest_map || {};
+  const shortsInterestMap = insights.shorts_interest_map || {};
+  const interestGapReport = insights.interest_gap_report || {};
+  const topInterestCategory = (map: any) => {
+    const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
+    return distribution[0]?.category || distribution[0]?.name || "데이터 부족";
+  };
+  const interestMismatchScore = Math.round(Number(interestGapReport.interest_mismatch_score || 0));
+  const topDriftCategory = Array.isArray(interestGapReport.algorithm_drift_categories) && interestGapReport.algorithm_drift_categories.length > 0
+    ? interestGapReport.algorithm_drift_categories[0]
+    : null;
   const categoryShares: CategoryShare[] = Array.isArray(insights.category_shares) ? insights.category_shares : [];
   const reportInsights: string[] = Array.isArray(insights.report_insights) ? insights.report_insights : [];
   const directInterestSummary = insights.direct_interest_summary || "검색 기록 부족";
@@ -409,6 +422,44 @@ function DashboardContent() {
           ) : (
             <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-6 text-sm font-bold leading-6 text-slate-500">
               이번 데이터에는 숏츠 분석에 사용할 이벤트가 부족합니다. 일반 영상, 검색, 구독 정보 분석은 그대로 유지됩니다.
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6 md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">interest comparison</p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">검색 의도와 시청 노출 비교</h2>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">
+                광고성 기록을 제외한 검색어, 일반 영상, 숏츠를 따로 분리해 관심사가 어디에서 달라지는지 비교합니다.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-teal-50 px-4 py-3 text-right">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-teal-600">mismatch</p>
+              <p className="mt-1 text-3xl font-black text-teal-800">{interestMismatchScore}점</p>
+            </div>
+          </div>
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">active search</p>
+              <p className="mt-2 text-lg font-black text-slate-950">{topInterestCategory(searchInterestMap)}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{Number(searchInterestMap.total_search_count || 0)}건 기준</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">standard video</p>
+              <p className="mt-2 text-lg font-black text-slate-950">{topInterestCategory(standardVideoInterestMap)}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{Number(standardVideoInterestMap.total_video_count || 0)}건 기준</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">shorts</p>
+              <p className="mt-2 text-lg font-black text-slate-950">{topInterestCategory(shortsInterestMap)}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{Number(shortsInterestMap.total_shorts_count || 0)}건 기준</p>
+            </div>
+          </div>
+          {topDriftCategory && (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800">
+              검색보다 더 많이 노출된 관심사는 {topDriftCategory.category}이며, 격차는 약 {Math.round(Number(topDriftCategory.gap || 0))}점입니다.
             </div>
           )}
         </Card>
