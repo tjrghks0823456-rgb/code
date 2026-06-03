@@ -66,6 +66,13 @@ def _is_watch_event(event: Dict[str, Any]) -> bool:
     return action_type == "view" or source_type == "watch_history"
 
 
+def _is_active_search_event(event: Dict[str, Any]) -> bool:
+    action_type = _lower(event.get("action_type"))
+    source_type = _lower(event.get("source_type"))
+    intent_level = _lower(event.get("intent_level"))
+    return action_type == "search" or source_type == "search_history" or intent_level == "active_search"
+
+
 def _parse_event_time(value: Any) -> Optional[datetime]:
     if isinstance(value, datetime):
         return value
@@ -149,6 +156,7 @@ def _level_from_score(score: float) -> str:
 
 def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     watch_events = [event for event in events if _is_watch_event(event)]
+    active_search_count = sum(1 for event in events if _is_active_search_event(event))
     shorts_events = [
         event
         for event in events
@@ -160,6 +168,7 @@ def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     warnings = [
         "Shorts analysis is estimated from Google Takeout event_time and title metadata.",
         "Source surfaces such as home feed, recommendations, or subscriptions remain unknown unless explicitly present.",
+        "passive_feed_score is a heuristic estimate; Google Takeout does not confirm whether shorts came from a passive feed.",
     ]
     if shorts_count == 0:
         warnings.append("No shorts events were available for shorts-specific analysis.")
@@ -218,13 +227,26 @@ def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         if shorts_count:
             warnings.append("No valid event_time values were available for shorts time-bucket analysis.")
 
+    active_search_ratio = active_search_count / max(shorts_count + active_search_count, 1)
+    passive_feed_score = 0.0
+    if shorts_count:
+        passive_feed_score = min(
+            100.0,
+            shorts_ratio * 35.0
+            + dopamine_loop_score * 0.35
+            + repeated_topic_score * 0.15
+            + time_concentration_score * 0.10
+            + (1.0 - min(1.0, active_search_ratio)) * 15.0,
+        )
+
     shorts_stimulation_risk = 0.0
     if shorts_count:
         shorts_stimulation_risk = min(
             100.0,
-            dopamine_loop_score * 0.45
-            + repeated_topic_score * 0.30
-            + time_concentration_score * 0.25,
+            dopamine_loop_score * 0.35
+            + repeated_topic_score * 0.25
+            + time_concentration_score * 0.20
+            + passive_feed_score * 0.20,
         )
 
     return {
@@ -244,6 +266,10 @@ def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "repeated_keyword_count": repeated_keyword_count,
         "repeated_topic_score": round(repeated_topic_score, 1),
         "scroll_repetition_level": _level_from_score(repeated_topic_score),
+        "active_search_count": active_search_count,
+        "active_search_ratio": round(active_search_ratio, 3),
+        "passive_feed_score": round(passive_feed_score, 1),
+        "passive_feed_level": _level_from_score(passive_feed_score),
         "top_shorts_keywords": [
             {"keyword": keyword, "count": count}
             for keyword, count in keyword_counter.most_common(8)

@@ -1,6 +1,7 @@
 # Change Memos
 
 ## 2026-06-03 Shorts phase 2 analysis note
+- Follow-up: added `passive_feed_score` as a heuristic estimate from shorts ratio, loop pressure, repeated topics, time concentration, and active-search scarcity. It does not claim to identify home-feed or recommendation origin.
 - Added `backend/app/core/shorts_analysis.py` for deterministic shorts-only metrics: loop grouping, repeated keyword scoring, time-bucket concentration, and `shorts_stimulation_risk`.
 - Dashboard and analysis responses now include `information_bias_risk`, `shorts_stimulation_risk`, and `final_detox_risk` while keeping `shorts_ratio` backward compatible as a 0-1 ratio.
 - Detox generation now passes backend-computed `shorts_analysis` into Gemini/mock mission generation and prepends gentle shorts reset missions when shorts data exists.

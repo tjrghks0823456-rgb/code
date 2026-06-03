@@ -316,7 +316,7 @@ function DashboardContent() {
 
           {shortsCount > 0 ? (
             <>
-              <div className="mt-6 grid gap-3 md:grid-cols-4">
+              <div className="mt-6 grid gap-3 md:grid-cols-5">
                 <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
                   <div className="flex items-center gap-2 text-rose-700">
                     <Flame size={18} />
@@ -325,6 +325,16 @@ function DashboardContent() {
                   <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.dopamine_loop_score || 0))}점</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">
                     최대 {shortsAnalysis.max_loop_length || 0}개 연속 · 의미 루프 {shortsAnalysis.meaningful_loop_count || 0}개
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                  <div className="flex items-center gap-2 text-indigo-700">
+                    <Sparkles size={18} />
+                    <span className="text-xs font-black">수동 소비 추정</span>
+                  </div>
+                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.passive_feed_score || 0))}점</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {shortsAnalysis.passive_feed_level || "low"} · 검색 {shortsAnalysis.active_search_count || 0}건 참고
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
