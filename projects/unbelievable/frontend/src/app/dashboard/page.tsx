@@ -223,6 +223,7 @@ function DashboardContent() {
   const userAgency = Math.round(Number(metaGap.UAS?.actual || 0));
   const insights = processedData.insights || {};
   const searchKeywords: SearchKeyword[] = Array.isArray(insights.search_keywords) ? insights.search_keywords : [];
+  const excludedAdCount = Number(insights.excluded_ad_count || processedData.data_coverage?.excluded_ad_count || 0);
   const categoryShares: CategoryShare[] = Array.isArray(insights.category_shares) ? insights.category_shares : [];
   const reportInsights: string[] = Array.isArray(insights.report_insights) ? insights.report_insights : [];
   const directInterestSummary = insights.direct_interest_summary || "검색 기록 부족";
@@ -421,7 +422,14 @@ function DashboardContent() {
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">search map</p>
                 <h2 className="mt-2 text-2xl font-black text-slate-950">검색어 관심사 맵</h2>
               </div>
-              <Sparkles className="text-teal-700" size={24} />
+              <div className="flex items-center gap-2">
+                {excludedAdCount > 0 && (
+                  <span className="rounded-full bg-teal-50 px-3 py-1 text-[11px] font-black text-teal-700">
+                    광고 {excludedAdCount}건 제외
+                  </span>
+                )}
+                <Sparkles className="text-teal-700" size={24} />
+              </div>
             </div>
             <div className="mt-5 space-y-3">
               {searchKeywords.length > 0 ? (

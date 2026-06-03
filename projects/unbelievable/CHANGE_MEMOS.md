@@ -1,5 +1,11 @@
 # Change Memos
 
+## 2026-06-03 Ad filtering hardening note
+- Rebuilt the shared ad filter around Google Ads details, ad/tracking URL markers, and campaign-creative title patterns such as `_KR_R1`, `6s`, `ver.2`, `1080x1920`, and Korean creative labels like `가로형`.
+- Search interest maps now use only valid `search_history`/`active_search` events after search-query cleanup, so watch history, shorts, subscriptions, playlists, comments, and detected ad/promotional events cannot appear as direct search interests.
+- Upload and analysis responses now preserve ad exclusion coverage through `excluded_ad_count`, `ad_skip_summary`, and `skipped_sources_with_reason`, and the dashboard search card shows the excluded ad count.
+- Real ZIP validation with `takeout-20260601T113511Z-3-001.zip` now excludes 1,014 ad/promotional events, saves 2,113 analysis events, and reduces the search interest map to 60 cleaned search entries.
+
 ## 2026-06-03 Takeout ZIP QA note
 - Ran the real `takeout-20260601T113511Z-3-001.zip` upload flow through the backend TestClient. It parsed 3,209 Takeout items, saved 2,023 non-ad events, and excluded 1,096 ad-origin events.
 - Adjusted `content_format_counts` to count only watch/video events so search, subscription, playlist, comment, live chat, and channel records do not inflate the `unknown` content-format bucket.

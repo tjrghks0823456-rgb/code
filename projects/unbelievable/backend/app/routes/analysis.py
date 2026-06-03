@@ -2,7 +2,7 @@ import uuid
 import logging
 from typing import List
 from fastapi import APIRouter, HTTPException
-from app.core.content_filters import split_analysis_events
+from app.core.content_filters import build_ad_skip_summary, split_analysis_events
 from app.core.database import db_client
 from app.core.nlp import nlp_client
 from app.core.scoring import compute_6axis_score_details, classify_16_type
@@ -25,6 +25,11 @@ async def run_analysis(
         # 1. Fetch normalized events first so shorts-only uploads can still be scored.
         events = db_client.fetch_data("norm_event", {"file_id": file_id})
         analysis_events, excluded_ad_events = split_analysis_events(events)
+        raw_files = db_client.fetch_data("raw_file", {"id": file_id})
+        raw_file = raw_files[0] if raw_files else {}
+        upload_excluded_ad_count = int(raw_file.get("excluded_ad_count") or 0)
+        excluded_ad_count = upload_excluded_ad_count + len(excluded_ad_events)
+        ad_skip_summary = raw_file.get("ad_skip_summary") or build_ad_skip_summary(excluded_ad_events)
 
         # 2. Fetch sessions for NLP. Shorts are intentionally excluded from
         # session_text, so an event-only analysis path is valid.
@@ -85,12 +90,12 @@ async def run_analysis(
             analysis_warnings.append("All NLP sessions failed; scoring will use low-confidence feature warnings instead of fake default NLP data.")
 
         # 4. Score all normalized non-ad events
-        if excluded_ad_events:
-            analysis_warnings.append(f"Excluded {len(excluded_ad_events)} ad-origin events before scoring.")
+        if excluded_ad_count:
+            analysis_warnings.append(f"Excluded {excluded_ad_count} ad-origin events before scoring.")
 
         # 5. Compute 6-axis scores using deterministic python scoring engine (FEAT_06)
         score_details, exception_codes, feature_summary = compute_6axis_score_details(analysis_events, nlp_results)
-        feature_summary["excluded_ad_count"] = len(excluded_ad_events)
+        feature_summary["excluded_ad_count"] = excluded_ad_count
         axis_scores = {
             code: detail["score"]
             for code, detail in score_details.items()
@@ -135,6 +140,11 @@ async def run_analysis(
             "shorts_stimulation_risk": risk_overall["shorts_stimulation_risk"],
             "final_detox_risk": risk_overall["final_detox_risk"],
             "shorts_analysis": feature_summary.get("shorts_analysis", {}),
+            "data_coverage": {
+                "excluded_ad_count": excluded_ad_count,
+                "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
+                "ad_skip_summary": ad_skip_summary,
+            },
             "mbti_type": type_code, # e.g. "HHHH"
             "exception_codes": exception_codes,
             "score_warnings": analysis_warnings + score_quality_warnings # Saved in warnings JSONB
@@ -189,7 +199,12 @@ async def run_analysis(
                     "data_quality_warnings"
                 ]
             },
-            "excluded_ad_count": len(excluded_ad_events),
+            "excluded_ad_count": excluded_ad_count,
+            "data_coverage": {
+                "excluded_ad_count": excluded_ad_count,
+                "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
+                "ad_skip_summary": ad_skip_summary,
+            },
             "exception_codes": exception_codes,
             "analysis_warnings": analysis_warnings + score_quality_warnings
         }

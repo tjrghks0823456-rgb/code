@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from bs4 import BeautifulSoup
-from app.core.content_filters import detect_ad_event_reason, split_analysis_events
+from app.core.content_filters import build_ad_skip_summary, detect_ad_event_reason, split_analysis_events
 from app.core.database import db_client
 from app.core.shorts_analysis import build_shorts_analysis
 from app.core.upload_config import DURATION_LIMITS, PARSER_LIMITS, ZIP_LIMITS
@@ -899,6 +899,7 @@ async def upload_file(
                 })
 
         analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
+        ad_skip_summary = build_ad_skip_summary(excluded_ad_events)
         content_format_counts = count_content_formats(analysis_events)
         shorts_analysis = build_shorts_analysis(analysis_events)
         apply_youtube_duration_metadata(analysis_events)
@@ -928,6 +929,8 @@ async def upload_file(
             db_client.save_data("norm_event", event)
 
         raw_file_entry["upload_status"] = "SUCCESS"
+        raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
+        raw_file_entry["ad_skip_summary"] = ad_skip_summary
         db_client.save_data("raw_file", raw_file_entry)
 
         session_id = str(uuid.uuid4())
@@ -956,6 +959,7 @@ async def upload_file(
             "total_saved": len(filtered_events),
             "skipped_fake_dopamine": skipped_count,
             "excluded_ad_count": len(excluded_ad_events),
+            "ad_skip_summary": ad_skip_summary,
             "content_format_counts": content_format_counts,
             "shorts_analysis": shorts_analysis,
             "duration_source_counts": duration_source_counts,
@@ -1120,6 +1124,10 @@ async def upload_takeout(
                 })
 
         analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
+        ad_skip_summary = build_ad_skip_summary(excluded_ad_events)
+        response_skipped_sources = dict(skipped_sources_with_reason)
+        if ad_skip_summary:
+            response_skipped_sources["google_ads"] = f"Excluded {len(excluded_ad_events)} Google Ads/promotional Takeout events"
         analysis_source_counts = count_source_types(analysis_events)
         content_format_counts = count_content_formats(analysis_events)
         shorts_analysis = build_shorts_analysis(analysis_events)
@@ -1169,6 +1177,9 @@ async def upload_takeout(
 
         # 6. Update raw file status to SUCCESS
         raw_file_entry["upload_status"] = "SUCCESS"
+        raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
+        raw_file_entry["skipped_sources_with_reason"] = response_skipped_sources
+        raw_file_entry["ad_skip_summary"] = ad_skip_summary
         db_client.save_data("raw_file", raw_file_entry)
 
         # 7. Chronological Time-based and Count-based Multi-session Generator
@@ -1239,7 +1250,8 @@ async def upload_takeout(
             "parsed_source_counts": parsed_source_counts,
             "analysis_source_counts": analysis_source_counts,
             "ignored_sources": ignored_sources[:50], # Limit response size
-            "skipped_sources_with_reason": skipped_sources_with_reason,
+            "skipped_sources_with_reason": response_skipped_sources,
+            "ad_skip_summary": ad_skip_summary,
             "session_count": len(sessions_list) + aux_session_count,
             "aux_session_count": aux_session_count,
             "total_parsed": len(parsed_events),

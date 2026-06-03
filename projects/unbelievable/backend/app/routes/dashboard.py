@@ -2,7 +2,13 @@ import logging
 from collections import Counter
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
-from app.core.content_filters import split_analysis_events
+from app.core.content_filters import (
+    clean_search_query,
+    is_shorts_video_event,
+    is_standard_video_event,
+    is_valid_search_event,
+    split_analysis_events,
+)
 from app.core.database import db_client
 from app.core.scoring import PERSONALITY_MAP
 from app.core.shorts_analysis import build_overall_risk, build_shorts_analysis
@@ -171,22 +177,28 @@ def build_dashboard_insights(
     score_warnings: List[Dict[str, str]]
 ) -> Dict[str, Any]:
     search_counter: Counter = Counter()
+    standard_video_counter: Counter = Counter()
+    shorts_counter: Counter = Counter()
     topic_counter: Counter = Counter()
     channel_counter: Counter = Counter()
     analysis_events, excluded_ad_events = split_analysis_events(events)
 
     for event in analysis_events:
-        action_type = clean_text(event.get("action_type")).lower()
-        source_type = clean_text(event.get("source_type")).lower()
-        intent_level = clean_text(event.get("intent_level")).lower()
-        content_format = clean_text(event.get("content_format")).lower() or "unknown"
         title = clean_text(event.get("text_base"))
 
-        if (action_type == "search" or source_type == "search_history" or intent_level == "active_search") and title:
-            search_counter[title] += 1
+        if is_valid_search_event(event):
+            query = clean_search_query(title)
+            if query:
+                search_counter[query] += 1
+
+        if is_standard_video_event(event) and title:
+            standard_video_counter[title] += 1
+
+        if is_shorts_video_event(event) and title:
+            shorts_counter[title] += 1
 
         channel = clean_text(event.get("channel_name") or event.get("channel_url") or event.get("source_surface"))
-        if source_type != "search_history" and content_format != "shorts" and is_known_value(channel):
+        if is_standard_video_event(event) and is_known_value(channel):
             channel_counter[channel] += 1
 
     for result in nlp_results:
@@ -207,6 +219,14 @@ def build_dashboard_insights(
             "category": topic_shares[0]["name"] if topic_shares else "검색"
         }
         for keyword, count in search_counter.most_common(8)
+    ]
+    standard_video_keywords = [
+        {"keyword": keyword, "count": count}
+        for keyword, count in standard_video_counter.most_common(8)
+    ]
+    shorts_keywords = [
+        {"keyword": keyword, "count": count}
+        for keyword, count in shorts_counter.most_common(8)
     ]
     shorts_analysis = build_shorts_analysis(analysis_events)
 
@@ -242,6 +262,25 @@ def build_dashboard_insights(
 
     return {
         "search_keywords": search_keywords,
+        "search_interest_map": {
+            "total_search_count": sum(search_counter.values()),
+            "keywords": search_keywords,
+            "excluded_ad_count": len(excluded_ad_events),
+            "warnings": []
+        },
+        "standard_video_interest_map": {
+            "total_video_count": sum(standard_video_counter.values()),
+            "top_keywords": standard_video_keywords,
+            "top_channels": channel_shares,
+            "warnings": []
+        },
+        "shorts_interest_map": {
+            "total_shorts_count": sum(shorts_counter.values()),
+            "top_shorts_keywords": shorts_keywords,
+            "warnings": [
+                "Shorts interest map is based on repeated exposure patterns, not direct search intent."
+            ] if shorts_keywords else []
+        },
         "category_shares": topic_shares,
         "channel_shares": channel_shares,
         "excluded_ad_count": len(excluded_ad_events),
@@ -321,6 +360,8 @@ async def get_dashboard_summary(
         
         # --- [NEW] Calculate Actual DSAO based on actual watch data ---
         file_id = run["file_id"]
+        raw_files = db_client.fetch_data("raw_file", {"id": file_id})
+        raw_file = raw_files[0] if raw_files else {}
         events = db_client.fetch_data("norm_event", {"file_id": file_id})
         analysis_events, excluded_ad_events = split_analysis_events(events)
         nlp_results = fetch_nlp_results_for_file(file_id)
@@ -363,7 +404,16 @@ async def get_dashboard_summary(
         }
         actual_dsao_name = DSAO_NAMES.get(actual_dsao_code, "미지의 미디어 탐험가")
         insights = build_dashboard_insights(events, nlp_results, axis_scores, score_warnings)
-        insights["excluded_ad_count"] = max(insights.get("excluded_ad_count", 0), len(excluded_ad_events))
+        upload_excluded_ad_count = int(raw_file.get("excluded_ad_count") or 0)
+        total_excluded_ad_count = upload_excluded_ad_count + len(excluded_ad_events)
+        insights["excluded_ad_count"] = max(insights.get("excluded_ad_count", 0), total_excluded_ad_count)
+        if insights.get("search_interest_map"):
+            insights["search_interest_map"]["excluded_ad_count"] = insights["excluded_ad_count"]
+        data_coverage = run.get("data_coverage") or {
+            "excluded_ad_count": total_excluded_ad_count,
+            "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
+            "ad_skip_summary": raw_file.get("ad_skip_summary", []),
+        }
         risk_overall = build_overall_risk(run["bias_risk_score"], insights.get("shorts_analysis", {}))
         
         return {
@@ -399,6 +449,7 @@ async def get_dashboard_summary(
             },
             "exception_codes": exception_codes,
             "score_warnings": score_warnings,
+            "data_coverage": data_coverage,
             "insights": insights,
             "meta_gap": meta_gap,
             "misconception": {
