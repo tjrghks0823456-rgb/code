@@ -1,5 +1,4 @@
 import math
-from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.content_filters import detect_ad_event_reason
@@ -11,6 +10,7 @@ from app.core.score_config import (
     SENTIMENT_THRESHOLDS,
     TOXIC_CATEGORY_KEYWORDS,
 )
+from app.core.shorts_analysis import build_shorts_analysis
 
 
 UNKNOWN_VALUES = {"", "unknown", "none", "null", "n/a"}
@@ -61,7 +61,7 @@ def _duration_confidence_value(label: Any) -> float:
 
 def _content_format(event: Dict[str, Any], action_type: str) -> str:
     explicit = _lower(event.get("content_format"))
-    if explicit:
+    if explicit and explicit != "unknown":
         return explicit
 
     title_url = _lower(
@@ -209,7 +209,6 @@ def extract_features(
     live_count = 0
     unknown_format_count = 0
     estimated_duration_count = 0
-    shorts_keyword_counter: Counter = Counter()
 
     for event in normalized_events:
         action = event["action_type"]
@@ -238,9 +237,6 @@ def extract_features(
                 estimated_duration_count += 1
             if event.get("is_short"):
                 shorts_count += 1
-                keyword = event.get("text_base")
-                if keyword:
-                    shorts_keyword_counter[keyword] += 1
 
         if is_search:
             search_count += 1
@@ -361,6 +357,8 @@ def extract_features(
     # Mock/fallback penalties are applied per axis in scoring.py. At the
     # feature layer we keep only data-shape confidence plus explicit warnings.
 
+    shorts_analysis = build_shorts_analysis(normalized_events)
+
     return {
         "watch_count": watch_count,
         "search_count": search_count,
@@ -376,19 +374,7 @@ def extract_features(
         "standard_video_count": standard_video_count,
         "live_count": live_count,
         "unknown_format_count": unknown_format_count,
-        "shorts_analysis": {
-            "shorts_count": shorts_count,
-            "shorts_ratio": round(shorts_ratio, 3),
-            "top_shorts_keywords": [
-                {"keyword": keyword, "count": count}
-                for keyword, count in shorts_keyword_counter.most_common(8)
-            ],
-            "phase2_todo": [
-                "dopamine_loop_score",
-                "passive_feed_score",
-                "time_of_day_scroll_pattern"
-            ],
-        },
+        "shorts_analysis": shorts_analysis,
         "total_duration_sec": sum(durations) if durations else None,
         "duration_confidence": round(duration_confidence, 3),
         "data_confidence": round(max(0.0, min(1.0, data_confidence)), 3),

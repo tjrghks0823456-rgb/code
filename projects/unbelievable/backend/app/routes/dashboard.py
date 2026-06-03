@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from app.core.content_filters import split_analysis_events
 from app.core.database import db_client
 from app.core.scoring import PERSONALITY_MAP
+from app.core.shorts_analysis import build_overall_risk, build_shorts_analysis
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -172,9 +173,6 @@ def build_dashboard_insights(
     search_counter: Counter = Counter()
     topic_counter: Counter = Counter()
     channel_counter: Counter = Counter()
-    shorts_counter: Counter = Counter()
-    watch_count = 0
-    shorts_count = 0
     analysis_events, excluded_ad_events = split_analysis_events(events)
 
     for event in analysis_events:
@@ -183,13 +181,6 @@ def build_dashboard_insights(
         intent_level = clean_text(event.get("intent_level")).lower()
         content_format = clean_text(event.get("content_format")).lower() or "unknown"
         title = clean_text(event.get("text_base"))
-
-        if action_type == "view" or source_type == "watch_history":
-            watch_count += 1
-            if content_format == "shorts":
-                shorts_count += 1
-                if title:
-                    shorts_counter[title] += 1
 
         if (action_type == "search" or source_type == "search_history" or intent_level == "active_search") and title:
             search_counter[title] += 1
@@ -217,19 +208,7 @@ def build_dashboard_insights(
         }
         for keyword, count in search_counter.most_common(8)
     ]
-    shorts_analysis = {
-        "shorts_count": shorts_count,
-        "shorts_ratio": round(shorts_count / max(watch_count, 1), 3),
-        "top_shorts_keywords": [
-            {"keyword": keyword, "count": count}
-            for keyword, count in shorts_counter.most_common(8)
-        ],
-        "phase2_todo": [
-            "dopamine_loop_score",
-            "passive_feed_score",
-            "time_of_day_scroll_pattern"
-        ],
-    }
+    shorts_analysis = build_shorts_analysis(analysis_events)
 
     report_insights: List[str] = []
     if search_keywords:
@@ -385,6 +364,7 @@ async def get_dashboard_summary(
         actual_dsao_name = DSAO_NAMES.get(actual_dsao_code, "미지의 미디어 탐험가")
         insights = build_dashboard_insights(events, nlp_results, axis_scores, score_warnings)
         insights["excluded_ad_count"] = max(insights.get("excluded_ad_count", 0), len(excluded_ad_events))
+        risk_overall = build_overall_risk(run["bias_risk_score"], insights.get("shorts_analysis", {}))
         
         return {
             "run_id": run_id,
@@ -393,6 +373,10 @@ async def get_dashboard_summary(
                 "email": profile["email"]
             },
             "bias_risk_score": run["bias_risk_score"],
+            "information_bias_risk": run.get("information_bias_risk", risk_overall["information_bias_risk"]),
+            "shorts_stimulation_risk": run.get("shorts_stimulation_risk", risk_overall["shorts_stimulation_risk"]),
+            "final_detox_risk": run.get("final_detox_risk", risk_overall["final_detox_risk"]),
+            "shorts_weight": risk_overall["shorts_weight"],
             "weighted_health": run["weighted_health"],
             "mbti": {
                 "code": mbti_code,

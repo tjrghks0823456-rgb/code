@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-03 Shorts phase 2 analysis note
+- Added `backend/app/core/shorts_analysis.py` for deterministic shorts-only metrics: loop grouping, repeated keyword scoring, time-bucket concentration, and `shorts_stimulation_risk`.
+- Dashboard and analysis responses now include `information_bias_risk`, `shorts_stimulation_risk`, and `final_detox_risk` while keeping `shorts_ratio` backward compatible as a 0-1 ratio.
+- Detox generation now passes backend-computed `shorts_analysis` into Gemini/mock mission generation and prepends gentle shorts reset missions when shorts data exists.
+- Dashboard UI now has a dedicated shorts section with loop, repeated-scroll, time-bucket, keyword, warning, and empty-state displays.
+- Validation covered upload -> analysis -> dashboard -> detox with 6 consecutive shorts events grouped into one meaningful loop.
+
 ## 2026-06-03 Shorts phase 1 UI note
 - Upload completion now shows the basic `shorts_analysis` metrics: `shorts_count`, `shorts_ratio`, and `top_shorts_keywords`.
 

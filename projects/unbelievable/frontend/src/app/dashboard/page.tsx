@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, RefreshCcw, Search, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock3, Flame, RefreshCcw, Repeat2, Search, Sparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../components/Button";
 import Card from "../../components/Card";
@@ -229,6 +229,17 @@ function DashboardContent() {
   const algorithmInterestSummary = insights.algorithm_interest_summary || "분류 데이터 부족";
   const diversity = Math.round(Number(metaGap.TDS?.actual || 0));
   const misconceptionIndex = Math.round(Number(processedData.misconception?.index || 0));
+  const shortsAnalysis = insights.shorts_analysis || {};
+  const shortsCount = Number(shortsAnalysis.shorts_count || 0);
+  const shortsRisk = Math.round(Number(processedData.shorts_stimulation_risk ?? shortsAnalysis.shorts_stimulation_risk ?? 0));
+  const finalDetoxRisk = Math.round(Number(processedData.final_detox_risk ?? riskScore));
+  const timeBucketLabels: Record<string, string> = {
+    dawn: "새벽",
+    morning: "오전",
+    afternoon: "오후",
+    night: "밤",
+    unknown: "불명"
+  };
 
   return (
     <PageShell active="dashboard">
@@ -255,11 +266,12 @@ function DashboardContent() {
           </div>
         </section>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <ScoreCard label="관심사 쏠림" value={`${riskScore}점`} caption={`${getRiskLabel(riskScore)} 단계`} tone="bg-rose-500 text-white" />
           <ScoreCard label="생각과 기록 차이" value={`${misconceptionIndex}점`} caption={processedData.misconception?.worst_axis_name || "메타인지 갭"} tone="bg-amber-500 text-white" />
           <ScoreCard label="관심사 다양성" value={`${diversity}점`} caption="시청 기록 기준" tone="bg-sky-500 text-white" />
           <ScoreCard label="사용자 주도성" value={`${userAgency}%`} caption="직접 탐색 비중" tone="bg-teal-600 text-white" />
+          <ScoreCard label="최종 디톡스 위험" value={`${finalDetoxRisk}점`} caption="정보 편향+숏츠 루프" tone="bg-slate-900 text-white" />
         </div>
 
         <Card className="p-5">
@@ -285,6 +297,109 @@ function DashboardContent() {
               })}
             </div>
           </div>
+        </Card>
+
+        <Card className="p-6 md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">shorts analysis</p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">숏츠 자극 소비 루프</h2>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">
+                숏츠는 일반 관심사 영향 점수에 직접 섞지 않고, 짧은 영상의 연속 소비와 반복 주제 신호로 별도 해석합니다.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-rose-50 px-4 py-3 text-right">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">stimulation risk</p>
+              <p className="mt-1 text-3xl font-black text-rose-700">{shortsRisk}점</p>
+            </div>
+          </div>
+
+          {shortsCount > 0 ? (
+            <>
+              <div className="mt-6 grid gap-3 md:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                  <div className="flex items-center gap-2 text-rose-700">
+                    <Flame size={18} />
+                    <span className="text-xs font-black">루프 지표</span>
+                  </div>
+                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.dopamine_loop_score || 0))}점</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    최대 {shortsAnalysis.max_loop_length || 0}개 연속 · 의미 루프 {shortsAnalysis.meaningful_loop_count || 0}개
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <Repeat2 size={18} />
+                    <span className="text-xs font-black">반복 스크롤</span>
+                  </div>
+                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.repeated_topic_score || 0))}점</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {shortsAnalysis.scroll_repetition_level || "low"} · 반복 키워드 {shortsAnalysis.repeated_keyword_count || 0}개
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                  <div className="flex items-center gap-2 text-sky-700">
+                    <Clock3 size={18} />
+                    <span className="text-xs font-black">시간대 집중</span>
+                  </div>
+                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.time_concentration_score || 0))}점</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    피크 {timeBucketLabels[shortsAnalysis.peak_shorts_time_bucket] || shortsAnalysis.peak_shorts_time_bucket || "불명"} · 심야 {shortsAnalysis.late_night_shorts_ratio || 0}%
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                  <p className="text-xs font-black text-slate-500">숏츠 비중</p>
+                  <p className="mt-3 text-2xl font-black text-slate-950">{shortsCount}개</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    전체 시청 대비 {Number(shortsAnalysis.shorts_ratio_percent ?? (shortsAnalysis.shorts_ratio || 0) * 100).toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-black text-slate-950">숏츠 반복 키워드</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {Array.isArray(shortsAnalysis.top_shorts_keywords) && shortsAnalysis.top_shorts_keywords.length > 0 ? (
+                      shortsAnalysis.top_shorts_keywords.map((item: any) => (
+                        <span key={`${item.keyword}-${item.count}`} className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700">
+                          {item.keyword} {item.count}회
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-bold text-slate-500">반복 키워드가 충분하지 않습니다.</span>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-black text-slate-950">시간대별 숏츠</p>
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {Object.entries(shortsAnalysis.shorts_by_time_bucket || {}).map(([bucket, count]) => (
+                      <div key={bucket} className="rounded-xl bg-[#fbfaf7] px-3 py-2 text-center">
+                        <p className="text-[10px] font-black text-slate-400">{timeBucketLabels[bucket] || bucket}</p>
+                        <p className="mt-1 text-lg font-black text-slate-900">{Number(count || 0)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {Array.isArray(shortsAnalysis.warnings) && shortsAnalysis.warnings.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">analysis notes</p>
+                  <div className="mt-2 space-y-1">
+                    {shortsAnalysis.warnings.slice(0, 3).map((warning: string) => (
+                      <p key={warning} className="text-xs font-bold leading-5 text-amber-800">{warning}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-6 text-sm font-bold leading-6 text-slate-500">
+              이번 데이터에는 숏츠 분석에 사용할 이벤트가 부족합니다. 일반 영상, 검색, 구독 정보 분석은 그대로 유지됩니다.
+            </div>
+          )}
         </Card>
 
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">

@@ -85,6 +85,12 @@ ALTER TABLE public.score_run
     ALTER COLUMN exception_codes TYPE VARCHAR(40)[]
     USING exception_codes::VARCHAR(40)[];
 
+ALTER TABLE public.score_run
+    ADD COLUMN IF NOT EXISTS information_bias_risk FLOAT,
+    ADD COLUMN IF NOT EXISTS shorts_stimulation_risk FLOAT,
+    ADD COLUMN IF NOT EXISTS final_detox_risk FLOAT,
+    ADD COLUMN IF NOT EXISTS shorts_analysis JSONB DEFAULT '{}'::jsonb;
+
 -- 7. 6축 세부 점수 테이블
 CREATE TABLE IF NOT EXISTS public.score_axis (
     axis_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

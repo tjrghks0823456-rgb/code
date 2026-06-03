@@ -15,14 +15,16 @@ class GeminiClient:
         risk_score: float, 
         axis_scores: Dict[str, float], 
         mbti_type: str,
-        dominant_topics: List[str]
+        dominant_topics: List[str],
+        shorts_analysis: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
         Generates structured Reverse Queries and Detox Missions using Gemini 2.5 Flash.
         If using mock credentials, generates high-quality realistic mock responses.
         """
+        shorts_analysis = shorts_analysis or {}
         if self.is_mock:
-            return self._generate_mock_plan(risk_score, axis_scores, mbti_type, dominant_topics)
+            return self._generate_mock_plan(risk_score, axis_scores, mbti_type, dominant_topics, shorts_analysis)
             
         try:
             # Placeholder for actual Gemini API call utilizing google-generativeai SDK
@@ -38,11 +40,13 @@ class GeminiClient:
             - 6-Axis Scores (TDS, SBS, EBS, VOS, SMS, UAS): {json.dumps(axis_scores)}
             - Personality Type: {mbti_type}
             - Dominant Topics Consumed: {json.dumps(dominant_topics)}
+            - Backend-computed shorts analysis: {json.dumps(shorts_analysis, ensure_ascii=False)}
             
             Generate a JSON containing:
             1. overall_summary: A 2-3 sentence academic explanation.
             2. reverse_queries: 3 alternative search query objects (query_text, expected_topic, why_this_helps).
             3. missions: A 3-day plan containing action items (id, title, description, success_condition, effort_level, input_type, choices).
+            Do not invent scores. Use shorts_analysis only to explain short-form repeated consumption loops and to suggest gentle 1-3 minute reset missions.
             """
             
             response = model.generate_content(
@@ -52,16 +56,18 @@ class GeminiClient:
             return json.loads(response.text)
         except Exception as e:
             logger.error(f"Failed to call Gemini API: {e}")
-            return self._generate_mock_plan(risk_score, axis_scores, mbti_type, dominant_topics)
+            return self._generate_mock_plan(risk_score, axis_scores, mbti_type, dominant_topics, shorts_analysis)
             
     def _generate_mock_plan(
         self, 
         risk_score: float, 
         axis_scores: Dict[str, float], 
         mbti_type: str,
-        dominant_topics: List[str]
+        dominant_topics: List[str],
+        shorts_analysis: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Generates dynamic, high-quality, realistic detox plans based on scores."""
+        shorts_analysis = shorts_analysis or {}
         # Find the lowest score axis
         sorted_axes = sorted(axis_scores.items(), key=lambda x: x[1])
         lowest_axis, lowest_score = sorted_axes[0]
@@ -147,6 +153,38 @@ class GeminiClient:
                 }
             ]
             
+        shorts_count = int(shorts_analysis.get("shorts_count") or 0)
+        if shorts_count > 0:
+            shorts_keywords = shorts_analysis.get("top_shorts_keywords") or []
+            keyword_hint = (
+                shorts_keywords[0].get("keyword")
+                if shorts_keywords and isinstance(shorts_keywords[0], dict)
+                else "반복 주제"
+            )
+            overall_summary += (
+                f" 숏츠는 관심사 편향 점수에 직접 섞지 않고, 짧은 영상 반복 소비 루프 관점에서 별도로 참고했습니다."
+                f" 현재 숏츠 자극 소비 위험은 {shorts_analysis.get('shorts_stimulation_risk', 0)}점입니다."
+            )
+            missions = [
+                {
+                    "id": "shorts_m1",
+                    "title": "숏츠 5개 뒤 키워드 하나 적기",
+                    "description": f"다음 숏츠 묶음을 본 뒤 방금 반복된 단어를 하나만 적어보세요. 감지된 반복 힌트는 '{keyword_hint}'입니다.",
+                    "success_condition": "반복 키워드 1개 입력",
+                    "effort_level": "low",
+                    "input_type": "text"
+                },
+                {
+                    "id": "shorts_m2",
+                    "title": "다음 숏츠 제목 먼저 읽기",
+                    "description": "다음 숏츠를 바로 넘기기 전에 제목을 한 번 읽고, 정말 볼지 3초만 선택해보세요.",
+                    "success_condition": "선택 완료",
+                    "effort_level": "low",
+                    "input_type": "choice",
+                    "choices": ["보고 넘기기", "저장만 하기", "일반 영상으로 바꾸기"]
+                },
+            ] + missions
+
         return {
             "overall_summary": overall_summary,
             "reverse_queries": reverse_queries,

@@ -4,7 +4,6 @@ import logging
 import zipfile
 import urllib.parse
 import csv
-from collections import Counter
 from io import BytesIO, StringIO
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -12,6 +11,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from bs4 import BeautifulSoup
 from app.core.content_filters import detect_ad_event_reason, split_analysis_events
 from app.core.database import db_client
+from app.core.shorts_analysis import build_shorts_analysis
 from app.core.upload_config import DURATION_LIMITS, PARSER_LIMITS, ZIP_LIMITS
 from app.core.youtube import parse_iso8601_duration, youtube_client
 
@@ -150,32 +150,6 @@ def count_content_formats(events: List[Dict[str, Any]]) -> Dict[str, int]:
         content_format = event.get("content_format") or classify_content_format(event)
         counts[content_format] = counts.get(content_format, 0) + 1
     return counts
-
-def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
-    watch_events = [event for event in events if event.get("action_type") == "view"]
-    shorts_events = [
-        event for event in watch_events
-        if (event.get("content_format") or classify_content_format(event)) == "shorts"
-    ]
-    keyword_counter = Counter()
-    for event in shorts_events:
-        keyword = (event.get("text_base") or event.get("title_text") or "").strip()
-        if keyword:
-            keyword_counter[keyword] += 1
-
-    return {
-        "shorts_count": len(shorts_events),
-        "shorts_ratio": round(len(shorts_events) / max(len(watch_events), 1), 3),
-        "top_shorts_keywords": [
-            {"keyword": keyword, "count": count}
-            for keyword, count in keyword_counter.most_common(8)
-        ],
-        "phase2_todo": [
-            "dopamine_loop_score",
-            "passive_feed_score",
-            "time_of_day_scroll_pattern"
-        ]
-    }
 
 def apply_youtube_duration_metadata(events: List[Dict[str, Any]]) -> Dict[str, int]:
     seen = set()

@@ -6,6 +6,7 @@ from app.core.content_filters import split_analysis_events
 from app.core.database import db_client
 from app.core.nlp import nlp_client
 from app.core.scoring import compute_6axis_score_details, classify_16_type
+from app.core.shorts_analysis import build_overall_risk
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -114,6 +115,13 @@ async def run_analysis(
             weighted_health = sum(axis_scores.values()) / len(axis_scores)
         bias_risk_score = round(100.0 - weighted_health, 1)
         weighted_health = round(weighted_health, 1)
+        risk_overall = build_overall_risk(
+            information_bias_risk=bias_risk_score,
+            shorts_analysis=feature_summary.get("shorts_analysis", {})
+        )
+        shorts_warnings = feature_summary.get("shorts_analysis", {}).get("warnings", [])
+        if isinstance(shorts_warnings, list):
+            analysis_warnings.extend(shorts_warnings)
 
         # 7. Save score run summary
         run_id = str(uuid.uuid4())
@@ -123,6 +131,10 @@ async def run_analysis(
             "file_id": file_id,
             "bias_risk_score": bias_risk_score,
             "weighted_health": weighted_health,
+            "information_bias_risk": risk_overall["information_bias_risk"],
+            "shorts_stimulation_risk": risk_overall["shorts_stimulation_risk"],
+            "final_detox_risk": risk_overall["final_detox_risk"],
+            "shorts_analysis": feature_summary.get("shorts_analysis", {}),
             "mbti_type": type_code, # e.g. "HHHH"
             "exception_codes": exception_codes,
             "score_warnings": analysis_warnings + score_quality_warnings # Saved in warnings JSONB
@@ -145,6 +157,10 @@ async def run_analysis(
             "success": True,
             "run_id": run_id,
             "bias_risk_score": bias_risk_score,
+            "information_bias_risk": risk_overall["information_bias_risk"],
+            "shorts_stimulation_risk": risk_overall["shorts_stimulation_risk"],
+            "final_detox_risk": risk_overall["final_detox_risk"],
+            "shorts_weight": risk_overall["shorts_weight"],
             "mbti_type": type_code,
             "mbti_name": type_name,
             "mbti_tags": tags,
