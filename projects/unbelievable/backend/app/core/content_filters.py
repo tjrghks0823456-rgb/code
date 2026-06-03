@@ -13,14 +13,50 @@ AD_TEXT_MARKERS = [
     "advertiser",
     "paid promotion",
     "sponsored",
-    "google 광고",
-    "youtube 광고",
-    "유튜브 광고",
-    "광고에서",
-    "광고를 시청",
-    "광고 동영상",
-    "스폰서 광고",
-    "광고주",
+    "promoted",
+    "shortened:",
+    "cid=",
+    "gclid",
+    "gbraid",
+    "wbraid",
+    "utm_",
+    "utm-source",
+    "utm source",
+    "adurl",
+    "aclk",
+    "clickserve",
+    "tracking",
+    "redirect",
+    "official store",
+    "official mall",
+    "time deal",
+    "hot deal",
+    "special offer",
+    "limited offer",
+    "popular products",
+    "shop now",
+    "buy now",
+    "sale",
+    "promo",
+    "광고",
+    "스폰서",
+    "프로모션",
+    "타임딜",
+    "핫딜",
+    "특가",
+    "공식몰",
+    "인기 제품",
+    "인기상품",
+    "기획전",
+    "할인",
+    "쿠폰",
+    "무료배송",
+    "구매하기",
+    "쇼핑",
+    "쇼핑몰",
+    "lge.com",
+    "닥터패치",
+    "the android show",
 ]
 
 AD_URL_MARKERS = [
@@ -30,6 +66,22 @@ AD_URL_MARKERS = [
     "googlesyndication",
     "ads.youtube.com",
     "/pagead/",
+    "/aclk",
+    "adclick",
+    "adurl=",
+    "utm_",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "gclid=",
+    "gbraid=",
+    "wbraid=",
+    "cid=",
+]
+
+LOW_VALUE_SEARCH_MARKERS = [
+    "알 수 없는 비디오",
+    "unknown video",
 ]
 
 
@@ -72,6 +124,10 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
     for marker in AD_TEXT_MARKERS:
         if marker in flattened:
             return f"text_marker:{marker}"
+
+    for marker in LOW_VALUE_SEARCH_MARKERS:
+        if marker in flattened:
+            return f"noise_marker:{marker}"
 
     return None
 
