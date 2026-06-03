@@ -639,6 +639,29 @@ export default function UploadPage() {
                       </div>
                     </div>
 
+                    {uploadSummary.shorts_analysis && (
+                      <div className="mt-3 rounded-2xl bg-rose-500/10 border border-rose-400/20 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="inline-flex items-center gap-2 text-xs font-bold text-rose-100">
+                            <Flame className="text-rose-300" size={16} />
+                            숏츠 기본 지표
+                          </span>
+                          <span className="text-xs font-black text-rose-200">
+                            {uploadSummary.shorts_analysis.shorts_count || 0}건 · {Math.round((uploadSummary.shorts_analysis.shorts_ratio || 0) * 100)}%
+                          </span>
+                        </div>
+                        {uploadSummary.shorts_analysis.top_shorts_keywords?.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {uploadSummary.shorts_analysis.top_shorts_keywords.slice(0, 5).map((item: { keyword: string; count: number }, i: number) => (
+                              <span key={`shorts-keyword-${i}`} className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-black text-rose-50">
+                                {item.keyword} {item.count}회
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="mt-3 flex items-center justify-between rounded-2xl bg-orange-500/10 border border-orange-400/20 px-4 py-3">
                       <span className="text-xs font-bold text-orange-100">광고 출처 제외</span>
                       <span className="text-xs font-black text-orange-300">

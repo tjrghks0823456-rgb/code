@@ -34,8 +34,19 @@ CREATE TABLE IF NOT EXISTS public.norm_event (
     text_base TEXT NOT NULL, -- 제목 또는 검색어 등
     platform VARCHAR(50) DEFAULT 'youtube',
     action_type VARCHAR(20) DEFAULT 'view', -- view, search
-    source_surface VARCHAR(50) -- home, search, autoplay, etc.
+    source_surface VARCHAR(50) DEFAULT 'unknown', -- unknown unless the source surface is explicitly known
+    source_type VARCHAR(50), -- watch_history, search_history, subscription, playlist, comment, live_chat, channel
+    content_format VARCHAR(30) DEFAULT 'unknown', -- shorts, standard_video, live, unknown
+    intent_level VARCHAR(30) DEFAULT 'unknown' -- active_search, unknown
 );
+
+ALTER TABLE public.norm_event
+    ADD COLUMN IF NOT EXISTS source_type VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS content_format VARCHAR(30) DEFAULT 'unknown',
+    ADD COLUMN IF NOT EXISTS intent_level VARCHAR(30) DEFAULT 'unknown';
+
+ALTER TABLE public.norm_event
+    ALTER COLUMN source_surface SET DEFAULT 'unknown';
 
 -- 4. 30분 단위 병합 세션 텍스트 테이블
 CREATE TABLE IF NOT EXISTS public.session_text (

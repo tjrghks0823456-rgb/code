@@ -4,6 +4,7 @@ import logging
 import zipfile
 import urllib.parse
 import csv
+from collections import Counter
 from io import BytesIO, StringIO
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -63,7 +64,45 @@ def extract_video_id(url: str) -> Optional[str]:
         pass
     return None
 
+def classify_content_format(item: Dict[str, Any]) -> str:
+    action_type = (item.get("action_type") or "").lower()
+    url = (
+        item.get("title_url")
+        or item.get("titleUrl")
+        or item.get("url")
+        or item.get("URL")
+        or ""
+    ).lower()
+    title = (item.get("title_text") or item.get("text_base") or "").lower()
+
+    if "/shorts/" in url or "youtube.com/shorts" in url:
+        return "shorts"
+    if "/live/" in url or "youtube.com/live" in url or "실시간 스트리밍" in title:
+        return "live"
+    if action_type == "view" and ("watch?v=" in url or item.get("video_id")):
+        return "standard_video"
+    return "unknown"
+
+def infer_intent_level(item: Dict[str, Any]) -> str:
+    action_type = (item.get("action_type") or "").lower()
+    source_type = (item.get("source_type") or "").lower()
+    if action_type == "search" or source_type == "search_history":
+        return "active_search"
+    return "unknown"
+
+def infer_source_type(item: Dict[str, Any]) -> str:
+    source_type = (item.get("source_type") or "").lower()
+    if source_type:
+        return source_type
+    action_type = (item.get("action_type") or "").lower()
+    if action_type == "search":
+        return "search_history"
+    if action_type == "view":
+        return "watch_history"
+    return "unknown"
+
 def is_shorts_item(item: Dict[str, Any]) -> bool:
+    return classify_content_format(item) == "shorts"
     title = (item.get("title_text") or item.get("text_base") or "").lower()
     url = (item.get("title_url") or "").lower()
     return "shorts" in title or "#shorts" in title or "/shorts/" in url or "쇼츠" in title
@@ -99,6 +138,44 @@ def count_source_types(events: List[Dict[str, Any]]) -> Dict[str, int]:
         if source_type:
             counts[source_type] = counts.get(source_type, 0) + 1
     return counts
+
+def count_content_formats(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {
+        "shorts": 0,
+        "standard_video": 0,
+        "live": 0,
+        "unknown": 0
+    }
+    for event in events:
+        content_format = event.get("content_format") or classify_content_format(event)
+        counts[content_format] = counts.get(content_format, 0) + 1
+    return counts
+
+def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    watch_events = [event for event in events if event.get("action_type") == "view"]
+    shorts_events = [
+        event for event in watch_events
+        if (event.get("content_format") or classify_content_format(event)) == "shorts"
+    ]
+    keyword_counter = Counter()
+    for event in shorts_events:
+        keyword = (event.get("text_base") or event.get("title_text") or "").strip()
+        if keyword:
+            keyword_counter[keyword] += 1
+
+    return {
+        "shorts_count": len(shorts_events),
+        "shorts_ratio": round(len(shorts_events) / max(len(watch_events), 1), 3),
+        "top_shorts_keywords": [
+            {"keyword": keyword, "count": count}
+            for keyword, count in keyword_counter.most_common(8)
+        ],
+        "phase2_todo": [
+            "dopamine_loop_score",
+            "passive_feed_score",
+            "time_of_day_scroll_pattern"
+        ]
+    }
 
 def apply_youtube_duration_metadata(events: List[Dict[str, Any]]) -> Dict[str, int]:
     seen = set()
@@ -420,6 +497,8 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
             "channel_name": channel_name,
             "channel_url": channel_url
         }
+        parsed_item["content_format"] = classify_content_format(parsed_item)
+        parsed_item["intent_level"] = infer_intent_level(parsed_item)
         ad_reason = detect_ad_event_reason({**parsed_item, "raw_takeout_text": text})
         if ad_reason:
             parsed_item["is_ad_event"] = True
@@ -489,6 +568,8 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
             "channel_name": channel_name,
             "channel_url": channel_url
         }
+        parsed_item["content_format"] = classify_content_format(parsed_item)
+        parsed_item["intent_level"] = infer_intent_level(parsed_item)
         ad_reason = detect_ad_event_reason({**item, **parsed_item})
         if ad_reason:
             parsed_item["is_ad_event"] = True
@@ -594,7 +675,7 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
             clean_title = clean_url
         if not clean_title:
             return
-        parsed_items.append({
+        parsed_item = {
             "title_text": clean_title[:500],
             "action_type": action_type,
             "event_time": event_time or now_str,
@@ -602,7 +683,10 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
             "video_id": extract_video_id(clean_url),
             "channel_name": channel_name or clean_title,
             "channel_url": clean_url or None
-        })
+        }
+        parsed_item["content_format"] = classify_content_format(parsed_item)
+        parsed_item["intent_level"] = infer_intent_level(parsed_item)
+        parsed_items.append(parsed_item)
 
     def pick_first(data: Dict[str, Any], keys: List[str]) -> str:
         for key in keys:
@@ -749,10 +833,12 @@ async def upload_file(
 
                 title_url = item.get("titleUrl", "")
                 video_id = extract_video_id(title_url)
+                current_source_type = infer_source_type({"action_type": current_action_type})
                 duration_item = {
                     "title_text": title_text,
                     "title_url": title_url,
                     "action_type": current_action_type,
+                    "source_type": current_source_type,
                 }
                 estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
                 ad_reason = detect_ad_event_reason({**item, **duration_item})
@@ -780,9 +866,12 @@ async def upload_file(
                     "text_base": title_text,
                     "platform": platform,
                     "action_type": current_action_type,
-                    "source_surface": "home_feed" if i % 2 == 0 else "search_results",
+                    "source_type": current_source_type,
+                    "source_surface": "unknown",
                     "title_url": title_url,
                     "video_id": video_id,
+                    "content_format": classify_content_format(duration_item),
+                    "intent_level": infer_intent_level(duration_item),
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
                     "duration_source": duration_source,
@@ -803,9 +892,11 @@ async def upload_file(
                     if len(parts) > 1:
                         title_text = parts[0].strip("\" ")
 
+                current_source_type = infer_source_type({"action_type": action_type})
                 duration_item = {
                     "title_text": title_text,
                     "action_type": action_type,
+                    "source_type": current_source_type,
                 }
                 estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
                 ad_reason = detect_ad_event_reason({**duration_item, "raw_line": cleaned_line})
@@ -818,7 +909,10 @@ async def upload_file(
                     "text_base": title_text,
                     "platform": platform,
                     "action_type": action_type,
-                    "source_surface": "home_feed" if i % 2 == 0 else "search_results",
+                    "source_type": current_source_type,
+                    "source_surface": "unknown",
+                    "content_format": classify_content_format(duration_item),
+                    "intent_level": infer_intent_level(duration_item),
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
                     "duration_source": duration_source,
@@ -827,6 +921,8 @@ async def upload_file(
                 })
 
         analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
+        content_format_counts = count_content_formats(analysis_events)
+        shorts_analysis = build_shorts_analysis(analysis_events)
         apply_youtube_duration_metadata(analysis_events)
         timed_events = []
         for event in analysis_events:
@@ -857,25 +953,33 @@ async def upload_file(
         db_client.save_data("raw_file", raw_file_entry)
 
         session_id = str(uuid.uuid4())
-        aggregated_titles = " | ".join([e["text_base"] for e in filtered_events[:15]])
+        standard_text_events = [
+            event for event in filtered_events
+            if event.get("action_type") == "search"
+            or (event.get("action_type") == "view" and event.get("content_format") == "standard_video")
+        ]
+        aggregated_titles = " | ".join([e["text_base"] for e in standard_text_events[:15]])
         session_text_entry = {
             "id": session_id,
             "file_id": file_id,
             "aggregated_text": aggregated_titles,
             "token_count": len(aggregated_titles.split()),
-            "start_time": filtered_events[-1]["event_time"] if filtered_events else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-            "end_time": filtered_events[0]["event_time"] if filtered_events else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            "start_time": standard_text_events[-1]["event_time"] if standard_text_events else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "end_time": standard_text_events[0]["event_time"] if standard_text_events else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         }
-        db_client.save_data("session_text", session_text_entry)
+        if aggregated_titles:
+            db_client.save_data("session_text", session_text_entry)
 
         return {
             "success": True,
             "file_id": file_id,
-            "session_id": session_id,
+            "session_id": session_id if aggregated_titles else None,
             "total_parsed": len(parsed_events),
             "total_saved": len(filtered_events),
             "skipped_fake_dopamine": skipped_count,
             "excluded_ad_count": len(excluded_ad_events),
+            "content_format_counts": content_format_counts,
+            "shorts_analysis": shorts_analysis,
             "duration_source_counts": duration_source_counts,
             "message": f"Successfully parsed {len(parsed_events)} events. Filtered out {skipped_count} short-form dopamine loops (< {DURATION_LIMITS['min_watch_sec']}s)."
         }
@@ -1022,12 +1126,14 @@ async def upload_takeout(
                     "text_base": item["title_text"],
                     "platform": "youtube",
                     "action_type": item["action_type"],
-                    "source_surface": "home_feed" if idx % 2 == 0 else "search_results",
+                    "source_surface": "unknown",
                     "source_type": kind,
                     "channel_name": item.get("channel_name"),
                     "channel_url": item.get("channel_url"),
                     "title_url": item.get("title_url"),
                     "video_id": item.get("video_id"),
+                    "content_format": item.get("content_format") or classify_content_format(item),
+                    "intent_level": item.get("intent_level") or infer_intent_level({**item, "source_type": kind}),
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
                     "duration_source": duration_source,
@@ -1037,6 +1143,8 @@ async def upload_takeout(
 
         analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
         analysis_source_counts = count_source_types(analysis_events)
+        content_format_counts = count_content_formats(analysis_events)
+        shorts_analysis = build_shorts_analysis(analysis_events)
         duration_source_counts = apply_youtube_duration_metadata(analysis_events)
 
         # 4. Filter watch history views for dopamine filter & sessions
@@ -1086,7 +1194,11 @@ async def upload_takeout(
         db_client.save_data("raw_file", raw_file_entry)
 
         # 7. Chronological Time-based and Count-based Multi-session Generator
-        session_events = [e for e in filtered_events if e["action_type"] in ["view", "search"]]
+        session_events = [
+            e for e in filtered_events
+            if e["action_type"] == "search"
+            or (e["action_type"] == "view" and e.get("content_format") == "standard_video")
+        ]
         session_events_sorted = sorted(session_events, key=lambda x: x["event_time"])
 
         sessions_list = []
@@ -1156,6 +1268,8 @@ async def upload_takeout(
             "total_saved": len(final_events),
             "skipped_fake_dopamine": skipped_count,
             "excluded_ad_count": len(excluded_ad_events),
+            "content_format_counts": content_format_counts,
+            "shorts_analysis": shorts_analysis,
             "duration_source_counts": duration_source_counts
         }
 

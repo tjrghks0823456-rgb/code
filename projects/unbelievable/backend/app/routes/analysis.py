@@ -21,10 +21,15 @@ async def run_analysis(
     and resilience against individual session failures.
     """
     try:
-        # 1. Fetch sessions for the file
+        # 1. Fetch normalized events first so shorts-only uploads can still be scored.
+        events = db_client.fetch_data("norm_event", {"file_id": file_id})
+        analysis_events, excluded_ad_events = split_analysis_events(events)
+
+        # 2. Fetch sessions for NLP. Shorts are intentionally excluded from
+        # session_text, so an event-only analysis path is valid.
         sessions = db_client.fetch_data("session_text", {"file_id": file_id})
-        if not sessions:
-            raise HTTPException(status_code=404, detail="No session text found for this file. Please upload a valid history file.")
+        if not sessions and not analysis_events:
+            raise HTTPException(status_code=404, detail="No analyzable history found for this file. Please upload a valid history file.")
 
         # Chronologically sort the sessions by start_time
         sessions_sorted = sorted(sessions, key=lambda s: s.get("start_time", ""))
@@ -37,8 +42,11 @@ async def run_analysis(
         else:
             selected_sessions = sessions_sorted
 
-        nlp_results = []
         analysis_warnings = []
+        if not sessions:
+            analysis_warnings.append("No standard-video/search session text found; scoring will use event features only.")
+
+        nlp_results = []
 
         # NLP text word count capping (MVP Limits)
         max_char_limit = 10000
@@ -75,9 +83,7 @@ async def run_analysis(
         if not nlp_results:
             analysis_warnings.append("All NLP sessions failed; scoring will use low-confidence feature warnings instead of fake default NLP data.")
 
-        # 4. Fetch all normalized events for scoring
-        events = db_client.fetch_data("norm_event", {"file_id": file_id})
-        analysis_events, excluded_ad_events = split_analysis_events(events)
+        # 4. Score all normalized non-ad events
         if excluded_ad_events:
             analysis_warnings.append(f"Excluded {len(excluded_ad_events)} ad-origin events before scoring.")
 
@@ -149,6 +155,11 @@ async def run_analysis(
                 for key in [
                     "watch_count",
                     "search_count",
+                    "standard_video_count",
+                    "shorts_count",
+                    "live_count",
+                    "unknown_format_count",
+                    "shorts_analysis",
                     "comment_count",
                     "playlist_count",
                     "subscription_count",

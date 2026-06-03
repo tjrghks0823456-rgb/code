@@ -172,18 +172,30 @@ def build_dashboard_insights(
     search_counter: Counter = Counter()
     topic_counter: Counter = Counter()
     channel_counter: Counter = Counter()
+    shorts_counter: Counter = Counter()
+    watch_count = 0
+    shorts_count = 0
     analysis_events, excluded_ad_events = split_analysis_events(events)
 
     for event in analysis_events:
         action_type = clean_text(event.get("action_type")).lower()
         source_type = clean_text(event.get("source_type")).lower()
+        intent_level = clean_text(event.get("intent_level")).lower()
+        content_format = clean_text(event.get("content_format")).lower() or "unknown"
         title = clean_text(event.get("text_base"))
 
-        if (action_type == "search" or source_type == "search_history") and title:
+        if action_type == "view" or source_type == "watch_history":
+            watch_count += 1
+            if content_format == "shorts":
+                shorts_count += 1
+                if title:
+                    shorts_counter[title] += 1
+
+        if (action_type == "search" or source_type == "search_history" or intent_level == "active_search") and title:
             search_counter[title] += 1
 
         channel = clean_text(event.get("channel_name") or event.get("channel_url") or event.get("source_surface"))
-        if source_type != "search_history" and is_known_value(channel):
+        if source_type != "search_history" and content_format != "shorts" and is_known_value(channel):
             channel_counter[channel] += 1
 
     for result in nlp_results:
@@ -205,6 +217,19 @@ def build_dashboard_insights(
         }
         for keyword, count in search_counter.most_common(8)
     ]
+    shorts_analysis = {
+        "shorts_count": shorts_count,
+        "shorts_ratio": round(shorts_count / max(watch_count, 1), 3),
+        "top_shorts_keywords": [
+            {"keyword": keyword, "count": count}
+            for keyword, count in shorts_counter.most_common(8)
+        ],
+        "phase2_todo": [
+            "dopamine_loop_score",
+            "passive_feed_score",
+            "time_of_day_scroll_pattern"
+        ],
+    }
 
     report_insights: List[str] = []
     if search_keywords:
@@ -241,6 +266,7 @@ def build_dashboard_insights(
         "category_shares": topic_shares,
         "channel_shares": channel_shares,
         "excluded_ad_count": len(excluded_ad_events),
+        "shorts_analysis": shorts_analysis,
         "report_insights": report_insights,
         "direct_interest_summary": direct_interest_summary,
         "algorithm_interest_summary": algorithm_interest_summary
@@ -319,7 +345,10 @@ async def get_dashboard_summary(
         events = db_client.fetch_data("norm_event", {"file_id": file_id})
         analysis_events, excluded_ad_events = split_analysis_events(events)
         nlp_results = fetch_nlp_results_for_file(file_id)
-        view_events = [e for e in analysis_events if e.get("action_type") == "view"]
+        view_events = [
+            e for e in analysis_events
+            if e.get("action_type") == "view" and e.get("content_format") == "standard_video"
+        ]
         long_views = [e for e in view_events if e.get("time_delta_sec") is not None and e.get("time_delta_sec") >= 180]
         
         long_ratio = (len(long_views) / len(view_events)) * 100.0 if view_events else 100.0

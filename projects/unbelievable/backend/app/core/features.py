@@ -1,4 +1,5 @@
 import math
+from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.content_filters import detect_ad_event_reason
@@ -56,6 +57,29 @@ def _top_level_category(category: Any) -> str:
 def _duration_confidence_value(label: Any) -> float:
     key = _lower(label) or "unknown"
     return DURATION_CONFIDENCE_VALUES.get(key, DURATION_CONFIDENCE_VALUES["unknown"])
+
+
+def _content_format(event: Dict[str, Any], action_type: str) -> str:
+    explicit = _lower(event.get("content_format"))
+    if explicit:
+        return explicit
+
+    title_url = _lower(
+        event.get("title_url")
+        or event.get("titleUrl")
+        or event.get("url")
+        or event.get("URL")
+    )
+    text_base = _lower(event.get("text_base") or event.get("title_text") or event.get("title"))
+    video_id = _clean_text(event.get("video_id"))
+
+    if "/shorts/" in title_url or "youtube.com/shorts" in title_url:
+        return "shorts"
+    if "/live/" in title_url or "youtube.com/live" in title_url or "실시간 스트리밍" in text_base:
+        return "live"
+    if action_type == "view" and ("watch?v=" in title_url or video_id):
+        return "standard_video"
+    return "unknown"
 
 
 def _dedupe(values: List[str]) -> List[str]:
@@ -128,11 +152,11 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         duration_label = "estimated"
 
     title_url = _clean_text(event.get("title_url"))
-    is_short = False
-    if duration_sec is not None and duration_sec <= 60:
-        is_short = True
-    if "shorts" in _lower(text_base) or "/shorts/" in _lower(title_url):
-        is_short = True
+    content_format = _content_format(event, action_type)
+    intent_level = _lower(event.get("intent_level"))
+    if not intent_level:
+        intent_level = "active_search" if action_type == "search" or source_type == "search_history" else "unknown"
+    is_short = content_format == "shorts"
 
     return {
         "id": event.get("id"),
@@ -142,6 +166,8 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         "text_base": text_base,
         "channel_key": channel_key,
         "source_surface": _lower(event.get("source_surface")),
+        "content_format": content_format,
+        "intent_level": intent_level,
         "duration_sec": duration_sec,
         "duration_confidence": _duration_confidence_value(duration_label),
         "duration_confidence_label": _lower(duration_label) or "unknown",
@@ -179,19 +205,31 @@ def extract_features(
     watch_count = 0
     search_count = 0
     shorts_count = 0
+    standard_video_count = 0
+    live_count = 0
+    unknown_format_count = 0
     estimated_duration_count = 0
+    shorts_keyword_counter: Counter = Counter()
 
     for event in normalized_events:
         action = event["action_type"]
         source_type = event["source_type"]
+        content_format = event.get("content_format", "unknown")
+        intent_level = event.get("intent_level", "unknown")
         action_counts[action] = action_counts.get(action, 0) + 1
         source_type_counts[source_type] = source_type_counts.get(source_type, 0) + 1
 
         is_watch = action == "view" or source_type == "watch_history"
-        is_search = action == "search" or source_type == "search_history"
+        is_search = action == "search" or source_type == "search_history" or intent_level == "active_search"
 
         if is_watch:
             watch_count += 1
+            if content_format == "standard_video":
+                standard_video_count += 1
+            elif content_format == "live":
+                live_count += 1
+            elif content_format == "unknown":
+                unknown_format_count += 1
             duration = event.get("duration_sec")
             if duration is not None:
                 durations.append(duration)
@@ -200,6 +238,9 @@ def extract_features(
                 estimated_duration_count += 1
             if event.get("is_short"):
                 shorts_count += 1
+                keyword = event.get("text_base")
+                if keyword:
+                    shorts_keyword_counter[keyword] += 1
 
         if is_search:
             search_count += 1
@@ -208,7 +249,7 @@ def extract_features(
                 search_keyword_distribution[keyword] = search_keyword_distribution.get(keyword, 0) + 1
 
         channel_key = event.get("channel_key")
-        if channel_key and not is_search:
+        if channel_key and not is_search and content_format != "shorts":
             channel_distribution[channel_key] = channel_distribution.get(channel_key, 0) + 1
 
         text_lower = _lower(event.get("text_base"))
@@ -297,7 +338,7 @@ def extract_features(
     previous_short = False
     for event in normalized_events:
         is_watch = event["action_type"] == "view" or event["source_type"] == "watch_history"
-        current_short = bool(is_watch and event.get("is_short"))
+        current_short = bool(is_watch and event.get("content_format") == "shorts")
         if current_short and previous_short:
             repeated_short_count += 1
         previous_short = current_short
@@ -332,6 +373,22 @@ def extract_features(
         "channel_distribution": channel_distribution,
         "search_keyword_distribution": search_keyword_distribution,
         "shorts_count": shorts_count,
+        "standard_video_count": standard_video_count,
+        "live_count": live_count,
+        "unknown_format_count": unknown_format_count,
+        "shorts_analysis": {
+            "shorts_count": shorts_count,
+            "shorts_ratio": round(shorts_ratio, 3),
+            "top_shorts_keywords": [
+                {"keyword": keyword, "count": count}
+                for keyword, count in shorts_keyword_counter.most_common(8)
+            ],
+            "phase2_todo": [
+                "dopamine_loop_score",
+                "passive_feed_score",
+                "time_of_day_scroll_pattern"
+            ],
+        },
         "total_duration_sec": sum(durations) if durations else None,
         "duration_confidence": round(duration_confidence, 3),
         "data_confidence": round(max(0.0, min(1.0, data_confidence)), 3),

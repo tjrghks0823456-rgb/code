@@ -1,5 +1,17 @@
 # Change Memos
 
+## 2026-06-03 Shorts phase 1 UI note
+- Upload completion now shows the basic `shorts_analysis` metrics: `shorts_count`, `shorts_ratio`, and `top_shorts_keywords`.
+
+## 2026-06-03 숏츠/일반 영상 1차 분리 메모
+
+### 14. content_format, intent_level 기반 시청 유형 분리
+- 무엇을 수정했나: `norm_event`에 `content_format`과 `intent_level`을 저장하도록 업로드 파이프라인을 바꿨다. `/shorts/` URL은 `shorts`, 일반 `watch?v=` URL은 `standard_video`, 라이브 URL은 `live`, 판단 불가는 `unknown`으로 저장한다.
+- 검색 기록 기준: 검색 기록은 `action_type=search`, `source_type=search_history`, `intent_level=active_search`, `source_surface=unknown`으로 저장한다.
+- 유입 경로 기준: Google Takeout만으로 홈피드/추천/구독탭/직접 클릭 여부를 확정할 수 없으므로 더 이상 `home_feed`나 `search_results`를 임의로 넣지 않는다.
+- 숏츠 분석 기준: 숏츠는 일반 TDS/SBS/VOS 신호에 무작정 섞지 않고 `shorts_analysis`로 별도 집계한다. 1차 지표는 `shorts_count`, `shorts_ratio`, `top_shorts_keywords`다.
+- 2차 TODO: `dopamine_loop_score`, `passive_feed_score`, 시간대별 연속 스크롤 패턴, 숏츠 전용 UI, 숏츠 전용 디톡스 미션은 다음 고도화 단계로 남겼다.
+
 ## 2026-06-03 광고/프로모션 검색어 필터 보강
 
 ### 13. 검색어 버블 광고성 제목 제거 보강
