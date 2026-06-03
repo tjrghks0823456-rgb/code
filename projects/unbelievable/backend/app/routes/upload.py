@@ -9,7 +9,14 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from bs4 import BeautifulSoup
-from app.core.content_filters import build_ad_skip_summary, detect_ad_event_reason, split_analysis_events
+from app.core.content_filters import (
+    build_ad_skip_summary,
+    detect_ad_event_reason,
+    detect_content_format,
+    extract_search_query,
+    is_google_ad_event,
+    split_analysis_events,
+)
 from app.core.database import db_client
 from app.core.shorts_analysis import build_shorts_analysis
 from app.core.upload_config import DURATION_LIMITS, PARSER_LIMITS, ZIP_LIMITS
@@ -65,23 +72,14 @@ def extract_video_id(url: str) -> Optional[str]:
     return None
 
 def classify_content_format(item: Dict[str, Any]) -> str:
-    action_type = (item.get("action_type") or "").lower()
     url = (
         item.get("title_url")
         or item.get("titleUrl")
         or item.get("url")
         or item.get("URL")
-        or ""
-    ).lower()
-    title = (item.get("title_text") or item.get("text_base") or "").lower()
-
-    if "/shorts/" in url or "youtube.com/shorts" in url:
-        return "shorts"
-    if "/live/" in url or "youtube.com/live" in url or "실시간 스트리밍" in title:
-        return "live"
-    if action_type == "view" and ("watch?v=" in url or item.get("video_id")):
-        return "standard_video"
-    return "unknown"
+    )
+    title = item.get("title_text") or item.get("text_base") or item.get("title") or ""
+    return detect_content_format(url=url or "", title=title, raw_item=item)
 
 def infer_intent_level(item: Dict[str, Any]) -> str:
     action_type = (item.get("action_type") or "").lower()
@@ -103,9 +101,6 @@ def infer_source_type(item: Dict[str, Any]) -> str:
 
 def is_shorts_item(item: Dict[str, Any]) -> bool:
     return classify_content_format(item) == "shorts"
-    title = (item.get("title_text") or item.get("text_base") or "").lower()
-    url = (item.get("title_url") or "").lower()
-    return "shorts" in title or "#shorts" in title or "/shorts/" in url or "쇼츠" in title
 
 def estimate_default_duration(item: Dict[str, Any]) -> tuple:
     if item.get("action_type") != "view":
@@ -215,8 +210,7 @@ def apply_timeline_duration_estimates(timed_events: List[tuple]) -> None:
 
         if metadata_duration:
             bounded_duration = max(1, min(gap_sec, metadata_duration))
-            event["time_delta_sec"] = bounded_duration
-            event["estimated_duration_sec"] = metadata_duration
+            event["estimated_duration_sec"] = bounded_duration
             if bounded_duration < metadata_duration:
                 event["duration_confidence"] = "timeline_capped_api"
                 event["duration_source"] = "timeline_capped_api"
@@ -226,9 +220,9 @@ def apply_timeline_duration_estimates(timed_events: List[tuple]) -> None:
             continue
 
         bounded_duration = max(1, min(gap_sec, current_estimate))
-        event["time_delta_sec"] = bounded_duration
+        # MVP fallback: timeline gaps are estimates, not confirmed watch time.
         event["estimated_duration_sec"] = bounded_duration
-        event["duration_confidence"] = "timeline"
+        event["duration_confidence"] = "estimated"
         event["duration_source"] = "timeline_gap"
 
 def classify_takeout_file(path: str) -> str:
@@ -477,7 +471,16 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
         }
         parsed_item["content_format"] = classify_content_format(parsed_item)
         parsed_item["intent_level"] = infer_intent_level(parsed_item)
-        ad_reason = detect_ad_event_reason({**parsed_item, "raw_takeout_text": text})
+        is_ad, ad_reason = is_google_ad_event(parsed_item, raw_text=text)
+        search_query = extract_search_query(parsed_item, raw_text=text) if action_type == "search" else None
+        if action_type == "search" and search_query:
+            parsed_item["search_query"] = search_query
+            parsed_item["title_text"] = search_query
+            parsed_item["video_id"] = None
+            parsed_item["content_format"] = "unknown"
+        elif action_type == "search" and not is_ad:
+            continue
+
         if ad_reason:
             parsed_item["is_ad_event"] = True
             parsed_item["ad_filter_reason"] = ad_reason
@@ -548,7 +551,16 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
         }
         parsed_item["content_format"] = classify_content_format(parsed_item)
         parsed_item["intent_level"] = infer_intent_level(parsed_item)
-        ad_reason = detect_ad_event_reason({**item, **parsed_item})
+        is_ad, ad_reason = is_google_ad_event({**item, **parsed_item})
+        search_query = extract_search_query({**item, **parsed_item}) if action_type == "search" else None
+        if action_type == "search" and search_query:
+            parsed_item["search_query"] = search_query
+            parsed_item["title_text"] = search_query
+            parsed_item["video_id"] = None
+            parsed_item["content_format"] = "unknown"
+        elif action_type == "search" and not is_ad:
+            continue
+
         if ad_reason:
             parsed_item["is_ad_event"] = True
             parsed_item["ad_filter_reason"] = ad_reason
@@ -811,15 +823,31 @@ async def upload_file(
 
                 title_url = item.get("titleUrl", "")
                 video_id = extract_video_id(title_url)
+                subtitles = item.get("subtitles", [])
+                channel_name = None
+                channel_url = None
+                if subtitles and isinstance(subtitles, list):
+                    channel_name = subtitles[0].get("name", "")
+                    channel_url = subtitles[0].get("url", "")
+
                 current_source_type = infer_source_type({"action_type": current_action_type})
                 duration_item = {
                     "title_text": title_text,
                     "title_url": title_url,
                     "action_type": current_action_type,
                     "source_type": current_source_type,
+                    "channel_name": channel_name,
+                    "channel_url": channel_url,
                 }
                 estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
-                ad_reason = detect_ad_event_reason({**item, **duration_item})
+                is_ad, ad_reason = is_google_ad_event({**item, **duration_item})
+                search_query = extract_search_query({**item, **duration_item}) if current_action_type == "search" else None
+                if current_action_type == "search" and search_query:
+                    title_text = search_query
+                    video_id = None
+                    duration_item["title_text"] = search_query
+                elif current_action_type == "search" and not is_ad:
+                    continue
 
                 item_time = item.get("time", "")
                 parsed_time_str = None
@@ -847,9 +875,12 @@ async def upload_file(
                     "source_type": current_source_type,
                     "source_surface": "unknown",
                     "title_url": title_url,
+                    "channel_name": channel_name,
+                    "channel_url": channel_url,
                     "video_id": video_id,
                     "content_format": classify_content_format(duration_item),
                     "intent_level": infer_intent_level(duration_item),
+                    "search_query": search_query,
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
                     "duration_source": duration_source,
@@ -877,7 +908,13 @@ async def upload_file(
                     "source_type": current_source_type,
                 }
                 estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
-                ad_reason = detect_ad_event_reason({**duration_item, "raw_line": cleaned_line})
+                is_ad, ad_reason = is_google_ad_event({**duration_item, "raw_line": cleaned_line})
+                search_query = extract_search_query(duration_item, raw_text=cleaned_line) if action_type == "search" else None
+                if action_type == "search" and search_query:
+                    title_text = search_query
+                    duration_item["title_text"] = search_query
+                elif action_type == "search" and not is_ad:
+                    continue
 
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
@@ -891,6 +928,7 @@ async def upload_file(
                     "source_surface": "unknown",
                     "content_format": classify_content_format(duration_item),
                     "intent_level": infer_intent_level(duration_item),
+                    "search_query": search_query,
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
                     "duration_source": duration_source,
@@ -1124,6 +1162,7 @@ async def upload_takeout(
                     "video_id": item.get("video_id"),
                     "content_format": item.get("content_format") or classify_content_format(item),
                     "intent_level": item.get("intent_level") or infer_intent_level({**item, "source_type": kind}),
+                    "search_query": item.get("search_query"),
                     "estimated_duration_sec": estimated_duration_sec,
                     "duration_confidence": duration_confidence,
                     "duration_source": duration_source,

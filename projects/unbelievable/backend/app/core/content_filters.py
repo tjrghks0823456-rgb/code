@@ -20,6 +20,7 @@ AD_DETAIL_MARKERS = [
 
 AD_URL_MARKERS = [
     "googleadservices",
+    "googleads",
     "doubleclick.net",
     "adservice.google",
     "googlesyndication",
@@ -28,13 +29,11 @@ AD_URL_MARKERS = [
     "/aclk",
     "adclick",
     "adurl=",
-    "utm_",
-    "utm-source",
-    "utm source",
-    "utm_source",
-    "utm_medium",
     "utm_campaign",
+    "utm_medium=cpc",
+    "utm_medium=paid",
     "gclid=",
+    "dclid=",
     "gbraid=",
     "wbraid=",
     "cid=",
@@ -58,22 +57,6 @@ AD_TEXT_MARKERS = [
     "buy now",
     "sale",
     "campaign",
-    "get started on google cloud",
-    "try cursor today",
-    "cursor agent",
-    "google cloud_kr",
-    "hotels.com (kr)",
-    "lge.com",
-    "the android show",
-    "sony audio",
-    "yebisu beer",
-    "coca-cola",
-    "coca cola",
-    "google play",
-    "turn off the light",
-    "high miles",
-    "lab series video",
-    "cjh x lab series",
     "\uad11\uace0",
     "\uc2a4\ud3f0\uc11c",
     "\ud504\ub85c\ubaa8\uc158",
@@ -87,38 +70,8 @@ AD_TEXT_MARKERS = [
     "\ucfe0\ud3f0",
     "\ubb34\ub8cc\ubc30\uc1a1",
     "\uad6c\ub9e4\ud558\uae30",
-    "\uc62c\uc778\ud574\ubd04",
-    "\ub2e5\ud130\ud328\uce58",
-    "\ub2e5\ud130 \ud328\uce58",
-    "\ub2e5\ud130\ube7c",
-    "\uceec\ub7ec\uadf8\ub7a8",
-    "\ud2f4\ud2b8 \ucd94\ucc9c",
     "\uccab\uad6c\ub9e4",
-    "\uc2a4\ud0dc\ud2f1",
-    "\uc2a4\ub9c8\uc77c\ubcf4\uc774",
-    "\ucf5c\uc624\ube0c\ubdf0\ud2f0",
-    "\ucf5c\uc624\ube0c\ub4c0\ud2f0",
     "\uc138\uc77c",
-    "\ub9e5\uc2a4\ucef7",
-    "\ucd94\uc131\ud6c8",
-    "\ud56b\ud55c \uc571",
-    "\ubc00\ub808 2026",
-    "\ud30c\uc774\ub85c\uc6b8\ud2b8\ub77c",
-    "\uc62c\ub274 \uc9c4\ub85c",
-    "\ub2e4\ube44\ub108\uc2a4",
-    "\uc544\ub514\ub2e4\uc2a4",
-    "\uc694\uace0\uc778\ud130\ub137",
-    "\uc544\ud0a4\ud074\ub798\uc2dd",
-    "\ud2f0\uc2a4\ud14c\uc774\uc158",
-    "\ud0c0\uc774\uc5b4\uc11c\ube44\uc2a4",
-    "\uc219\ucde8\ud574\uc18c\uc81c",
-    "\uae68\ub178\ub2c8",
-    "\ub300\ud559\uc0dd\ud3b8",
-    "\ub77c\ub85c\uc288\ud3ec\uc81c",
-    "\uc5d0\ube60\ub04c\ub77c",
-    "\ud2b8\ub7ec\ube14*\uc5d0\uc13c\uc2a4",
-    "\ud56b\uce58\uc988\ubc24",
-    "\ucd9c\uc2dc",
 ]
 
 LOW_VALUE_SEARCH_EXACT = {
@@ -150,10 +103,25 @@ PROMO_QUERY_PATTERNS = [
 
 SEARCH_PREFIXES = [
     "searched for ",
+    "you searched for ",
     "search: ",
     "query: ",
     "\uac80\uc0c9\uc5b4: ",
     "\uac80\uc0c9: ",
+]
+
+SEARCH_FIELD_NAMES = [
+    "query",
+    "searchQuery",
+    "searchTerm",
+    "searchedText",
+    "keyword",
+]
+
+SEARCH_TEXT_PATTERNS = [
+    re.compile(r"^\s*searched for\s+(.+?)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*you searched for\s+(.+?)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"(?:검색어|검색)\s*[:：]\s*(.+?)(?:\n|$)", re.IGNORECASE | re.DOTALL),
 ]
 
 
@@ -197,8 +165,54 @@ def clean_search_query(value: Any) -> str:
         if query.lower().startswith(prefix):
             query = query[len(prefix):].strip()
             break
+    query = re.sub(r"https?://\S+", " ", query)
+    query = re.sub(r"\b(?:gclid|dclid|gbraid|wbraid|utm_[a-z_]+|cid)=[^\s&]+", " ", query, flags=re.IGNORECASE)
     query = re.sub(r"\s+", " ", query)
     return query.strip(" \t\r\n\"'")
+
+
+def _first_string_field(record: Dict[str, Any], names: List[str]) -> str:
+    for name in names:
+        value = record.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _search_candidate_from_text(value: Any) -> Optional[str]:
+    text = _clean_text(value)
+    if not text:
+        return None
+
+    first_line = text.splitlines()[0].strip() if "\n" in text else text
+    for pattern in SEARCH_TEXT_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(1).splitlines()[0].strip()
+
+    lower_first = first_line.lower()
+    for prefix in SEARCH_PREFIXES:
+        if lower_first.startswith(prefix):
+            return first_line[len(prefix):].strip()
+
+    return None
+
+
+def _looks_like_search_context(record: Dict[str, Any]) -> bool:
+    return (
+        _lower(record.get("action_type")) == "search"
+        or _lower(record.get("source_type")) == "search_history"
+        or _lower(record.get("intent_level")) == "active_search"
+    )
+
+
+def _looks_like_watch_context(record: Dict[str, Any]) -> bool:
+    raw_title = _lower(record.get("title") or record.get("title_text") or record.get("text_base"))
+    return (
+        raw_title.startswith("watched ")
+        or _lower(record.get("action_type")) == "view"
+        or _lower(record.get("source_type")) == "watch_history"
+    )
 
 
 def is_promotional_search_text(value: Any) -> Optional[str]:
@@ -227,6 +241,113 @@ def is_promotional_search_text(value: Any) -> Optional[str]:
     return None
 
 
+def _valid_search_query(candidate: Any) -> Optional[str]:
+    query = clean_search_query(candidate)
+    query_lower = query.lower()
+
+    if not query:
+        return None
+    if len(query) < 2:
+        return None
+    if len(query) > 120:
+        return None
+    if query_lower.startswith(("watched ", "visited ")):
+        return None
+    if re.fullmatch(r"(?:https?://|www\.)\S+", query_lower):
+        return None
+    if re.search(r"\.(?:html?|json|csv|txt|mp4|mov|avi|webm)$", query_lower):
+        return None
+    if is_promotional_search_text(query):
+        return None
+    return query
+
+
+def extract_search_query(item: Dict[str, Any], raw_text: str = "") -> Optional[str]:
+    """Return a clear user-entered YouTube search query, or None if ambiguous."""
+    if not isinstance(item, dict):
+        return None
+
+    record = dict(item)
+    if raw_text:
+        record["raw_text"] = raw_text
+
+    if detect_ad_event_reason(record):
+        return None
+    if _looks_like_watch_context(record) and not _looks_like_search_context(record):
+        return None
+
+    for field_name in SEARCH_FIELD_NAMES:
+        query = _valid_search_query(record.get(field_name))
+        if query:
+            return query
+
+    for source in [
+        record.get("title"),
+        record.get("text_base"),
+        record.get("title_text"),
+        raw_text,
+        record.get("raw_takeout_text"),
+    ]:
+        candidate = _search_candidate_from_text(source)
+        query = _valid_search_query(candidate)
+        if query:
+            return query
+
+    if _looks_like_search_context(record) and not _looks_like_watch_context(record):
+        normalized_candidate = _first_string_field(record, ["search_query", "text_base", "title_text", "title"])
+        return _valid_search_query(normalized_candidate)
+
+    return None
+
+
+def is_google_ad_event(raw_item: Dict[str, Any], file_path: str = "", raw_text: str = "") -> Tuple[bool, str]:
+    record = dict(raw_item or {})
+    if file_path:
+        record["file_path"] = file_path
+    if raw_text:
+        record["raw_text"] = raw_text
+    reason = detect_ad_event_reason(record)
+    return bool(reason), reason or ""
+
+
+def detect_content_format(url: str = "", title: str = "", raw_item: Optional[Dict[str, Any]] = None) -> str:
+    item = raw_item or {}
+    url_text = " ".join(
+        _flatten_strings({
+            "url": url,
+            "title_url": item.get("title_url"),
+            "titleUrl": item.get("titleUrl"),
+            "URL": item.get("URL"),
+        })
+    ).lower()
+    title_text = " ".join(
+        _flatten_strings({
+            "title": title,
+            "title_text": item.get("title_text"),
+            "text_base": item.get("text_base"),
+        })
+    ).lower()
+    detail_text = " ".join(_flatten_strings(item.get("details") or item.get("detail") or [])).lower()
+
+    if "/shorts/" in url_text or "youtube.com/shorts" in url_text:
+        return "shorts"
+    if (
+        "/live/" in url_text
+        or "youtube.com/live" in url_text
+        or "실시간 스트리밍" in title_text
+        or "live stream" in title_text
+        or "live" in detail_text
+        or _is_true_flag(item.get("isLive"))
+        or _is_true_flag(item.get("is_live"))
+    ):
+        return "live"
+    if "youtube.com/watch" in url_text or "watch?v=" in url_text:
+        return "standard_video"
+    if _lower(item.get("action_type")) == "view" and item.get("video_id"):
+        return "standard_video"
+    return "unknown"
+
+
 def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
     if not isinstance(record, dict):
         return None
@@ -234,7 +355,13 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
     if _is_true_flag(record.get("is_ad_event")) or _is_true_flag(record.get("is_ad")):
         return str(record.get("ad_filter_reason") or "explicit_ad_flag")
 
-    details = record.get("details") or record.get("detail") or []
+    details = {
+        "details": record.get("details"),
+        "detail": record.get("detail"),
+        "source": record.get("source"),
+        "activityControls": record.get("activityControls"),
+        "activity_controls": record.get("activity_controls"),
+    }
     detail_text = " ".join(_flatten_strings(details)).lower()
     for marker in AD_DETAIL_MARKERS:
         if marker in detail_text:
@@ -313,11 +440,7 @@ def is_valid_search_event(event: Dict[str, Any]) -> bool:
     if not is_search:
         return False
 
-    query = clean_search_query(event.get("text_base") or event.get("title_text") or event.get("title"))
-    if not query:
-        return False
-
-    return is_promotional_search_text(query) is None
+    return extract_search_query(event) is not None
 
 
 def is_standard_video_event(event: Dict[str, Any]) -> bool:

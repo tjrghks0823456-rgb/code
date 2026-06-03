@@ -1,5 +1,13 @@
 # Change Memos
 
+## 2026-06-04 Data cleanup phase 2 note
+- Added explicit helpers in `content_filters.py`: `is_google_ad_event()`, `extract_search_query()`, and `detect_content_format()`.
+- Ad filtering now requires stronger evidence such as Google Ads details, ad/tracking URLs, `gclid`, `dclid`, `utm_campaign`, `utm_medium=cpc`, `Shortened:`, or campaign-style creative codes. Brand names such as `Google Cloud`, `Hotels.com`, and `Sony` are not treated as ads by name alone.
+- Search history parsing now stores a `search_query` only when the query is explicit through `Searched for ...`, `You searched for ...`, Korean `검색어:`/`검색:` patterns, or query-like fields. Ambiguous landing-page titles are skipped unless they are counted as excluded ad events.
+- Content format detection now keeps `/shorts/` as `shorts`, normal `youtube.com/watch?v=` URLs as `standard_video`, clear live evidence as `live`, and unclear surfaces as `unknown`.
+- Takeout records with no confirmed watch time keep `time_delta_sec=None`; timeline/default fallbacks are stored only as `estimated_duration_sec` with `duration_confidence`.
+- Verification: backend `compileall` passed, and manual checks confirmed brand-only titles are not ads, ad URLs/details are excluded, search extraction works, and shorts/standard video separation works.
+
 ## 2026-06-03 Dashboard interest maps API note
 - Expanded `build_search_interest_map`, `build_standard_video_interest_map`, and `build_shorts_interest_map` response details without removing existing fields.
 - Category distribution now exposes percent `ratio`, legacy-friendly `value`, internal `ratio_fraction`, and subcategory metadata including `entities`, `raw_items`, `confidence`, `matched_keywords`, `source_groups`, and `secondary_tags`.
