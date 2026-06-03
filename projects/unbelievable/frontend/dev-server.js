@@ -2,7 +2,7 @@ const { createServer } = require("http");
 const next = require("next");
 
 const port = Number(process.env.PORT || 3000);
-const hostname = "127.0.0.1";
+const hostname = process.env.HOST || "127.0.0.1";
 const app = next({ dev: true, hostname, port });
 const handle = app.getRequestHandler();
 

@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-03 One-link sharing note
+- Changed frontend API calls to use same-origin `/api` by default instead of browser-side `http://localhost:8000`, so shared visitors do not call their own localhost.
+- Added a Next.js rewrite that proxies `/api/:path*` to `BACKEND_ORIGIN` or `http://127.0.0.1:8000`, allowing the frontend and backend to work behind one public frontend URL.
+- Updated `dev-server.js` to allow host binding through `HOST` while keeping `127.0.0.1` as the default.
+- Added `share_unbelievable.ps1` and `share_unbelievable.bat`; if `cloudflared` is installed, running the BAT starts local services and prints a public `trycloudflare.com` URL to share.
+- For a permanent website, this still needs real hosting and persistent storage; the tunnel script is best for temporary demos while this PC is on.
+
 ## 2026-06-03 Gemini interest explanation note
 - Added `GeminiClient.enrich_interest_report()` as an optional explanation layer for already-computed interest maps. It does not change scores, categories, or ad filtering decisions.
 - If `GEMINI_API_KEY` is configured, the dashboard can receive a concise Gemini-generated Korean interpretation under `insights.interest_ai_summary`.

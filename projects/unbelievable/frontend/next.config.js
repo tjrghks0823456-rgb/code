@@ -1,7 +1,16 @@
 /** @type {import('next').NextConfig} */
+const backendOrigin = process.env.BACKEND_ORIGIN || "http://127.0.0.1:8000";
+
 const nextConfig = {
   reactStrictMode: true,
-  /* config options here */
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${backendOrigin}/api/:path*`,
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
