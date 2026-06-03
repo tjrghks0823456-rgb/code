@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-03 Interest classifier detail engine note
+- Expanded `classify_interest_topic(text, raw_category="", channel_name="")` so it can return category, subcategory, confidence, entities, matched keywords, raw text, raw category, source group, and secondary tags.
+- Kept existing dashboard/API wiring unchanged for this step; the richer helper output is available for the next API response integration stage.
+- Added entity-aware mappings for examples such as `류현진 인터뷰 -> 스포츠/야구`, `이강인 -> 스포츠/축구`, and `FC모바일 -> 게임/모바일게임` with secondary `스포츠/축구` tags.
+- Added politics/social source grouping without political-leaning judgment: `매불쇼`, `가로세로연구소`, `MBC 뉴스`, and `TV조선` are classified as political/social content consumption sources only.
+- Added raw NLP category fallback mapping such as `Computers & Electronics -> IT/테크`, while ambiguous `People & Society` stays low-confidence unless text/channel evidence clarifies it.
+
 ## 2026-06-03 One-link sharing note
 - Changed frontend API calls to use same-origin `/api` by default instead of browser-side `http://localhost:8000`, so shared visitors do not call their own localhost.
 - Added a Next.js rewrite that proxies `/api/:path*` to `BACKEND_ORIGIN` or `http://127.0.0.1:8000`, allowing the frontend and backend to work behind one public frontend URL.
