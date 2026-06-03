@@ -1,5 +1,11 @@
 # Change Memos
 
+## 2026-06-03 Live Takeout verification note
+- Restarted the backend/frontend so the latest ad-safe interest-map code was actually running on ports 8000/3000.
+- Re-uploaded `takeout-20260601T113511Z-3-001.zip` through the running API and verified `total_parsed=3209`, `total_saved=2113`, and `excluded_ad_count=1014`.
+- Dashboard summary for run `41545d26-27f4-4b76-9619-ae1dcd436fbc` now reports `search_interest_map.total_search_count=60`, `excluded_ad_count=1014`, and an `interest_gap_report.interest_mismatch_score=5.4`.
+- The previous visible ad examples, including `Get Started on Google Cloud_KR_R1`, `[Sony Audio]`, `Hotels.com (KR)`, `The Android Show`, `Shortened: cid=...`, and `6s ver.2` creative titles, appear in `ad_skip_summary` instead of the search-interest list.
+
 ## 2026-06-03 Interest map category gap note
 - Added `backend/app/core/interest_maps.py` so ad-safe search, standard-video, and shorts events each build separate rule-based interest maps with major/minor categories.
 - Search interest maps now call the shared ad filter and `is_valid_search_event()` before extracting queries, so campaign titles and watch-history titles cannot become direct search interests.
