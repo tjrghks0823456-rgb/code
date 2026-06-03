@@ -228,9 +228,71 @@ def extract_search_query(event: Dict[str, Any], raw_text: str = "") -> Optional[
     return query or None
 
 
+def _event_raw_category(event: Dict[str, Any]) -> str:
+    return _text(
+        event.get("raw_category")
+        or event.get("category")
+        or event.get("nlp_category")
+        or event.get("topic_category")
+    )
+
+
+def _confidence_score(value: str) -> int:
+    return {"low": 1, "medium": 2, "high": 3}.get(_lower(value), 0)
+
+
+def _best_confidence(values: List[str]) -> str:
+    if not values:
+        return "low"
+    return max(values, key=_confidence_score)
+
+
+def _ensure_subcategory_detail(
+    details: Dict[str, Dict[str, Dict[str, Any]]],
+    category: str,
+    subcategory: str,
+) -> Dict[str, Any]:
+    if category not in details:
+        details[category] = {}
+    if subcategory not in details[category]:
+        details[category][subcategory] = {
+            "entities": [],
+            "raw_items": [],
+            "confidence_values": [],
+            "matched_keywords": [],
+            "source_groups": [],
+            "secondary_tags": [],
+        }
+    return details[category][subcategory]
+
+
+def _record_topic(
+    topic: Dict[str, Any],
+    raw_item: str,
+    category_counter: Counter,
+    subcategory_counter: Dict[str, Counter],
+    subcategory_details: Dict[str, Dict[str, Dict[str, Any]]],
+) -> None:
+    category = topic.get("category") or "기타/미분류"
+    subcategory = topic.get("subcategory") or "미분류"
+
+    category_counter[category] += 1
+    subcategory_counter[category][subcategory] += 1
+
+    detail = _ensure_subcategory_detail(subcategory_details, category, subcategory)
+    detail["entities"].extend(topic.get("entities") or [])
+    detail["raw_items"].append(raw_item)
+    detail["confidence_values"].append(topic.get("confidence") or "low")
+    detail["matched_keywords"].extend(topic.get("matched_keywords") or [])
+    if topic.get("source_group"):
+        detail["source_groups"].append(topic["source_group"])
+    detail["secondary_tags"].extend(topic.get("secondary_tags") or [])
+
+
 def _category_distribution(
     category_counter: Counter,
     subcategory_counter: Dict[str, Counter],
+    subcategory_details: Dict[str, Dict[str, Dict[str, Any]]],
     total: int,
 ) -> List[Dict[str, Any]]:
     if total <= 0:
@@ -242,17 +304,26 @@ def _category_distribution(
             {
                 "name": subcategory,
                 "count": sub_count,
-                "value": round((sub_count / total) * 100.0, 1),
+                "ratio": round((sub_count / max(1, count)) * 100.0, 1),
+                "value": round((sub_count / max(1, count)) * 100.0, 1),
+                "entities": _dedupe(subcategory_details.get(category, {}).get(subcategory, {}).get("entities", []))[:8],
+                "raw_items": _dedupe(subcategory_details.get(category, {}).get(subcategory, {}).get("raw_items", []))[:8],
+                "confidence": _best_confidence(subcategory_details.get(category, {}).get(subcategory, {}).get("confidence_values", [])),
+                "matched_keywords": _dedupe(subcategory_details.get(category, {}).get(subcategory, {}).get("matched_keywords", []))[:8],
+                "source_groups": _dedupe(subcategory_details.get(category, {}).get(subcategory, {}).get("source_groups", []))[:5],
+                "secondary_tags": _dedupe(subcategory_details.get(category, {}).get(subcategory, {}).get("secondary_tags", []))[:8],
             }
             for subcategory, sub_count in subcategory_counter[category].most_common(5)
         ]
+        ratio_percent = round((count / total) * 100.0, 1)
         distribution.append(
             {
                 "category": category,
                 "name": category,
                 "count": count,
-                "ratio": round(count / total, 4),
-                "value": round((count / total) * 100.0, 1),
+                "ratio": ratio_percent,
+                "ratio_fraction": round(count / total, 4),
+                "value": ratio_percent,
                 "subcategories": subcategories,
             }
         )
@@ -270,6 +341,10 @@ def _keyword_rows(counter: Counter, top_limit: int = 8) -> List[Dict[str, Any]]:
                 "category": topic["category"],
                 "subcategory": topic["subcategory"],
                 "confidence": topic["confidence"],
+                "entities": topic.get("entities", []),
+                "source_group": topic.get("source_group", ""),
+                "secondary_tags": topic.get("secondary_tags", []),
+                "raw_category": topic.get("raw_category", ""),
             }
         )
     return rows
@@ -279,6 +354,7 @@ def build_search_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     keyword_counter: Counter = Counter()
     category_counter: Counter = Counter()
     subcategory_counter: Dict[str, Counter] = defaultdict(Counter)
+    subcategory_details: Dict[str, Dict[str, Dict[str, Any]]] = {}
     excluded_ad_count = 0
 
     for event in events or []:
@@ -291,9 +367,12 @@ def build_search_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             continue
 
         keyword_counter[query] += 1
-        topic = classify_interest_topic(query)
-        category_counter[topic["category"]] += 1
-        subcategory_counter[topic["category"]][topic["subcategory"]] += 1
+        topic = classify_interest_topic(
+            query,
+            raw_category=_event_raw_category(event),
+            channel_name=event.get("channel_name", ""),
+        )
+        _record_topic(topic, query, category_counter, subcategory_counter, subcategory_details)
 
     total = sum(keyword_counter.values())
     warnings = []
@@ -305,7 +384,7 @@ def build_search_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_search_count": total,
         "top_keywords": top_keywords,
         "keywords": top_keywords,
-        "category_distribution": _category_distribution(category_counter, subcategory_counter, total),
+        "category_distribution": _category_distribution(category_counter, subcategory_counter, subcategory_details, total),
         "excluded_ad_count": excluded_ad_count,
         "warnings": warnings,
     }
@@ -315,6 +394,7 @@ def build_standard_video_interest_map(events: List[Dict[str, Any]]) -> Dict[str,
     title_counter: Counter = Counter()
     category_counter: Counter = Counter()
     subcategory_counter: Dict[str, Counter] = defaultdict(Counter)
+    subcategory_details: Dict[str, Dict[str, Dict[str, Any]]] = {}
     channel_counter: Counter = Counter()
 
     for event in events or []:
@@ -324,9 +404,12 @@ def build_standard_video_interest_map(events: List[Dict[str, Any]]) -> Dict[str,
         title = _event_title(event)
         if title:
             title_counter[title] += 1
-            topic = classify_interest_topic(title)
-            category_counter[topic["category"]] += 1
-            subcategory_counter[topic["category"]][topic["subcategory"]] += 1
+            topic = classify_interest_topic(
+                title,
+                raw_category=_event_raw_category(event),
+                channel_name=event.get("channel_name", ""),
+            )
+            _record_topic(topic, title, category_counter, subcategory_counter, subcategory_details)
 
         channel = _channel_key(event)
         if channel:
@@ -344,7 +427,7 @@ def build_standard_video_interest_map(events: List[Dict[str, Any]]) -> Dict[str,
             {"name": name, "count": count, "value": round((count / max(1, total)) * 100.0, 1)}
             for name, count in channel_counter.most_common(8)
         ],
-        "category_distribution": _category_distribution(category_counter, subcategory_counter, total),
+        "category_distribution": _category_distribution(category_counter, subcategory_counter, subcategory_details, total),
         "warnings": warnings,
     }
 
@@ -353,6 +436,7 @@ def build_shorts_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     title_counter: Counter = Counter()
     category_counter: Counter = Counter()
     subcategory_counter: Dict[str, Counter] = defaultdict(Counter)
+    subcategory_details: Dict[str, Dict[str, Dict[str, Any]]] = {}
     standard_count = 0
 
     for event in events or []:
@@ -366,13 +450,18 @@ def build_shorts_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         title = _event_title(event)
         if title:
             title_counter[title] += 1
-            topic = classify_interest_topic(title)
-            category_counter[topic["category"]] += 1
-            subcategory_counter[topic["category"]][topic["subcategory"]] += 1
+            topic = classify_interest_topic(
+                title,
+                raw_category=_event_raw_category(event),
+                channel_name=event.get("channel_name", ""),
+            )
+            _record_topic(topic, title, category_counter, subcategory_counter, subcategory_details)
 
     total = sum(title_counter.values())
     denominator = total + standard_count
-    warnings = []
+    warnings = [
+        "숏츠 관심사 맵은 직접 검색 의도가 아니라 짧은 영상 반복 노출 패턴을 기반으로 계산됩니다."
+    ]
     if total == 0:
         warnings.append("숏츠 시청 기록이 부족합니다.")
 
@@ -382,7 +471,8 @@ def build_shorts_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "shorts_ratio": round(total / denominator, 4) if denominator else 0.0,
         "shorts_ratio_percent": round((total / denominator) * 100.0, 1) if denominator else 0.0,
         "top_shorts_keywords": _keyword_rows(title_counter),
-        "category_distribution": _category_distribution(category_counter, subcategory_counter, total),
+        "category_distribution": _category_distribution(category_counter, subcategory_counter, subcategory_details, total),
+        "repeat_topic_score": round((title_counter.most_common(1)[0][1] / total) * 100.0, 1) if total else 0.0,
         "warnings": warnings,
     }
 
@@ -392,7 +482,12 @@ def _ratio_map(interest_map: Dict[str, Any]) -> Dict[str, float]:
     for item in interest_map.get("category_distribution") or []:
         category = item.get("category") or item.get("name")
         if category:
-            ratios[category] = float(item.get("ratio") or 0.0)
+            ratio = item.get("ratio_fraction")
+            if ratio is None:
+                ratio = float(item.get("ratio") or 0.0)
+                if ratio > 1.0:
+                    ratio = ratio / 100.0
+            ratios[category] = float(ratio or 0.0)
     return ratios
 
 

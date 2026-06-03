@@ -452,6 +452,20 @@ async def get_dashboard_summary(
             int(data_coverage.get("excluded_ad_count") or 0),
             total_excluded_ad_count,
         )
+        content_counts = data_coverage.get("content_format_counts") or {}
+        parsed_source_counts = dict(data_coverage.get("parsed_source_counts") or {})
+        parsed_source_counts.setdefault("search_history", parsed_source_counts.get("search_history", 0))
+        parsed_source_counts.setdefault("standard_video", content_counts.get("standard_video", 0))
+        parsed_source_counts.setdefault("shorts", content_counts.get("shorts", 0))
+        parsed_source_counts.setdefault("live", content_counts.get("live", 0))
+        parsed_source_counts.setdefault("unknown", content_counts.get("unknown", 0))
+        data_coverage["parsed_source_counts"] = parsed_source_counts
+        data_coverage.setdefault("analysis_source_counts", {})
+        data_coverage.setdefault("content_format_counts", content_counts)
+        data_coverage.setdefault("duration_source_counts", {})
+        data_coverage.setdefault("skipped_sources_with_reason", {})
+        data_coverage.setdefault("ad_skip_summary", [])
+        data_coverage.setdefault("warnings", [])
         risk_overall = build_overall_risk(run["bias_risk_score"], insights.get("shorts_analysis", {}))
         
         return {

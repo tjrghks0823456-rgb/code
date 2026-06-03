@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-03 Dashboard interest maps API note
+- Expanded `build_search_interest_map`, `build_standard_video_interest_map`, and `build_shorts_interest_map` response details without removing existing fields.
+- Category distribution now exposes percent `ratio`, legacy-friendly `value`, internal `ratio_fraction`, and subcategory metadata including `entities`, `raw_items`, `confidence`, `matched_keywords`, `source_groups`, and `secondary_tags`.
+- Search, standard-video, and shorts maps still use separate inclusion filters so view events cannot enter search maps, shorts cannot enter standard-video maps, and standard videos cannot enter shorts maps.
+- Shorts maps now include `repeat_topic_score` and a warning that shorts maps represent short-form repeated exposure patterns, not direct search intent.
+- Dashboard `data_coverage.parsed_source_counts` now always includes `search_history`, `standard_video`, `shorts`, `live`, and `unknown` defaults to avoid undefined frontend reads.
+
 ## 2026-06-03 Interest classifier detail engine note
 - Expanded `classify_interest_topic(text, raw_category="", channel_name="")` so it can return category, subcategory, confidence, entities, matched keywords, raw text, raw category, source group, and secondary tags.
 - Kept existing dashboard/API wiring unchanged for this step; the richer helper output is available for the next API response integration stage.
