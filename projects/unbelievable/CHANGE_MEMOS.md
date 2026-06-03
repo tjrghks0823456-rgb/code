@@ -1,5 +1,10 @@
 # Change Memos
 
+## 2026-06-03 Takeout ZIP QA note
+- Ran the real `takeout-20260601T113511Z-3-001.zip` upload flow through the backend TestClient. It parsed 3,209 Takeout items, saved 2,023 non-ad events, and excluded 1,096 ad-origin events.
+- Adjusted `content_format_counts` to count only watch/video events so search, subscription, playlist, comment, live chat, and channel records do not inflate the `unknown` content-format bucket.
+- After the adjustment, the same ZIP reports `standard_video=322`, `unknown=285`, `shorts=0`, and `live=0` for watch-format counts while source-type counts still keep all parsed Takeout categories separate.
+
 ## 2026-06-03 Shorts phase 2 analysis note
 - Follow-up: added `passive_feed_score` as a heuristic estimate from shorts ratio, loop pressure, repeated topics, time concentration, and active-search scarcity. It does not claim to identify home-feed or recommendation origin.
 - Added `backend/app/core/shorts_analysis.py` for deterministic shorts-only metrics: loop grouping, repeated keyword scoring, time-bucket concentration, and `shorts_stimulation_risk`.

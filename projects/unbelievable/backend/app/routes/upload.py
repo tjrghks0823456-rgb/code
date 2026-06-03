@@ -147,6 +147,10 @@ def count_content_formats(events: List[Dict[str, Any]]) -> Dict[str, int]:
         "unknown": 0
     }
     for event in events:
+        action_type = (event.get("action_type") or "").lower()
+        source_type = (event.get("source_type") or "").lower()
+        if action_type != "view" and source_type != "watch_history":
+            continue
         content_format = event.get("content_format") or classify_content_format(event)
         counts[content_format] = counts.get(content_format, 0) + 1
     return counts
