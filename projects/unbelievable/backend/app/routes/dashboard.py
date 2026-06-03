@@ -16,6 +16,7 @@ from app.core.interest_maps import (
     build_shorts_interest_map,
     build_standard_video_interest_map,
 )
+from app.core.gemini import gemini_client
 from app.core.scoring import PERSONALITY_MAP
 from app.core.shorts_analysis import build_overall_risk, build_shorts_analysis
 
@@ -243,6 +244,12 @@ def build_dashboard_insights(
         standard_video_interest_map,
         shorts_interest_map,
     )
+    interest_ai_summary = gemini_client.enrich_interest_report(
+        search_interest_map,
+        standard_video_interest_map,
+        shorts_interest_map,
+        interest_gap_report,
+    )
 
     search_keywords = search_interest_map.get("top_keywords", [])[:8] or search_keywords
     standard_video_keywords = standard_video_interest_map.get("top_keywords", [])[:8] or standard_video_keywords
@@ -295,6 +302,7 @@ def build_dashboard_insights(
         "standard_video_interest_map": standard_video_interest_map,
         "shorts_interest_map": shorts_interest_map,
         "interest_gap_report": interest_gap_report,
+        "interest_ai_summary": interest_ai_summary,
         "category_shares": topic_shares,
         "channel_shares": channel_shares,
         "excluded_ad_count": len(excluded_ad_events),

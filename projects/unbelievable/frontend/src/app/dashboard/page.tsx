@@ -229,6 +229,7 @@ function DashboardContent() {
   const standardVideoInterestMap = insights.standard_video_interest_map || {};
   const shortsInterestMap = insights.shorts_interest_map || {};
   const interestGapReport = insights.interest_gap_report || {};
+  const interestAiSummary = insights.interest_ai_summary || {};
   const topInterestCategory = (map: any) => {
     const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
     return distribution[0]?.category || distribution[0]?.name || "데이터 부족";
@@ -462,6 +463,31 @@ function DashboardContent() {
               검색보다 더 많이 노출된 관심사는 {topDriftCategory.category}이며, 격차는 약 {Math.round(Number(topDriftCategory.gap || 0))}점입니다.
             </div>
           )}
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-black text-slate-950">AI 해석 요약</p>
+              <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+                {interestAiSummary.mode === "gemini" ? "gemini" : "rule based"}
+              </span>
+            </div>
+            <p className="mt-3 text-sm font-bold leading-6 text-slate-700">
+              {interestAiSummary.summary || "관심사 해석 데이터가 부족합니다."}
+            </p>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                {interestAiSummary.search_intent_read || "검색 의도 데이터가 부족합니다."}
+              </p>
+              <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                {interestAiSummary.watch_exposure_read || "일반 영상 노출 데이터가 부족합니다."}
+              </p>
+              <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                {interestAiSummary.shorts_read || "숏츠 데이터가 부족합니다."}
+              </p>
+            </div>
+            <p className="mt-3 rounded-2xl bg-teal-50 px-3 py-2 text-xs font-black leading-5 text-teal-800">
+              {interestAiSummary.next_action_hint || "다음 시청 전 검색어를 먼저 정해 추천 흐름을 끊어보세요."}
+            </p>
+          </div>
         </Card>
 
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">

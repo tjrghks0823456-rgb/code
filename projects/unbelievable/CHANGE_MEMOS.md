@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-03 Gemini interest explanation note
+- Added `GeminiClient.enrich_interest_report()` as an optional explanation layer for already-computed interest maps. It does not change scores, categories, or ad filtering decisions.
+- If `GEMINI_API_KEY` is configured, the dashboard can receive a concise Gemini-generated Korean interpretation under `insights.interest_ai_summary`.
+- If no real key is configured, the same field is filled by deterministic rule-based fallback text, so local demos remain stable.
+- Added `GEMINI_MODEL` configuration with `gemini-2.5-flash` as the default model name.
+- Dashboard UI now shows an `AI 해석 요약` block inside the interest comparison card and labels whether it came from Gemini or the rule-based fallback.
+
 ## 2026-06-03 Live Takeout verification note
 - Restarted the backend/frontend so the latest ad-safe interest-map code was actually running on ports 8000/3000.
 - Re-uploaded `takeout-20260601T113511Z-3-001.zip` through the running API and verified `total_parsed=3209`, `total_saved=2113`, and `excluded_ad_count=1014`.

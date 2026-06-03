@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # API Keys
     GOOGLE_LANGUAGE_API_KEY: str = os.getenv("GOOGLE_LANGUAGE_API_KEY", "mock-nl-api-key")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "mock-gemini-api-key")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "mock-youtube-api-key")
     
     # Data storage files
