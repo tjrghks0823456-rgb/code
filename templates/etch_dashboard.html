@@ -259,6 +259,7 @@
         <button type="button" data-tab="history" role="tab" aria-selected="false">서버 이력</button>
         <button type="button" data-tab="events" role="tab" aria-selected="false">이벤트</button>
         <button type="button" data-tab="modules" role="tab" aria-selected="false">모듈 상태</button>
+        <button type="button" data-tab="recipe" role="tab" aria-selected="false">레시피</button>
         <button type="button" data-tab="ai" role="tab" aria-selected="false">AI 진단(스텁)</button>
     </nav>
 
@@ -359,6 +360,39 @@
         </div>
     </div>
 
+    <div class="wrap tab-panel" id="tab-recipe" role="tabpanel" hidden>
+        <div class="mod-toolbar">
+            <label>데이터 소스
+                <select id="recSource">
+                    <option value="demo">demo (시뮬·벤치)</option>
+                    <option value="live">live (실측)</option>
+                </select>
+            </label>
+            <button type="button" id="btnRecRefresh">지금 새로고침</button>
+            <span id="recMeta">활성 레시피: -</span>
+        </div>
+        <div class="kpi-row">
+            <div class="kpi"><div class="lbl">이름</div><div class="num" id="recName" style="font-size:1rem">-</div></div>
+            <div class="kpi"><div class="lbl">버전</div><div class="num" id="recVer" style="font-size:0.95rem">-</div></div>
+            <div class="kpi"><div class="lbl">식각 PM</div><div class="num" id="recSeq" style="font-size:0.85rem">-</div></div>
+        </div>
+        <div class="grid2">
+            <div class="panel">
+                <h2>가공 tick (시뮬)</h2>
+                <div class="panel-row"><span>Etch (PM2~4)</span><span id="recEtchTick">-</span></div>
+                <div class="panel-row"><span>Strip (PM1)</span><span id="recStripTick">-</span></div>
+                <div class="panel-row"><span>Aligner</span><span id="recAlignTick">-</span></div>
+            </div>
+            <div class="panel">
+                <h2>출처</h2>
+                <div class="panel-row"><span>레시피 ID</span><span id="recId">-</span></div>
+                <div class="panel-row"><span>데이터 소스</span><span id="recDataSrc">-</span></div>
+                <div class="panel-row"><span>XML (WPF)</span><span>Recipes/default.process.xml</span></div>
+            </div>
+        </div>
+        <div id="recEmpty" class="empty-msg">레시피 없음. WPF RUNNING 후 sensor-data의 recipe 필드를 확인하세요.</div>
+    </div>
+
     <div class="wrap tab-panel" id="tab-ai" role="tabpanel" hidden>
         <div class="kpi-row">
             <div class="kpi"><div class="lbl">이상 점수</div><div class="num" id="aiScoreNum">-</div></div>
@@ -376,7 +410,7 @@
     </div>
 
     <footer class="note">
-        API: <code>GET /api/sensors</code> · <code>GET /api/etch/modules/latest</code> · 압력 <strong>mTorr</strong> · <code>진동</code>(g).
+        API: <code>GET /api/sensors</code> · <code>modules/latest</code> · <code>recipe/active</code> · 압력 <strong>mTorr</strong>.
     </footer>
 
     <script>
@@ -669,8 +703,12 @@
                         document.getElementById('logEmpty').style.display = logRows.length ? 'none' : 'block';
                     }
 
+                    syncRecipeSourceFromSensors(data);
                     if (document.getElementById('tab-modules').classList.contains('active')) {
                         refreshModulesTab();
+                    }
+                    if (document.getElementById('tab-recipe').classList.contains('active')) {
+                        refreshRecipeTab();
                     }
                 })
                 .catch(() => {
@@ -696,6 +734,7 @@
                 if (id === 'history') refreshServerHistory();
                 if (id === 'events') refreshEvents();
                 if (id === 'modules') refreshModulesTab();
+                if (id === 'recipe') refreshRecipeTab();
                 if (id === 'ai') refreshAiTab();
             });
         });
@@ -786,6 +825,67 @@
 
         document.getElementById('btnModRefresh').addEventListener('click', refreshModulesTab);
         document.getElementById('modSource').addEventListener('change', refreshModulesTab);
+
+        function resolveRecipeSource() {
+            const sel = document.getElementById('recSource');
+            return sel ? sel.value : 'demo';
+        }
+
+        function syncRecipeSourceFromSensors(data) {
+            const sel = document.getElementById('recSource');
+            if (!sel || !data) return;
+            if (data.dataSource === 'live' || data.dataSource === 'demo') {
+                sel.value = data.dataSource;
+                const modSel = document.getElementById('modSource');
+                if (modSel) modSel.value = data.dataSource;
+                return;
+            }
+            const live = data.sensorsLive === true && data.connected;
+            const next = live ? 'live' : (data.benchMode === true ? 'demo' : sel.value);
+            sel.value = next;
+        }
+
+        function renderRecipe(j) {
+            const empty = document.getElementById('recEmpty');
+            const meta = document.getElementById('recMeta');
+            if (!j || !j.success || !j.recipe) {
+                document.getElementById('recName').textContent = '-';
+                document.getElementById('recVer').textContent = '-';
+                document.getElementById('recSeq').textContent = '-';
+                document.getElementById('recEtchTick').textContent = '-';
+                document.getElementById('recStripTick').textContent = '-';
+                document.getElementById('recAlignTick').textContent = '-';
+                document.getElementById('recId').textContent = '-';
+                document.getElementById('recDataSrc').textContent = j && j.dataSource ? j.dataSource : '-';
+                meta.textContent = j && j.message ? j.message : '활성 레시피: 없음';
+                empty.style.display = 'block';
+                return;
+            }
+            const r = j.recipe;
+            empty.style.display = 'none';
+            meta.textContent = '활성: ' + (r.name || r.id || '-');
+            document.getElementById('recName').textContent = r.name || '-';
+            document.getElementById('recVer').textContent = 'v' + (r.version || '1');
+            document.getElementById('recSeq').textContent = r.etchPmSequence || '-';
+            document.getElementById('recEtchTick').textContent = r.etchProcessTicks != null ? r.etchProcessTicks + ' tick' : '-';
+            document.getElementById('recStripTick').textContent = r.stripProcessTicks != null ? r.stripProcessTicks + ' tick' : '-';
+            document.getElementById('recAlignTick').textContent = r.alignProcessTicks != null ? r.alignProcessTicks + ' tick' : '-';
+            document.getElementById('recId').textContent = r.id || '-';
+            document.getElementById('recDataSrc').textContent = j.dataSource || '-';
+        }
+
+        function refreshRecipeTab() {
+            const source = resolveRecipeSource();
+            fetch('/api/etch/recipe/active?source=' + encodeURIComponent(source))
+                .then(r => r.json())
+                .then(renderRecipe)
+                .catch(() => {
+                    document.getElementById('recMeta').textContent = '조회 실패 (Flask 확인)';
+                });
+        }
+
+        document.getElementById('btnRecRefresh').addEventListener('click', refreshRecipeTab);
+        document.getElementById('recSource').addEventListener('change', refreshRecipeTab);
 
         function initServerChart() {
             const ctx = document.getElementById('serverTrendChart').getContext('2d');
@@ -934,6 +1034,7 @@
         setInterval(() => {
             if (document.getElementById('tab-ai').classList.contains('active')) refreshAiTab();
             if (document.getElementById('tab-modules').classList.contains('active')) refreshModulesTab();
+            if (document.getElementById('tab-recipe').classList.contains('active')) refreshRecipeTab();
         }, 2000);
     </script>
 </body>
