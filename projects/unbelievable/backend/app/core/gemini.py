@@ -116,7 +116,11 @@ class GeminiClient:
                 },
                 "interest_gap_report": {
                     "interest_mismatch_score": interest_gap_report.get("interest_mismatch_score", 0),
-                    "algorithm_drift_categories": (interest_gap_report.get("algorithm_drift_categories") or [])[:5],
+                    "recommendation_flow_candidate_categories": (
+                        interest_gap_report.get("recommendation_flow_candidate_categories")
+                        or interest_gap_report.get("algorithm_drift_categories")
+                        or []
+                    )[:5],
                     "intent_matched_categories": (interest_gap_report.get("intent_matched_categories") or [])[:5],
                 },
             }
@@ -131,8 +135,8 @@ class GeminiClient:
             Return strict JSON with these keys:
             - summary: one concise sentence.
             - search_intent_read: one sentence about active searches.
-            - watch_exposure_read: one sentence about standard-video exposure.
-            - shorts_read: one sentence about shorts exposure.
+            - watch_exposure_read: one sentence about standard-video consumption.
+            - shorts_read: one sentence about shorts repeated consumption.
             - next_action_hint: one practical next action.
             - confidence: high, medium, or low.
             - warnings: array of short Korean warning strings.
@@ -180,11 +184,15 @@ class GeminiClient:
         watch_total = int(standard_video_interest_map.get("total_video_count") or 0)
         shorts_total = int(shorts_interest_map.get("total_shorts_count") or 0)
 
-        drift = interest_gap_report.get("algorithm_drift_categories") or []
-        if drift:
-            drift_hint = f"검색보다 더 많이 노출된 주제는 {drift[0].get('category', '특정 주제')}입니다."
+        candidates = (
+            interest_gap_report.get("recommendation_flow_candidate_categories")
+            or interest_gap_report.get("algorithm_drift_categories")
+            or []
+        )
+        if candidates:
+            drift_hint = f"추천 흐름 영향 후보로는 {candidates[0].get('category', '특정 주제')}가 먼저 보입니다."
         else:
-            drift_hint = "검색 의도와 일반 영상 노출의 큰 이탈은 아직 뚜렷하지 않습니다."
+            drift_hint = "검색 의도와 일반 영상 소비의 큰 이탈은 아직 뚜렷하지 않습니다."
 
         warnings: List[str] = []
         if search_total < 3:
@@ -197,15 +205,15 @@ class GeminiClient:
         return self._normalize_interest_report({
             "mode": mode,
             "model": "rule_based",
-            "summary": f"현재 검색 의도와 시청 노출의 관심사 격차는 {mismatch}점으로 계산되었습니다.",
+            "summary": f"현재 검색 의도와 시청 소비의 관심사 격차는 {mismatch}점으로 계산되었습니다.",
             "search_intent_read": f"광고를 제외한 실제 검색은 {search_total}건이며, 상위 관심사는 {search_top}입니다.",
-            "watch_exposure_read": f"일반 영상 노출은 {watch_total}건이며, 상위 관심사는 {watch_top}입니다. {drift_hint}",
+            "watch_exposure_read": f"일반 영상 소비는 {watch_total}건이며, 상위 관심사는 {watch_top}입니다. {drift_hint}",
             "shorts_read": (
                 f"숏츠는 {shorts_total}건이며, 상위 관심사는 {shorts_top}입니다."
                 if shorts_total > 0
                 else "이번 데이터에서는 숏츠 관심사 표본이 부족합니다."
             ),
-            "next_action_hint": "상위 검색 관심사와 많이 노출된 영상 관심사가 다른 경우, 다음 시청 전 검색어를 먼저 정해 추천 흐름을 끊어보세요.",
+            "next_action_hint": "상위 검색 관심사와 비검색 시청 관심사가 다른 경우, 다음 시청 전 검색어를 먼저 정해 추천 흐름을 잠깐 끊어보세요.",
             "confidence": "medium" if search_total >= 3 and watch_total >= 3 else "low",
             "warnings": warnings,
         })

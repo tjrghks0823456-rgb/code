@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from app.core.content_filters import (
     clean_search_query,
     detect_ad_event_reason,
+    extract_search_query as extract_event_search_query,
     is_shorts_video_event,
     is_standard_video_event,
     is_valid_search_event,
@@ -224,8 +225,7 @@ def extract_search_query(event: Dict[str, Any], raw_text: str = "") -> Optional[
     """Return only a real user search query; ads, watches, and noise return None."""
     if not is_valid_search_event(event):
         return None
-    query = clean_search_query(raw_text or _event_title(event))
-    return query or None
+    return extract_event_search_query(event, raw_text=raw_text) or clean_search_query(raw_text or _event_title(event)) or None
 
 
 def _event_raw_category(event: Dict[str, Any]) -> str:
@@ -501,29 +501,51 @@ def _gap_rows(
         search_ratio = search_ratios.get(category, 0.0)
         target_ratio = target_ratios.get(category, 0.0)
         delta = target_ratio - search_ratio
+        if delta > 0:
+            interpretation = "검색 대비 실제 소비 비중이 높음"
+            direction = "watch_higher"
+        elif delta < 0:
+            interpretation = "검색은 많지만 실제 소비 비중은 낮음"
+            direction = "search_higher"
+        else:
+            interpretation = "검색과 실제 소비 비중이 유사함"
+            direction = "matched"
         rows.append(
             {
                 "category": category,
                 "search_ratio": round(search_ratio * 100.0, 1),
                 f"{target_label}_ratio": round(target_ratio * 100.0, 1),
-                "gap": round(abs(delta) * 100.0, 1),
-                "direction": "over_exposed" if delta > 0 else ("under_exposed" if delta < 0 else "matched"),
+                "gap": round(delta * 100.0, 1),
+                "abs_gap": round(abs(delta) * 100.0, 1),
+                "direction": direction,
+                "interpretation": interpretation,
             }
         )
-    return sorted(rows, key=lambda item: item["gap"], reverse=True)
+    return sorted(rows, key=lambda item: item["abs_gap"], reverse=True)
 
 
-def _mean_gap(search_ratios: Dict[str, float], target_ratios: Dict[str, float]) -> float:
+def _l1_gap(search_ratios: Dict[str, float], target_ratios: Dict[str, float]) -> float:
     categories = set(search_ratios) | set(target_ratios)
     if not categories:
         return 0.0
-    return sum(abs(target_ratios.get(category, 0.0) - search_ratios.get(category, 0.0)) for category in categories) / len(categories)
+    return sum(abs(target_ratios.get(category, 0.0) - search_ratios.get(category, 0.0)) for category in categories) / 2.0
+
+
+def _category_samples(interest_map: Dict[str, Any], category: str, limit: int = 5) -> List[str]:
+    samples: List[str] = []
+    for item in interest_map.get("category_distribution") or []:
+        if (item.get("category") or item.get("name")) != category:
+            continue
+        for subcategory in item.get("subcategories") or []:
+            samples.extend(subcategory.get("raw_items") or [])
+    return _dedupe(samples)[:limit]
 
 
 def build_interest_gap_report(
     search_interest_map: Dict[str, Any],
     standard_video_interest_map: Dict[str, Any],
     shorts_interest_map: Dict[str, Any],
+    explicit_map: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     search_ratios = _ratio_map(search_interest_map)
     standard_ratios = _ratio_map(standard_video_interest_map)
@@ -532,36 +554,75 @@ def build_interest_gap_report(
     search_vs_standard = _gap_rows(search_ratios, standard_ratios, "standard_video")
     search_vs_shorts = _gap_rows(search_ratios, shorts_ratios, "shorts")
 
-    drift_categories: List[Dict[str, Any]] = []
-    for row in search_vs_standard:
-        if row["direction"] == "over_exposed" and row["gap"] >= 10.0:
-            drift_categories.append({**row, "surface": "standard_video"})
-    for row in search_vs_shorts:
-        if row["direction"] == "over_exposed" and row["gap"] >= 10.0:
-            drift_categories.append({**row, "surface": "shorts"})
+    recommendation_candidates: List[Dict[str, Any]] = []
+    for category in sorted(set(search_ratios) | set(standard_ratios) | set(shorts_ratios)):
+        search_ratio = search_ratios.get(category, 0.0)
+        watch_ratio = standard_ratios.get(category, 0.0)
+        shorts_ratio = shorts_ratios.get(category, 0.0)
+        watch_lift = max(0.0, watch_ratio - search_ratio)
+        shorts_lift = max(0.0, shorts_ratio - search_ratio)
+        candidate_score = ((watch_lift * 0.7) + (shorts_lift * 0.3)) * 100.0
+        if candidate_score < 8.0:
+            continue
+
+        evidence = []
+        if watch_lift > 0:
+            evidence.append(
+                f"검색 비중 {round(search_ratio * 100.0, 1)}% 대비 일반 시청 비중 {round(watch_ratio * 100.0, 1)}%"
+            )
+        if shorts_lift > 0:
+            evidence.append(
+                f"검색 비중 {round(search_ratio * 100.0, 1)}% 대비 숏츠 비중 {round(shorts_ratio * 100.0, 1)}%"
+            )
+
+        recommendation_candidates.append({
+            "category": category,
+            "search_ratio": round(search_ratio * 100.0, 1),
+            "watch_ratio": round(watch_ratio * 100.0, 1),
+            "standard_video_ratio": round(watch_ratio * 100.0, 1),
+            "shorts_ratio": round(shorts_ratio * 100.0, 1),
+            "candidate_score": round(candidate_score, 1),
+            "interpretation": "검색 기록에서는 낮았지만 비검색 시청 기록에서 상대적으로 많이 나타난 주제입니다.",
+            "evidence": evidence,
+            "sample_items": _category_samples(standard_video_interest_map, category) or _category_samples(shorts_interest_map, category),
+        })
 
     matched_categories = [
         {
             "category": category,
             "search_ratio": round(search_ratios[category] * 100.0, 1),
             "standard_video_ratio": round(standard_ratios[category] * 100.0, 1),
+            "interpretation": "검색과 일반 시청에서 모두 반복된 관심사입니다.",
         }
         for category in sorted(set(search_ratios) & set(standard_ratios))
         if search_ratios[category] >= 0.1 and standard_ratios[category] >= 0.1
     ]
 
-    mismatch = (_mean_gap(search_ratios, standard_ratios) * 0.7) + (_mean_gap(search_ratios, shorts_ratios) * 0.3)
+    standard_gap = _l1_gap(search_ratios, standard_ratios)
+    shorts_gap = _l1_gap(search_ratios, shorts_ratios) if shorts_interest_map.get("total_shorts_count", 0) else 0.0
+    mismatch = (standard_gap * 0.7) + (shorts_gap * 0.3)
     warnings = []
     if search_interest_map.get("total_search_count", 0) < 3:
         warnings.append("검색어 표본이 적어 관심사 격차는 참고용입니다.")
     if standard_video_interest_map.get("total_video_count", 0) < 3:
-        warnings.append("일반 영상 표본이 적어 알고리즘 노출 비교는 참고용입니다.")
+        warnings.append("일반 영상 표본이 적어 추천 흐름 영향 후보는 참고용입니다.")
+    if explicit_map is None:
+        warnings.append("명시적 반응 데이터가 없어 추천 흐름 영향 후보는 검색 대비 소비 비중 차이만으로 계산했습니다.")
+
+    recommendation_candidates = sorted(
+        recommendation_candidates,
+        key=lambda item: item["candidate_score"],
+        reverse=True,
+    )[:8]
 
     return {
         "interest_mismatch_score": round(min(100.0, mismatch * 100.0), 1),
+        "summary": "직접 검색한 관심사와 실제 시청한 관심사 사이의 차이를 비교했습니다.",
+        "search_vs_watch_gap": search_vs_standard[:8],
         "search_vs_standard_video_gap": search_vs_standard[:8],
         "search_vs_shorts_gap": search_vs_shorts[:8],
-        "algorithm_drift_categories": sorted(drift_categories, key=lambda item: item["gap"], reverse=True)[:8],
+        "recommendation_flow_candidate_categories": recommendation_candidates,
+        "algorithm_drift_categories": recommendation_candidates,
         "intent_matched_categories": matched_categories[:8],
         "warnings": warnings,
     }

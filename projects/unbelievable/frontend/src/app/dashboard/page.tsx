@@ -230,18 +230,55 @@ function DashboardContent() {
   const shortsInterestMap = insights.shorts_interest_map || {};
   const interestGapReport = insights.interest_gap_report || {};
   const interestAiSummary = insights.interest_ai_summary || {};
-  const topInterestCategory = (map: any) => {
-    const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
-    return distribution[0]?.category || distribution[0]?.name || "데이터 부족";
-  };
   const interestMismatchScore = Math.round(Number(interestGapReport.interest_mismatch_score || 0));
-  const topDriftCategory = Array.isArray(interestGapReport.algorithm_drift_categories) && interestGapReport.algorithm_drift_categories.length > 0
-    ? interestGapReport.algorithm_drift_categories[0]
+  const flowCandidates = Array.isArray(interestGapReport.recommendation_flow_candidate_categories)
+    ? interestGapReport.recommendation_flow_candidate_categories
+    : (Array.isArray(interestGapReport.algorithm_drift_categories) ? interestGapReport.algorithm_drift_categories : []);
+  const topFlowCandidate = flowCandidates.length > 0
+    ? flowCandidates[0]
     : null;
+  const topInterestCategories = (map: any) => {
+    const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
+    return distribution.slice(0, 3).map((item) => item.category || item.name).filter(Boolean);
+  };
+  const renderInterestMapDetails = (label: string, map: any, emptyText: string) => {
+    const distribution = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
+    return (
+      <details className="rounded-2xl border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer text-sm font-black text-slate-950">{label}</summary>
+        {distribution.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            {distribution.slice(0, 4).map((category: any) => (
+              <div key={category.category || category.name} className="rounded-xl bg-[#fbfaf7] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900">{category.category || category.name}</p>
+                  <span className="text-xs font-bold text-slate-500">{Math.round(Number(category.ratio || category.value || 0))}%</span>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {(category.subcategories || []).slice(0, 3).map((sub: any) => (
+                    <div key={sub.name} className="text-xs font-semibold leading-5 text-slate-600">
+                      <span className="font-black text-slate-800">{sub.name}</span>
+                      {Array.isArray(sub.entities) && sub.entities.length > 0 && <span> · {sub.entities.slice(0, 3).join(", ")}</span>}
+                      {Array.isArray(sub.raw_items) && sub.raw_items.length > 0 && (
+                        <p className="mt-1 text-slate-500">근거: {sub.raw_items.slice(0, 2).join(" / ")}</p>
+                      )}
+                      <p className="text-[11px] font-bold text-slate-400">confidence: {sub.confidence || "low"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm font-bold text-slate-500">{emptyText}</p>
+        )}
+      </details>
+    );
+  };
   const categoryShares: CategoryShare[] = Array.isArray(insights.category_shares) ? insights.category_shares : [];
   const reportInsights: string[] = Array.isArray(insights.report_insights) ? insights.report_insights : [];
   const directInterestSummary = insights.direct_interest_summary || "검색 기록 부족";
-  const algorithmInterestSummary = insights.algorithm_interest_summary || "분류 데이터 부족";
+  const recommendationFlowSummary = insights.recommendation_flow_summary || insights.algorithm_interest_summary || "분류 데이터 부족";
   const diversity = Math.round(Number(metaGap.TDS?.actual || 0));
   const misconceptionIndex = Math.round(Number(processedData.misconception?.index || 0));
   const shortsAnalysis = insights.shorts_analysis || {};
@@ -268,7 +305,7 @@ function DashboardContent() {
         <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <SectionTitle
             eyebrow="analysis report"
-            title="손석환님의 알고리즘 리포트입니다"
+            title="손석환님의 미디어 성향 리포트입니다"
             description="내가 직접 찾은 관심사와 시청 기록이 보여주는 관심사를 나란히 비교했습니다."
           />
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -431,10 +468,15 @@ function DashboardContent() {
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">interest comparison</p>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">검색 의도와 시청 노출 비교</h2>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">관심사 비교 리포트</h2>
               <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">
-                광고성 기록을 제외한 검색어, 일반 영상, 숏츠를 따로 분리해 관심사가 어디에서 달라지는지 비교합니다.
+                Google Takeout만으로 추천 경로를 100% 확정할 수 없기 때문에, 검색 기록 대비 실제 시청에서 더 많이 나타난 주제를 후보로만 표시합니다.
               </p>
+              {excludedAdCount > 0 && (
+                <p className="mt-2 text-xs font-black text-teal-700">
+                  Google 광고 및 프로모션성 Takeout 항목 {excludedAdCount}개는 분석에서 제외되었습니다.
+                </p>
+              )}
             </div>
             <div className="rounded-2xl bg-teal-50 px-4 py-3 text-right">
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-teal-600">mismatch</p>
@@ -443,24 +485,33 @@ function DashboardContent() {
           </div>
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">active search</p>
-              <p className="mt-2 text-lg font-black text-slate-950">{topInterestCategory(searchInterestMap)}</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">{Number(searchInterestMap.total_search_count || 0)}건 기준</p>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">직접 검색 관심 TOP 3</p>
+              <p className="mt-2 text-lg font-black leading-7 text-slate-950">
+                {topInterestCategories(searchInterestMap).join(" · ") || "데이터 부족"}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-500">사용자가 직접 입력한 검색어만 반영합니다.</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">standard video</p>
-              <p className="mt-2 text-lg font-black text-slate-950">{topInterestCategory(standardVideoInterestMap)}</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">{Number(standardVideoInterestMap.total_video_count || 0)}건 기준</p>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">실제 시청 관심 TOP 3</p>
+              <p className="mt-2 text-lg font-black leading-7 text-slate-950">
+                {topInterestCategories(standardVideoInterestMap).join(" · ") || "데이터 부족"}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-500">실제로 시청한 일반 영상 기반 관심사입니다.</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">shorts</p>
-              <p className="mt-2 text-lg font-black text-slate-950">{topInterestCategory(shortsInterestMap)}</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">{Number(shortsInterestMap.total_shorts_count || 0)}건 기준</p>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">숏츠 반복 관심 TOP 3</p>
+              <p className="mt-2 text-lg font-black leading-7 text-slate-950">
+                {topInterestCategories(shortsInterestMap).join(" · ") || "데이터 부족"}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-500">직접 검색 의도가 아니라 짧은 영상 반복 노출 패턴입니다.</p>
             </div>
           </div>
-          {topDriftCategory && (
+          {topFlowCandidate && (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800">
-              검색보다 더 많이 노출된 관심사는 {topDriftCategory.category}이며, 격차는 약 {Math.round(Number(topDriftCategory.gap || 0))}점입니다.
+              <p className="font-black">추천 흐름 영향 후보</p>
+              <p className="mt-1">
+                {topFlowCandidate.category}는 검색 기록 대비 실제 시청에서 더 많이 나타난 주제입니다. 후보 점수는 {Math.round(Number(topFlowCandidate.candidate_score || 0))}점입니다.
+              </p>
             </div>
           )}
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
@@ -487,6 +538,11 @@ function DashboardContent() {
             <p className="mt-3 rounded-2xl bg-teal-50 px-3 py-2 text-xs font-black leading-5 text-teal-800">
               {interestAiSummary.next_action_hint || "다음 시청 전 검색어를 먼저 정해 추천 흐름을 끊어보세요."}
             </p>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {renderInterestMapDetails("검색 기반 맵", searchInterestMap, "검색어로 인정 가능한 데이터가 부족합니다.")}
+            {renderInterestMapDetails("일반 시청 기반 맵", standardVideoInterestMap, "일반 영상 데이터가 부족합니다.")}
+            {renderInterestMapDetails("숏츠 반복 맵", shortsInterestMap, "숏츠 데이터가 부족하여 참고용으로 표시됩니다.")}
           </div>
         </Card>
 
@@ -566,8 +622,8 @@ function DashboardContent() {
                 <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{directInterestSummary}</p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">알고리즘이 많이 보여준 관심사</p>
-                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{algorithmInterestSummary}</p>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">추천 흐름 영향 후보</p>
+                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{recommendationFlowSummary}</p>
               </div>
             </div>
             <p className="mt-5 text-xs font-semibold leading-5 text-slate-500">

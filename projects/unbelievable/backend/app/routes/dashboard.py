@@ -290,7 +290,7 @@ def build_dashboard_insights(
         report_insights.append(f"{len(score_warnings)}개의 신뢰도 경고가 있어 일부 지표는 참고용으로 봐야 합니다.")
 
     direct_interest_summary = " · ".join(item["keyword"] for item in search_keywords[:3]) if search_keywords else "검색 기록 부족"
-    algorithm_interest_summary = (
+    recommendation_flow_summary = (
         " · ".join(item["name"] for item in topic_shares[:3])
         if topic_shares
         else (" · ".join(item["name"] for item in channel_shares[:3]) if channel_shares else "분류 데이터 부족")
@@ -309,7 +309,8 @@ def build_dashboard_insights(
         "shorts_analysis": shorts_analysis,
         "report_insights": report_insights,
         "direct_interest_summary": direct_interest_summary,
-        "algorithm_interest_summary": algorithm_interest_summary
+        "recommendation_flow_summary": recommendation_flow_summary,
+        "algorithm_interest_summary": recommendation_flow_summary
     }
 
 @router.get("/dashboard/summary")

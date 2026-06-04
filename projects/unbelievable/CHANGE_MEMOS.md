@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-04 Interest gap report and dashboard UI note
+- Updated `build_interest_gap_report()` to return `summary`, `search_vs_watch_gap`, `recommendation_flow_candidate_categories`, `intent_matched_categories`, and warnings while keeping the old `algorithm_drift_categories` key only as a compatibility alias.
+- Recalculated `interest_mismatch_score` from category-ratio L1 distance: standard-video search gap is primary, shorts gap is a 0.3 weighted helper only when shorts data exists.
+- Recommendation-flow candidates now use cautious language: they mean topics that appear more in non-search viewing than direct search, not a confirmed recommendation path.
+- Updated Gemini/rule-based explanations and dashboard copy to avoid the banned visible phrases such as “알고리즘이 많이 보여준 관심사”.
+- Dashboard now shows `관심사 비교 리포트` with TOP 3 cards for direct search, standard-video viewing, and shorts repetition, plus expandable map details with subcategories, entities, raw evidence, and confidence.
+
 ## 2026-06-04 Data cleanup phase 2 note
 - Added explicit helpers in `content_filters.py`: `is_google_ad_event()`, `extract_search_query()`, and `detect_content_format()`.
 - Ad filtering now requires stronger evidence such as Google Ads details, ad/tracking URLs, `gclid`, `dclid`, `utm_campaign`, `utm_medium=cpc`, `Shortened:`, or campaign-style creative codes. Brand names such as `Google Cloud`, `Hotels.com`, and `Sony` are not treated as ads by name alone.
