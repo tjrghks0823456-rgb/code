@@ -28,6 +28,8 @@ C:\etchflask\run_flask.bat
 - `GET /api/sensors` — 최신 스냅샷
 - `POST /api/etch/sensor-data` — WPF 텔레메트리
 - `GET /api/etch/history` · `events` · `summary`
+- `GET /api/etch/modules/latest?source=demo|live` — 모듈 테이블 (웹 **모듈 상태** 탭)
+- `GET /api/etch/recipe/active?source=demo|live` — 활성 레시피 (WPF POST `recipe`)
 
 ## 센서 표시
 
