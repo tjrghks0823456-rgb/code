@@ -4,8 +4,11 @@
 - Investigated why `기타/미분류` dominated both search and standard-video maps: the parser was loading data, but `classify_interest_topic()` only used narrow manual keyword rules and sent unmatched real-world terms to the fallback bucket.
 - Current dashboard sample showed search `기타/미분류=2520/3000` and standard-video `기타/미분류=150/232`; examples included `이글스`, `t1`, `페이커`, `김호영`, `락힙합`, `mbc 서울시장`, and `콜오브듀티`.
 - Expanded rules for Korean sports/baseball, e-sports/LOL, FPS games, broadcast news/election terms, business creator terms, music/idol terms, entertainment/person terms, and lifestyle moving/living terms.
+- Follow-up pass removed the overly broad single-character `락` rule because it incorrectly caught words like `철근 누락`; music matching now uses stronger terms such as `락힙합`, `록`, and `rock`.
+- Added more real sample coverage for `국토부/철근 누락`, `간편장부대상자`, `지누션`, `이민우`, `복냥즈`, and English/music-like titles such as `my whole world`.
 - Added a sample regression check so the newly covered terms no longer fall into `기타/미분류`.
-- Note: the running backend process must be restarted or the Takeout must be re-analyzed before the dashboard numbers reflect the new classifier rules.
+- Re-uploaded `takeout-20260601T113511Z-3-001 (2).zip` after restarting the backend and generated run `9e21229c-34d9-4890-b6a2-7befe15e23d8`; search `기타/미분류` dropped from 84.0% to 75.6%, and standard-video `기타/미분류` dropped from 64.7% to 54.7%.
+- Remaining high `기타/미분류` is mostly ambiguous names/titles such as `goose senbi`, `스마일보이`, `허키`, `Airplane`, and `BUMPA`; these need either a richer entity dictionary or Gemini/YouTube metadata-assisted classification.
 
 ## 2026-06-04 DetoxProgram-inspired dashboard highlight cards
 - Referenced the teammate project `tpwhd541211/DetoxProgram` beyond the graph itself and adapted the dashboard-style summary patterns that fit Unbelievable.
