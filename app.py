@@ -31,7 +31,7 @@ logging.basicConfig(
 app = Flask(__name__, root_path=_APP_DIR)
 CORS(app)
 
-use_database = False
+use_database = os.environ.get('ETCH_USE_DB', '').strip().lower() in ('1', 'true', 'yes')
 _ETCH_SQLITE = os.path.join(_APP_DIR, 'data', 'etch_monitoring.db')
 data_manager = DataManager(use_db=use_database, etch_sqlite_path=_ETCH_SQLITE)
 
@@ -170,7 +170,7 @@ def receive_etch_sensor_data():
         ingest = data_manager.ingest_etch_post(data)
         data_source = ingest.get('dataSource', 'offline')
 
-        if ingest.get('aiUpdated'):
+        if ingest.get('stored'):
             ai_input = {
                 'equipmentState': data.get('equipmentState'),
                 'alarmCode': data.get('alarmCode'),
@@ -179,7 +179,11 @@ def receive_etch_sensor_data():
                 'humidity': data.get('humidity'),
                 'pressure': data.get('pressure'),
                 'vibration': data.get('vibration'),
-                'sensorsLive': True,
+                'sensorsLive': data.get('sensorsLive', False),
+                'benchMode': data.get('benchMode', False),
+                'pressureMin': PRESSURE_INTERLOCK_MIN,
+                'pressureMax': PRESSURE_INTERLOCK_MAX,
+                'vibrationMax': 0.8,
             }
             data_manager.set_ai_diagnosis(etch_ai_predict_stub(ai_input))
 
@@ -337,7 +341,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(_APP_DIR, 'templates'), exist_ok=True)
     os.makedirs(os.path.join(_APP_DIR, 'models'), exist_ok=True)
 
-    print("식각 HMI — 메모리 스냅샷 + SQLite 이력:", _ETCH_SQLITE)
+    print("식각 HMI — DB:", "SQLite ON" if use_database else "메모리", "|", _ETCH_SQLITE)
     print(f"[etchflask] 앱 폴더: {_APP_DIR}")
     print(f"[etchflask] 대시보드 파일: {_DASHBOARD_HTML} (존재: {os.path.isfile(_DASHBOARD_HTML)})")
 

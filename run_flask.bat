@@ -12,5 +12,6 @@ echo [etchflask] Flask 서버 시작 (현장 PC — 0.0.0.0:5000)
 echo   현장 브라우저: http://127.0.0.1:5000
 echo   모니터링 PC:   http://^<이 PC LAN IP^>:5000  ^(ipconfig 참고^)
 echo   자세한 구성: REMOTE_MONITORING.md
+echo   SQLite 이력 영구 저장: set ETCH_USE_DB=1 후 실행 (data\etch_monitoring.db)
 python app.py
 pause

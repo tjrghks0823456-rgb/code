@@ -401,6 +401,7 @@
         </div>
         <div class="ai-box">
             <h2>권고 (조회 전용 · 인터락 자동 제어 없음)</h2>
+            <p id="aiPredicted" style="font-size:0.9rem;font-weight:600;color:#7c2d12;margin-bottom:8px;">예상 알람: -</p>
             <p id="aiSuggested" style="font-size:0.95rem;line-height:1.5;color:#111827;">-</p>
         </div>
         <div class="ai-box">
@@ -1018,6 +1019,11 @@
                     const sc = x.anomaly_score != null ? Number(x.anomaly_score) : NaN;
                     document.getElementById('aiScoreNum').textContent = Number.isNaN(sc) ? '-' : sc.toFixed(2);
                     document.getElementById('aiScoreNum').style.color = sc >= 0.75 ? '#dc2626' : sc >= 0.45 ? '#ca8a04' : '#16a34a';
+                    const pa = (x.predicted_alarm || 'NONE').toString().toUpperCase();
+                    const pc = x.prediction_confidence != null ? Number(x.prediction_confidence) : NaN;
+                    document.getElementById('aiPredicted').textContent = pa === 'NONE'
+                        ? '예상 알람: 없음'
+                        : '예상 알람: ' + pa + (Number.isNaN(pc) ? '' : ' · 신뢰 ' + (pc * 100).toFixed(0) + '%');
                     document.getElementById('aiSuggested').textContent = x.suggested_action || x.note || '-';
                     document.getElementById('aiUpdatedAt').textContent = x.updatedAt || '-';
                 })
