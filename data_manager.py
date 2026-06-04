@@ -7,21 +7,45 @@ from typing import List, Dict, Any, Optional
 class DataManager:
     """센서 데이터 및 로그를 관리하는 클래스"""
     
-    def __init__(self, db_path='data/smart_farm.db', use_db=True):
+    def __init__(self, db_path='data/smart_farm.db', use_db=True, etch_sqlite_path: Optional[str] = None):
         """
         Args:
             db_path: 데이터베이스 파일 경로
             use_db: DB 사용 여부 (False면 메모리 기반)
+            etch_sqlite_path: 식각 텔레메트리·이벤트 영구 DB (Phase 3.5)
         """
         self.use_db = use_db
         self.db_path = db_path if use_db else ':memory:'
-        
+        self._etch_store = None
+        if etch_sqlite_path:
+            from etch_persistence import EtchSqliteStore
+            self._etch_store = EtchSqliteStore(etch_sqlite_path)
+        self._last_modules_live: Optional[List[Dict[str, Any]]] = None
+        self._last_modules_demo: Optional[List[Dict[str, Any]]] = None
+        self._last_recipe_live: Optional[Dict[str, Any]] = None
+        self._last_recipe_demo: Optional[Dict[str, Any]] = None
+
         # 메모리 기반일 때는 인메모리 리스트 사용
         if not use_db:
             self.sensor_data_list = []
             self.logs_list = []
-            self.farm_info_dict = {}
             self.production_data_list = []
+            # WPF → Flask 식각 텔레메트리 링버퍼(모니터링/리포트용)
+            # 실가공(EtherCAT live) 전용 — AI·KPI·웹 차트
+            self.etch_history: List[Dict[str, Any]] = []
+            self.etch_events: List[Dict[str, Any]] = []
+            self._last_etch_equipment_state: Optional[str] = None
+            self._last_etch_alarm: Optional[str] = None
+            self._last_etch_interlock: Optional[bool] = None
+            # 데모(시뮬) 전용 — 실가공 이력과 분리
+            self.demo_etch_history: List[Dict[str, Any]] = []
+            self.demo_etch_events: List[Dict[str, Any]] = []
+            self._last_demo_equipment_state: Optional[str] = None
+            self._last_demo_alarm: Optional[str] = None
+            self._last_demo_interlock: Optional[bool] = None
+            self._demo_stream_active: bool = False
+            self._last_demo_status: Optional[Dict[str, Any]] = None
+            self._last_ai_diagnosis: Optional[Dict[str, Any]] = None
         else:
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
     
@@ -99,7 +123,9 @@ class DataManager:
             'humidity': (0, 100),
             'temperature': (-10, 50),
             'light': (0, 100),
-            'soil_moisture': (0, 100)
+            'soil_moisture': (0, 100),
+            # 식각 압력(mTorr) — farmui 채광 % 상한(100) 사용 금지
+            'pressure_mtorr': (0, 5000),
         }
         
         if sensor_key in valid_ranges:
@@ -119,35 +145,17 @@ class DataManager:
             power_on = 1 if sensor_data.get('powerOn', False) else 0
             connected = 1 if sensor_data.get('connected', False) else 0
             
-            # 현재 농장 정보 저장 (최신 상태 유지)
-            self.farm_info_dict['current_farm'] = {
-                'farm_id': farm_id,
-                'power_on': power_on,
-                'connected': connected,
-                'last_update': timestamp
-            }
-            
-            # 농장별 작물 정보 저장 (C#에서 전송된 경우)
-            farms = sensor_data.get('farms', [])
-            if farms:
-                for farm in farms:
-                    farm_id_info = farm.get('id')
-                    crop_name = farm.get('cropName', '')
-                    note = farm.get('note', '')
-                    if farm_id_info and crop_name:
-                        if farm_id_info not in self.farm_info_dict:
-                            self.farm_info_dict[farm_id_info] = {}
-                        self.farm_info_dict[farm_id_info]['crop_name'] = crop_name
-                        self.farm_info_dict[farm_id_info]['note'] = note
-                        self.farm_info_dict[farm_id_info]['last_updated'] = datetime.now().isoformat()
-            
             sensors = sensor_data.get('sensors', [])
+            sensors_live = bool(sensor_data.get('sensorsLive', False)) and bool(connected)
             
-            # 센서 값 추출 및 검증
+            # 센서 값 추출 및 검증 (EtherCAT 실측일 때만)
             humidity = None
             temperature = None
             light = None
             soil_moisture = None
+            
+            if not sensors_live:
+                sensors = []
             
             for sensor in sensors:
                 name = sensor.get('name', '')
@@ -158,9 +166,11 @@ class DataManager:
                     humidity = self.validate_sensor_value('humidity', raw_value)
                 elif name == '온도':
                     temperature = self.validate_sensor_value('temperature', raw_value)
+                elif name == '압력':
+                    light = self.validate_sensor_value('pressure_mtorr', raw_value)
                 elif name == '채광':
                     light = self.validate_sensor_value('light', raw_value)
-                elif name == '토양습도':
+                elif name in ('토양습도', '진동'):
                     soil_moisture = self.validate_sensor_value('soil_moisture', raw_value)
             
             data_entry = {
@@ -172,10 +182,21 @@ class DataManager:
                 'light': light,
                 'soil_moisture': soil_moisture,
                 'power_on': power_on,
-                'connected': connected
+                'connected': connected,
+                'sensors_live': sensors_live,
             }
-            
+
+            for ek in ('equipmentState', 'alarmCode', 'accessSafe', 'interlockOk', 'username'):
+                if ek in sensor_data:
+                    data_entry[ek] = sensor_data[ek]
+
+            data_entry['data_source'] = sensor_data.get('dataSource', 'live')
+            if data_entry['data_source'] != 'live':
+                return
+
             self.sensor_data_list.append(data_entry)
+            self._append_etch_history_and_events(data_entry, history=self.etch_history, events=self.etch_events,
+                state_attr='_last_etch_equipment_state', alarm_attr='_last_etch_alarm', interlock_attr='_last_etch_interlock')
             
             # 최대 1000개까지만 유지 (오래된 데이터 삭제)
             if len(self.sensor_data_list) > 1000:
@@ -209,9 +230,11 @@ class DataManager:
                     humidity = raw_value
                 elif name == '온도':
                     temperature = raw_value
+                elif name == '압력':
+                    light = self.validate_sensor_value('pressure_mtorr', raw_value)
                 elif name == '채광':
-                    light = raw_value
-                elif name == '토양습도':
+                    light = self.validate_sensor_value('light', raw_value)
+                elif name in ('토양습도', '진동'):
                     soil_moisture = raw_value
             
             cursor.execute('''
@@ -225,7 +248,385 @@ class DataManager:
             print(f"센서 데이터 저장 오류: {e}")
         finally:
             conn.close()
+
+    def _ring_append(self, buf: List[Dict[str, Any]], item: Dict[str, Any], max_len: int) -> None:
+        buf.append(item)
+        overflow = len(buf) - max_len
+        if overflow > 0:
+            del buf[0:overflow]
+
+    @staticmethod
+    def resolve_data_source(raw: Dict[str, Any]) -> str:
+        """WPF POST JSON → live | demo | offline."""
+        explicit = (raw.get('dataSource') or raw.get('data_source') or '').strip().lower()
+        if explicit in ('live', 'demo', 'offline'):
+            return explicit
+        bench = bool(raw.get('benchMode', False))
+        plc_connected = bool(raw.get('connected', False))
+        sensors_live = bool(raw.get('sensorsLive', False)) and plc_connected
+        if sensors_live:
+            return 'live'
+        if bench:
+            return 'demo'
+        return 'offline'
+
+    def _cache_recipe(self, raw: Dict[str, Any], source: str) -> None:
+        from recipe_engine import normalize_recipe
+        recipe = normalize_recipe(raw.get('recipe'))
+        if not recipe:
+            return
+        if source == 'demo':
+            self._last_recipe_demo = recipe
+        elif source == 'live':
+            self._last_recipe_live = recipe
+
+    def get_active_recipe(self, source: str = 'live') -> Optional[Dict[str, Any]]:
+        if source == 'demo':
+            return dict(self._last_recipe_demo) if self._last_recipe_demo else None
+        return dict(self._last_recipe_live) if self._last_recipe_live else None
+
+    def _cache_modules(self, raw: Dict[str, Any], source: str) -> None:
+        modules = raw.get('modules')
+        if not modules or not isinstance(modules, list):
+            return
+        if source == 'demo':
+            self._last_modules_demo = modules
+        elif source == 'live':
+            self._last_modules_live = modules
+
+    def get_latest_modules(self, source: str = 'live') -> List[Dict[str, Any]]:
+        modules, _ = self.get_latest_modules_meta(source)
+        return modules
+
+    def get_latest_modules_meta(self, source: str = 'live') -> tuple[List[Dict[str, Any]], Optional[str]]:
+        if source not in ('live', 'demo'):
+            source = 'live'
+        if self._etch_store:
+            modules, ts = self._etch_store.get_latest_modules(source)
+            if modules:
+                return modules, ts
+        cached = self._last_modules_demo if source == 'demo' else self._last_modules_live
+        if cached:
+            snap = self._last_demo_status if source == 'demo' else self.get_latest_sensor_data()
+            ts = (snap or {}).get('lastUpdate') or (snap or {}).get('timestamp')
+            return list(cached), ts
+        return [], None
+
+    def ingest_etch_post(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+        """식각 텔레메트리 수신 — 실가공·데모 버퍼 분리."""
+        source = self.resolve_data_source(raw)
+        if source == 'live':
+            self._ingest_live_post(raw)
+            self._cache_modules(raw, 'live')
+            self._cache_recipe(raw, 'live')
+            if self._etch_store:
+                self._etch_store.insert_telemetry(raw, 'live')
+            return {'dataSource': 'live', 'stored': True, 'aiUpdated': not self.use_db, 'persisted': bool(self._etch_store)}
+        if source == 'demo':
+            self._ingest_demo_post(raw)
+            self._cache_modules(raw, 'demo')
+            self._cache_recipe(raw, 'demo')
+            if self._etch_store:
+                self._etch_store.insert_telemetry(raw, 'demo')
+            return {'dataSource': 'demo', 'stored': True, 'aiUpdated': False, 'persisted': bool(self._etch_store)}
+        return {'dataSource': 'offline', 'stored': False, 'aiUpdated': False, 'persisted': False}
+
+    def persist_etch_event(self, event: Dict[str, Any], source: Optional[str] = None) -> None:
+        """WPF·내부 이벤트 영구 저장."""
+        src = (source or event.get('dataSource') or 'live').lower()
+        if src not in ('live', 'demo'):
+            src = 'live'
+        if not self.use_db:
+            buf = self.demo_etch_events if src == 'demo' else self.etch_events
+            self._ring_append(buf, event, 400)
+        if self._etch_store:
+            self._etch_store.insert_event(event, src)
+
+    def _ingest_live_post(self, raw: Dict[str, Any]) -> None:
+        plc_connected = bool(raw.get('connected', False))
+        sensors_live = bool(raw.get('sensorsLive', False)) and plc_connected
+        sensor_data = {
+            'currentFarm': raw.get('equipmentId', 1),
+            'powerOn': raw.get('powerOn', False),
+            'connected': plc_connected,
+            'sensorsLive': sensors_live,
+            'dataSource': 'live',
+            'lastUpdate': raw.get('lastUpdate', datetime.now().isoformat()),
+            'sensors': [],
+            'equipmentState': raw.get('equipmentState'),
+            'alarmCode': raw.get('alarmCode'),
+            'accessSafe': raw.get('accessSafe'),
+            'interlockOk': raw.get('interlockOk'),
+            'username': raw.get('username'),
+            'modules': raw.get('modules'),
+            'benchMode': bool(raw.get('benchMode', False)),
+            'dataSource': raw.get('dataSource', 'live'),
+            'maintenanceMode': bool(raw.get('maintenanceMode', False)),
+        }
+        if sensors_live:
+            sensor_data['sensors'] = [
+                {'name': '온도', 'rawValue': raw.get('temperature', 0)},
+                {'name': '습도', 'rawValue': raw.get('humidity', 0)},
+                {'name': '압력', 'rawValue': raw.get('pressure', 0)},
+                {'name': '진동', 'rawValue': raw.get('vibration', 0)},
+            ]
+        self.save_sensor_data(sensor_data)
+
+    def _ingest_demo_post(self, raw: Dict[str, Any]) -> None:
+        if self.use_db:
+            return
+        ts = raw.get('lastUpdate', datetime.now().isoformat())
+        sample: Dict[str, Any] = {
+            'timestamp': ts,
+            'dataSource': 'demo',
+            'equipmentId': raw.get('equipmentId', 1),
+            'temperature': raw.get('temperature'),
+            'humidity': raw.get('humidity'),
+            'pressure_mtorr': raw.get('pressure'),
+            'vibration_g': raw.get('vibration'),
+            'equipmentState': raw.get('equipmentState'),
+            'alarmCode': raw.get('alarmCode'),
+            'interlockOk': raw.get('interlockOk'),
+            'accessSafe': raw.get('accessSafe'),
+            'username': raw.get('username'),
+            'benchMode': True,
+            'connected': False,
+            'sensorsLive': False,
+            'modules': raw.get('modules'),
+        }
+        self._ring_append(self.demo_etch_history, sample, 1500)
+        self._demo_stream_active = True
+        self._last_demo_status = dict(sample)
+
+        entry = {
+            'timestamp': ts,
+            'farm_id': sample['equipmentId'],
+            'equipmentState': sample.get('equipmentState'),
+            'alarmCode': sample.get('alarmCode'),
+            'interlockOk': sample.get('interlockOk'),
+            'username': sample.get('username'),
+        }
+        self._append_etch_history_and_events(
+            entry,
+            history=self.demo_etch_history,
+            events=self.demo_etch_events,
+            state_attr='_last_demo_equipment_state',
+            alarm_attr='_last_demo_alarm',
+            interlock_attr='_last_demo_interlock',
+            skip_history_sample=True,
+        )
+
+    def _append_etch_history_and_events(
+        self,
+        data_entry: Dict[str, Any],
+        *,
+        history: List[Dict[str, Any]],
+        events: List[Dict[str, Any]],
+        state_attr: str,
+        alarm_attr: str,
+        interlock_attr: str,
+        skip_history_sample: bool = False,
+    ) -> None:
+        """메모리 모드: 상태·알람·인터록 이벤트 (이력 샘플은 호출측에서 이미 넣었을 수 있음)."""
+        if self.use_db:
+            return
+
+        ts = data_entry.get('timestamp', datetime.now().isoformat())
+        if not skip_history_sample:
+            sample: Dict[str, Any] = {
+                'timestamp': ts,
+                'dataSource': data_entry.get('data_source', 'live'),
+                'equipmentId': data_entry.get('farm_id'),
+                'temperature': data_entry.get('temperature'),
+                'humidity': data_entry.get('humidity'),
+                'pressure_mtorr': data_entry.get('light'),
+                'vibration_g': data_entry.get('soil_moisture'),
+                'equipmentState': data_entry.get('equipmentState'),
+                'alarmCode': data_entry.get('alarmCode'),
+                'interlockOk': data_entry.get('interlockOk'),
+                'accessSafe': data_entry.get('accessSafe'),
+                'username': data_entry.get('username'),
+                'connected': bool(data_entry.get('connected')),
+                'powerOn': bool(data_entry.get('power_on')),
+            }
+            self._ring_append(history, sample, 2500)
+
+        st = data_entry.get('equipmentState')
+        al = data_entry.get('alarmCode')
+        il = data_entry.get('interlockOk')
+        user = data_entry.get('username')
+
+        def ev(kind: str, message: str) -> Dict[str, Any]:
+            return {
+                'time': ts,
+                'kind': kind,
+                'message': message,
+                'equipmentState': st,
+                'alarmCode': al,
+                'interlockOk': il,
+                'username': user,
+            }
+
+        if st is not None:
+            prev_st = getattr(self, state_attr)
+            if prev_st is not None and str(st) != prev_st:
+                self._ring_append(events, ev('state_change', f"상태 {prev_st} → {st}"), 400)
+            setattr(self, state_attr, str(st))
+
+        prev_al = getattr(self, alarm_attr)
+        cur_al = str(al) if al else None
+        if cur_al != prev_al:
+            if al:
+                self._ring_append(events, ev('alarm', f"알람: {al}"), 400)
+            elif prev_al:
+                self._ring_append(events, ev('alarm', f"알람 해제 (이전 {prev_al})"), 400)
+            setattr(self, alarm_attr, cur_al)
+
+        if isinstance(il, bool):
+            prev_il = getattr(self, interlock_attr)
+            if prev_il is True and il is False:
+                self._ring_append(events, ev('interlock_lost', '인터록 미충족'), 400)
+            elif prev_il is False and il is True:
+                self._ring_append(events, ev('interlock_ok', '인터록 충족'), 400)
+            setattr(self, interlock_attr, il)
+
+    def set_ai_diagnosis(self, result: Dict[str, Any]) -> None:
+        if self.use_db:
+            return
+        entry = dict(result)
+        entry['updatedAt'] = datetime.now().isoformat()
+        self._last_ai_diagnosis = entry
+
+    def get_ai_diagnosis_latest(self) -> Optional[Dict[str, Any]]:
+        if self.use_db:
+            return None
+        return self._last_ai_diagnosis
+
+    def get_etch_telemetry_history(self, limit: int = 500, source: str = 'live') -> List[Dict[str, Any]]:
+        if self._etch_store:
+            return self._etch_store.get_telemetry_history(limit, source)
+        if self.use_db:
+            return []
+        n = max(1, min(int(limit), 2500))
+        buf = self.demo_etch_history if source == 'demo' else self.etch_history
+        return list(buf[-n:])
+
+    def get_etch_events(self, limit: int = 100, source: str = 'live') -> List[Dict[str, Any]]:
+        if self._etch_store:
+            return self._etch_store.get_events(limit, source)
+        if self.use_db:
+            return []
+        n = max(1, min(int(limit), 400))
+        buf = self.demo_etch_events if source == 'demo' else self.etch_events
+        return list(buf[-n:])[::-1]
+
+    def _summarize_history(self, hist: List[Dict[str, Any]], events: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not hist:
+            return {
+                'samples': 0,
+                'last': None,
+                'runningRatio': None,
+                'alarmEvents': 0,
+                'interlockEvents': 0,
+            }
+        last = dict(hist[-1])
+        total = len(hist)
+        run_ct = sum(
+            1
+            for s in hist
+            if str(s.get('equipmentState') or '').upper() == 'RUNNING'
+        )
+        alarm_ev = sum(1 for e in events if e.get('kind') == 'alarm')
+        il_ev = sum(1 for e in events if e.get('kind') == 'interlock_lost')
+        return {
+            'samples': total,
+            'last': last,
+            'runningRatio': round(run_ct / total, 4) if total else None,
+            'alarmEvents': alarm_ev,
+            'interlockEvents': il_ev,
+        }
+
+    def get_etch_summary(self, source: str = 'live') -> Dict[str, Any]:
+        """브라우저용 KPI — 기본은 실가공(live) 이력만."""
+        if self._etch_store:
+            base = self._etch_store.summarize(source)
+            if not self.use_db and source == 'demo':
+                base['demoSamples'] = len(self.demo_etch_history)
+            elif not self.use_db:
+                base['liveSamples'] = len(self.etch_history)
+        elif self.use_db:
+            base = {
+                'samples': 0,
+                'last': None,
+                'runningRatio': None,
+                'alarmEvents': 0,
+                'interlockEvents': 0,
+            }
+        elif source == 'demo':
+            base = self._summarize_history(self.demo_etch_history, self.demo_etch_events)
+        else:
+            base = self._summarize_history(self.etch_history, self.etch_events)
+
+        if not self.use_db:
+            base['dataSource'] = source
+            base['demoStreamActive'] = self._demo_stream_active
+            base['demoSamples'] = len(self.demo_etch_history)
+            base['liveSamples'] = len(self.etch_history)
+            if self._last_demo_status:
+                base['lastDemo'] = dict(self._last_demo_status)
+        return base
     
+    def _row_sensors_live(self, row_data: Dict[str, Any]) -> bool:
+        return bool(row_data.get('sensors_live')) and bool(row_data.get('connected'))
+
+    def _build_sensor_list_from_row(self, row_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """EtherCAT 실측이 있을 때만 센서 배열 반환 (미연결·시뮬 시 빈 목록)."""
+        if not self._row_sensors_live(row_data):
+            return []
+
+        sensors: List[Dict[str, Any]] = []
+        if row_data.get('humidity') is not None:
+            h = row_data['humidity']
+            sensors.append({
+                'id': 1,
+                'name': '습도',
+                'value': f'{h:.1f}%',
+                'rawValue': h,
+                'percentage': int(h),
+                'status': '정상',
+            })
+        if row_data.get('temperature') is not None:
+            t = row_data['temperature']
+            sensors.append({
+                'id': 2,
+                'name': '온도',
+                'value': f'{t:.1f}℃',
+                'rawValue': t,
+                'percentage': int(t),
+                'status': '정상',
+            })
+        if row_data.get('light') is not None:
+            p = row_data['light']
+            sensors.append({
+                'id': 3,
+                'name': '압력',
+                'value': f'{p:.1f} mTorr',
+                'rawValue': p,
+                'percentage': None,
+                'status': '정상',
+            })
+        if row_data.get('soil_moisture') is not None:
+            v = row_data['soil_moisture']
+            sensors.append({
+                'id': 4,
+                'name': '진동',
+                'value': f'{v:.2f} g',
+                'rawValue': v,
+                'percentage': int(v),
+                'status': '정상',
+            })
+        return sensors
+
     def get_latest_sensor_data(self, farm_id: Optional[int] = None) -> Dict[str, Any]:
         """
         최신 센서 데이터 가져오기 (농장별 필터링 지원)
@@ -240,6 +641,7 @@ class DataManager:
                     "currentFarm": farm_id or 1,
                     "powerOn": False,
                     "connected": False,
+                    "sensorsLive": False,
                     "lastUpdate": datetime.now().isoformat(),
                     "sensors": []
                 }
@@ -256,53 +658,40 @@ class DataManager:
                         "currentFarm": farm_id,
                         "powerOn": False,
                         "connected": False,
+                        "sensorsLive": False,
                         "lastUpdate": datetime.now().isoformat(),
                         "sensors": []
                     }
             else:
-                # farm_id가 없으면 전체 중 최신 데이터
-                row_data = self.sensor_data_list[-1]
+                row_data = None
+                for candidate in reversed(self.sensor_data_list):
+                    ds = candidate.get('data_source', 'live')
+                    if ds == 'live' or (ds != 'demo' and self._row_sensors_live(candidate)):
+                        row_data = candidate
+                        break
+                if row_data is None:
+                    return {
+                        "currentFarm": farm_id or 1,
+                        "powerOn": False,
+                        "connected": False,
+                        "sensorsLive": False,
+                        "dataSource": "offline",
+                        "lastUpdate": datetime.now().isoformat(),
+                        "sensors": []
+                    }
             
-            return {
+            result = {
                 "currentFarm": row_data['farm_id'],
                 "powerOn": bool(row_data['power_on']),
                 "connected": bool(row_data['connected']),
+                "sensorsLive": self._row_sensors_live(row_data),
                 "lastUpdate": row_data['timestamp'],
-                "sensors": [
-                    {
-                        "id": 1,
-                        "name": "습도",
-                        "value": f"{row_data['humidity']:.1f}%" if row_data['humidity'] is not None else "0%",
-                        "rawValue": row_data['humidity'] if row_data['humidity'] is not None else 0,
-                        "percentage": int(row_data['humidity']) if row_data['humidity'] is not None else 0,
-                        "status": "정상"
-                    },
-                    {
-                        "id": 2,
-                        "name": "온도",
-                        "value": f"{row_data['temperature']:.1f}℃" if row_data['temperature'] is not None else "0℃",
-                        "rawValue": row_data['temperature'] if row_data['temperature'] is not None else 0,
-                        "percentage": int(row_data['temperature']) if row_data['temperature'] is not None else 0,
-                        "status": "정상"
-                    },
-                    {
-                        "id": 3,
-                        "name": "채광",
-                        "value": f"{row_data['light']:.1f}%" if row_data['light'] is not None else "0%",
-                        "rawValue": row_data['light'] if row_data['light'] is not None else 0,
-                        "percentage": int(row_data['light']) if row_data['light'] is not None else 0,
-                        "status": "정상"
-                    },
-                    {
-                        "id": 4,
-                        "name": "토양습도",
-                        "value": f"{row_data['soil_moisture']:.1f}%" if row_data['soil_moisture'] is not None else "0%",
-                        "rawValue": row_data['soil_moisture'] if row_data['soil_moisture'] is not None else 0,
-                        "percentage": int(row_data['soil_moisture']) if row_data['soil_moisture'] is not None else 0,
-                        "status": "정상"
-                    }
-                ]
+                "sensors": self._build_sensor_list_from_row(row_data),
             }
+            for ek in ('equipmentState', 'alarmCode', 'accessSafe', 'interlockOk', 'username'):
+                if ek in row_data:
+                    result[ek] = row_data[ek]
+            return result
         
         # DB 모드
         conn = sqlite3.connect(self.db_path)
@@ -363,16 +752,16 @@ class DataManager:
                         },
                         {
                             "id": 3,
-                            "name": "채광",
-                            "value": f"{row[5]:.1f}%" if row[5] is not None else "0%",
+                            "name": "압력",
+                            "value": f"{row[5]:.1f} mTorr" if row[5] is not None else "— mTorr",
                             "rawValue": row[5] if row[5] is not None else 0,
                             "percentage": int(row[5]) if row[5] is not None else 0,
                             "status": "정상"
                         },
                         {
                             "id": 4,
-                            "name": "토양습도",
-                            "value": f"{row[6]:.1f}%" if row[6] is not None else "0%",
+                            "name": "진동",
+                            "value": f"{row[6]:.2f} g" if row[6] is not None else "0 g",
                             "rawValue": row[6] if row[6] is not None else 0,
                             "percentage": int(row[6]) if row[6] is not None else 0,
                             "status": "정상"
@@ -539,72 +928,6 @@ class DataManager:
             ''', (timestamp, message, date, log_type))
             
             conn.commit()
-        finally:
-            conn.close()
-    
-    def get_farm_data(self) -> Dict[str, Any]:
-        """농장 데이터 가져오기 (C#에서 전송한 최신 정보 반환)"""
-        if not self.use_db:
-            # 메모리 모드: 딕셔너리에서 가져오기
-            farms = []
-            for farm_id in range(1, 4):
-                if farm_id in self.farm_info_dict:
-                    farms.append({
-                        "id": farm_id,
-                        "cropName": self.farm_info_dict[farm_id].get('crop_name', ''),
-                        "note": self.farm_info_dict[farm_id].get('note', '')
-                    })
-                else:
-                    farms.append({
-                        "id": farm_id,
-                        "cropName": "",
-                        "note": ""
-                    })
-            
-            # 현재 농장 정보 가져오기 (C#에서 전송한 최신 정보)
-            current_farm_info = self.farm_info_dict.get('current_farm', {})
-            current_farm = current_farm_info.get('farm_id', 1)
-            power_on = current_farm_info.get('power_on', False)
-            connected = current_farm_info.get('connected', False)
-            
-            return {
-                "currentFarm": current_farm,
-                "powerOn": bool(power_on),
-                "connected": bool(connected),
-                "farms": farms
-            }
-        
-        # DB 모드
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        try:
-            cursor.execute('SELECT * FROM farm_info ORDER BY farm_id')
-            rows = cursor.fetchall()
-            
-            farms = []
-            for row in rows:
-                farms.append({
-                    "id": row[0],
-                    "cropName": row[1] or "",
-                    "note": row[2] or ""
-                })
-            
-            # 기본값 추가 (DB에 데이터가 없는 경우)
-            if not farms:
-                for i in range(1, 4):
-                    farms.append({
-                        "id": i,
-                        "cropName": "",
-                        "note": ""
-                    })
-            
-            return {
-                "currentFarm": 1,
-                "powerOn": False,
-                "connected": False,
-                "farms": farms
-            }
         finally:
             conn.close()
     

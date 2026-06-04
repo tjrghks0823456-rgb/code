@@ -1,21 +1,24 @@
 # PyCharm에서 Flask 서버 실행하기
 
+> **프로젝트 경로:** `C:\etchflask` (식각 HMI 모니터링 서버)  
+> 관련: [README.md](README.md) · [REMOTE_MONITORING.md](REMOTE_MONITORING.md)
+
 ## 가장 빠른 실행 (배치 파일)
 
-`C:\farmui\farmui\run_farmui.bat` 더블클릭
+`C:\etchflask\run_flask.bat` 더블클릭
 
 - `requirements.txt` 설치 후 Flask 시작
-- 약 1.5초 뒤 **브라우저가 자동으로** `http://127.0.0.1:5000` 을 엽니다 (`app.py` 내장)
+- 브라우저에서 `http://127.0.0.1:5000` 접속 (식각 대시보드)
 
 ## 설정 방법
 
 ### 1. PyCharm 프로젝트 열기
 1. PyCharm 실행
-2. `File` → `Open` → `C:\farmui\farmui` 폴더 선택
+2. `File` → `Open` → `C:\etchflask` 폴더 선택
 
 ### 2. Python 인터프리터 설정
 1. `File` → `Settings` (또는 `Ctrl+Alt+S`)
-2. `Project: farmui` → `Python Interpreter`
+2. `Project: etchflask` → `Python Interpreter`
 3. 가상환경 생성:
    - `Add Interpreter` → `New environment` → `venv` 폴더 선택
    - 또는 기존 가상환경 사용: `Existing environment` → `venv\Scripts\python.exe` 선택
@@ -32,43 +35,30 @@
 2. `+` 버튼 클릭 → `Python` 선택
 3. 설정:
    - **Name**: `Flask Server`
-   - **Script path**: `C:\farmui\farmui\app.py` 파일 선택
-   - **Working directory**: `C:\farmui\farmui` 선택
+   - **Script path**: `C:\etchflask\app.py` 파일 선택
+   - **Working directory**: `C:\etchflask` 선택
    - **Python interpreter**: 위에서 설정한 인터프리터 선택
 
 ### 5. Flask 서버 실행
 1. 상단 메뉴에서 `Flask Server` 선택
 2. 실행 버튼 클릭 (▶️) 또는 `Shift+F10`
-3. 서버가 시작되면 자동으로 브라우저가 열립니다: `http://localhost:5000`
+3. 서버가 시작되면 브라우저에서 `http://127.0.0.1:5000` 접속
 
 ## 실행 확인
 
-서버가 정상적으로 시작되면:
-- PyCharm 콘솔에 다음 메시지가 표시됩니다:
-  ```
-  💾 메모리 모드로 실행 중... (DB 사용 안 함)
-  ==================================================
-  Flask 웹 서버를 시작합니다...
-  서버 주소: http://localhost:5000
-  ==================================================
-  🌐 브라우저를 엽니다: http://localhost:5000
-  * Running on http://0.0.0.0:5000
-  ```
+서버가 정상적으로 시작되면 콘솔에 바인드 주소가 표시됩니다. WPF HMI에서 `FlaskBaseUrl`이 동일한지 확인하세요.
 
 ## 문제 해결
 
 ### 브라우저가 자동으로 열리지 않는 경우
-- 수동으로 브라우저에서 `http://localhost:5000` 접속
+- 수동으로 `http://127.0.0.1:5000` 접속
 
 ### 포트가 이미 사용 중인 경우
-- `app.py`의 `port=5000` 부분을 다른 포트로 변경 (예: `port=5001`)
-- 또는 다른 프로그램이 5000 포트를 사용 중인지 확인
+- `etch_config.py`의 `FLASK_PORT` 변경 또는 5000 포트 사용 프로세스 종료
 
 ### 패키지가 설치되지 않은 경우
-- PyCharm 하단의 `Terminal` 탭 열기
 - `pip install -r requirements.txt` 실행
 
-### C# 애플리케이션과 연결
-- C# 애플리케이션의 "웹 연결" 버튼을 클릭하면 Flask 서버와 자동으로 연결됩니다
-- Flask 서버 주소: `http://localhost:5000`
-
+### WPF HMI와 연결
+- WPF `appsettings.json`의 `FlaskBaseUrl` = `http://127.0.0.1:5000` (현장 PC)
+- 모니터링 PC: `http://<현장IP>:5000`
