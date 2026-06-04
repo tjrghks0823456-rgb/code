@@ -263,7 +263,7 @@ def build_dashboard_insights(
             "count": item.get("count", 0),
             "tone": INSIGHT_TONES[index % len(INSIGHT_TONES)]
         })
-    if not topic_shares:
+    if rule_topic_shares:
         topic_shares = rule_topic_shares
 
     report_insights: List[str] = []
@@ -290,10 +290,15 @@ def build_dashboard_insights(
         report_insights.append(f"{len(score_warnings)}개의 신뢰도 경고가 있어 일부 지표는 참고용으로 봐야 합니다.")
 
     direct_interest_summary = " · ".join(item["keyword"] for item in search_keywords[:3]) if search_keywords else "검색 기록 부족"
+    flow_summary_categories = interest_gap_report.get("recommendation_flow_candidate_categories", []) or []
     recommendation_flow_summary = (
-        " · ".join(item["name"] for item in topic_shares[:3])
-        if topic_shares
-        else (" · ".join(item["name"] for item in channel_shares[:3]) if channel_shares else "분류 데이터 부족")
+        " · ".join(item.get("category", "") for item in flow_summary_categories[:3] if item.get("category"))
+        if flow_summary_categories
+        else (
+            " · ".join(item["name"] for item in topic_shares[:3])
+            if topic_shares
+            else (" · ".join(item["name"] for item in channel_shares[:3]) if channel_shares else "분류 데이터 부족")
+        )
     )
 
     return {

@@ -13,7 +13,7 @@ ZIP_LIMITS = {
 PARSER_LIMITS = {
     "max_html_content_cells": 1000,
     "max_json_history_items": 1000,
-    "max_html_links": 1000,
+    "max_html_links": 3000,
     "max_auxiliary_records": 1000,
     "max_csv_rows": 1000,
     "legacy_upload_json_items": 500,
@@ -29,4 +29,3 @@ DURATION_LIMITS = {
     "max_timeline_gap_sec": 6 * 60 * 60,
     "metadata_video_limit": 50,
 }
-

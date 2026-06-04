@@ -16,7 +16,6 @@ import { loadSelfSurveyResult, SelfSurveyResult } from "../../utils/surveyStorag
 
 type ApiData = any;
 type SearchKeyword = { keyword: string; count: number; category?: string };
-type CategoryShare = { name: string; value: number; tone: string; count?: number };
 type InterestSubcategory = { name?: string; ratio?: number; value?: number; entities?: string[]; raw_items?: string[]; confidence?: string };
 type InterestCategory = { category?: string; name?: string; value?: number; ratio?: number; count?: number; subcategories?: InterestSubcategory[] };
 
@@ -330,7 +329,6 @@ function DashboardContent() {
       </div>
     );
   };
-  const categoryShares: CategoryShare[] = Array.isArray(insights.category_shares) ? insights.category_shares : [];
   const reportInsights: string[] = Array.isArray(insights.report_insights) ? insights.report_insights : [];
   const directInterestSummary = insights.direct_interest_summary || "검색 기록 부족";
   const recommendationFlowSummary = insights.recommendation_flow_summary || insights.algorithm_interest_summary || "분류 데이터 부족";
@@ -605,87 +603,50 @@ function DashboardContent() {
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <RadarChart data={chartData} scoreWarnings={scoreWarnings} />
 
-          <Card className="p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">search map</p>
-                <h2 className="mt-2 text-2xl font-black text-slate-950">검색어 관심사 맵</h2>
-              </div>
-              <div className="flex items-center gap-2">
+          <div className="space-y-4">
+            {renderInterestMindMap("검색어 관심사 맵", searchInterestMap, "검색어로 인정 가능한 데이터가 부족합니다.", "search")}
+            <Card className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-teal-700">search evidence</p>
+                  <h3 className="mt-1 text-lg font-black text-slate-950">실제 검색어 근거</h3>
+                </div>
                 {excludedAdCount > 0 && (
                   <span className="rounded-full bg-teal-50 px-3 py-1 text-[11px] font-black text-teal-700">
                     광고 {excludedAdCount}건 제외
                   </span>
                 )}
-                <Sparkles className="text-teal-700" size={24} />
               </div>
-            </div>
-            <div className="mt-5 space-y-3">
-              {searchKeywords.length > 0 ? (
-                searchKeywords.map((item, index) => (
-                  <div key={item.keyword} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
-                    <span className="text-xs font-black text-slate-400">{index + 1}</span>
-                    <span className="flex-1 text-sm font-black text-slate-800">{item.keyword}</span>
-                    <span className="text-xs font-bold text-slate-500">{item.count}회</span>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-5 text-sm font-bold text-slate-500">
-                  검색 기록이 부족해 키워드 맵을 계산하지 못했습니다.
-                </div>
-              )}
-            </div>
-            <div className="mt-5 rounded-3xl border border-slate-200 bg-[#fbfaf7] p-4">
-              <p className="text-sm font-black text-slate-950">검색어 비중 버블</p>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {searchKeywords.length > 0 ? (
-                  searchKeywords.map((item) => (
-                    <span
-                      key={item.keyword}
-                      className="rounded-full bg-white px-3 py-1.5 font-black text-slate-700 shadow-sm"
-                      style={{ fontSize: `${Math.max(12, Math.min(24, item.count + 12))}px` }}
-                    >
-                      {item.keyword}
-                    </span>
+                  searchKeywords.slice(0, 8).map((item, index) => (
+                    <div key={item.keyword} className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-[#fbfaf7] px-3 py-2">
+                      <span className="text-[11px] font-black text-slate-400">{index + 1}</span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-black text-slate-800">{item.keyword}</span>
+                      <span className="text-[11px] font-bold text-slate-500">{item.count}회</span>
+                    </div>
                   ))
                 ) : (
-                  <span className="rounded-full bg-white px-3 py-1.5 text-sm font-black text-slate-500 shadow-sm">검색 데이터 없음</span>
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-5 text-sm font-bold text-slate-500">
+                    검색 기록이 부족해 키워드 근거를 표시하지 못했습니다.
+                  </div>
                 )}
               </div>
-            </div>
-            <div className="mt-5 space-y-3">
-              {categoryShares.length > 0 ? (
-                categoryShares.map((item) => (
-                  <div key={item.name}>
-                    <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
-                      <span>{item.name}</span>
-                      <span>{Math.round(Number(item.value || 0))}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-slate-100">
-                      <div className={["h-full rounded-full", item.tone].join(" ")} style={{ width: `${Math.max(0, Math.min(100, Number(item.value || 0)))}%` }} />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm font-bold text-slate-500">
-                  NLP 주제 분류 결과가 부족합니다.
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">내가 직접 찾은 관심사</p>
+                  <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{directInterestSummary}</p>
                 </div>
-              )}
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">내가 직접 찾은 관심사</p>
-                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{directInterestSummary}</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">추천 흐름 영향 후보</p>
+                  <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{recommendationFlowSummary}</p>
+                </div>
               </div>
-              <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">추천 흐름 영향 후보</p>
-                <p className="mt-3 text-sm font-bold leading-6 text-slate-700">{recommendationFlowSummary}</p>
-              </div>
-            </div>
-            <p className="mt-5 text-xs font-semibold leading-5 text-slate-500">
-              분석 데이터는 결과 생성 목적 외에는 사용하지 않아요.
-            </p>
-          </Card>
+              <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">
+                분석 데이터는 결과 생성 목적 외에는 사용하지 않아요.
+              </p>
+            </Card>
+          </div>
         </div>
 
         {selfSurvey && (

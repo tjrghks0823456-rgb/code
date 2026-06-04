@@ -1,5 +1,13 @@
 # Change Memos
 
+## 2026-06-04 Search Takeout parser and mind-map UI follow-up
+- Fixed YouTube search-history HTML parsing to read actual `youtube.com/results?search_query=` entries instead of counting mixed ad/watch cells.
+- Corrected search ad filtering so query-only search records are not misclassified as `low_value_search`.
+- Raised the bounded search-link scan to 3000 entries so recent real searches are represented.
+- Replaced the old raw keyword bubble search-map card with a radial interest mind map plus a compact evidence list.
+- Changed dashboard summaries to prefer service-facing Korean interest categories over raw NLP labels such as `Computers & Electronics`.
+- Verified with `takeout-20260601T113511Z-3-001 (2).zip`: 3000 search events parsed/analyzed, 61 ad events excluded, and 0 `/shorts/` URL events detected.
+
 ## 2026-06-04 Search HTML parser and mind-map UI correction
 - Fixed the search-history HTML parser so it prefers explicit query text from `Searched for ...`, Korean search lines, and `search_query` URL parameters instead of taking the first anchor text in a content cell.
 - Prevented search events with `watch?v=`, `/shorts/`, or `video_id` evidence from being accepted as direct search queries when no explicit query phrase exists. This stops search-result video titles from entering the search interest map.

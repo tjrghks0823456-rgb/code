@@ -78,7 +78,6 @@ LOW_VALUE_SEARCH_EXACT = {
     "",
     "unknown video",
     "\uc54c \uc218 \uc5c6\ub294 \ube44\ub514\uc624",
-    "\uc5ec\uae30",
 }
 
 PROMO_QUERY_PATTERNS = [
@@ -123,6 +122,7 @@ SEARCH_TEXT_PATTERNS = [
     re.compile(r"^\s*you searched for\s+(.+?)\s*$", re.IGNORECASE | re.DOTALL),
     re.compile(r"(?:검색어|검색)\s*[:：]\s*(.+?)(?:\n|$)", re.IGNORECASE | re.DOTALL),
     re.compile(r"^\s*(?:검색함|검색)\s+(.+?)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*(.+?)\s*을\(를\)\s*검색했습니다\.?", re.IGNORECASE | re.DOTALL),
 ]
 
 
@@ -410,7 +410,20 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
     action_type = _lower(record.get("action_type"))
     source_type = _lower(record.get("source_type"))
     if action_type == "search" or source_type == "search_history":
-        return is_promotional_search_text(record.get("text_base") or record.get("title_text") or record.get("title"))
+        search_text = (
+            record.get("search_query")
+            or record.get("query")
+            or record.get("searchQuery")
+            or record.get("searchTerm")
+            or record.get("searchedText")
+            or record.get("keyword")
+            or record.get("text_base")
+            or record.get("title_text")
+            or record.get("title")
+        )
+        if not search_text:
+            return None
+        return is_promotional_search_text(search_text)
 
     return None
 

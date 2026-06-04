@@ -1,6 +1,7 @@
 import uuid
 import json
 import logging
+import re
 import zipfile
 import urllib.parse
 import csv
@@ -24,6 +25,17 @@ from app.core.youtube import parse_iso8601_duration, youtube_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+SEARCH_DONE_MARKERS = (
+    "searched for",
+    "you searched for",
+    "\uac80\uc0c9\ud588\uc2b5\ub2c8\ub2e4",
+)
+
+YOUTUBE_SEARCH_LINK_RE = re.compile(
+    r"<a\s+[^>]*href=[\"']([^\"']*youtube\.com/results\?[^\"']*)[\"'][^>]*>(.*?)</a>",
+    re.IGNORECASE | re.DOTALL,
+)
 
 YOUTUBE_HINTS = [
     "youtube",
@@ -386,7 +398,7 @@ def extract_html_search_query(cell, raw_text: str) -> Optional[str]:
     lines = [line.strip() for line in cell.stripped_strings if line.strip()]
     for idx, line in enumerate(lines):
         lower_line = line.lower()
-        if lower_line.startswith(("searched for ", "you searched for ", "검색어:", "검색:")):
+        if lower_line.startswith(("searched for ", "you searched for ", "\uac80\uc0c9\uc5b4:", "\uac80\uc0c9:")):
             query = extract_search_query(
                 {
                     "title": line,
@@ -397,7 +409,7 @@ def extract_html_search_query(cell, raw_text: str) -> Optional[str]:
             )
             if query:
                 return query
-        if lower_line in {"searched for", "you searched for", "검색", "검색함"} and idx + 1 < len(lines):
+        if lower_line in {"searched for", "you searched for", "\uac80\uc0c9", "\uac80\uc0c9\ud568"} and idx + 1 < len(lines):
             query = extract_search_query(
                 {
                     "title": f"Searched for {lines[idx + 1]}",
@@ -410,27 +422,94 @@ def extract_html_search_query(cell, raw_text: str) -> Optional[str]:
                 return query
 
     for link in cell.find_all("a"):
-        href = link.get("href", "")
-        try:
-            parsed = urllib.parse.urlparse(href)
-            params = urllib.parse.parse_qs(parsed.query)
-            query_value = (params.get("search_query") or params.get("q") or [""])[0]
-            query = extract_search_query(
-                {
-                    "query": urllib.parse.unquote_plus(query_value),
-                    "action_type": "search",
-                    "source_type": "search_history",
-                    "intent_level": "active_search",
-                }
-            )
-            if query:
-                return query
-        except Exception:
-            continue
+        query = extract_search_query_from_href(link.get("href", ""), link.get_text().strip())
+        if query:
+            return query
 
     return None
 
+def extract_search_query_from_href(href: str, fallback_text: str = "") -> Optional[str]:
+    normalized_href = (href or "").replace("&amp;", "&")
+    if not normalized_href:
+        return None
+
+    try:
+        parsed = urllib.parse.urlparse(normalized_href)
+        params = urllib.parse.parse_qs(parsed.query)
+        query_value = (params.get("search_query") or [""])[0]
+        if not query_value and "youtube.com" in parsed.netloc and parsed.path.rstrip("/") == "/results":
+            query_value = (params.get("q") or [""])[0]
+        query_text = urllib.parse.unquote_plus(query_value) or fallback_text
+        return extract_search_query(
+            {
+                "query": query_text,
+                "action_type": "search",
+                "source_type": "search_history",
+                "intent_level": "active_search",
+            }
+        )
+    except Exception:
+        return None
+
+def extract_timestamp_from_html_fragment(fragment: str) -> Optional[str]:
+    text = BeautifulSoup(fragment, "html.parser").get_text("\n")
+    for line in reversed([line.strip() for line in text.splitlines() if line.strip()]):
+        parsed_time = parse_takeout_html_timestamp(line)
+        if parsed_time:
+            return parsed_time
+    return None
+
+def parse_youtube_search_html(html_content: str) -> List[dict]:
+    parsed_items = []
+
+    for match in YOUTUBE_SEARCH_LINK_RE.finditer(html_content):
+        if len(parsed_items) >= PARSER_LIMITS["max_html_links"]:
+            break
+
+        tail_text = BeautifulSoup(html_content[match.end():match.end() + 220], "html.parser").get_text(" ")
+        if not any(marker in tail_text.lower() for marker in SEARCH_DONE_MARKERS):
+            continue
+
+        link_text = BeautifulSoup(match.group(2), "html.parser").get_text(" ").strip()
+        search_query = extract_search_query_from_href(match.group(1), link_text)
+        if not search_query:
+            continue
+
+        fragment_start = html_content.rfind('<div class="outer-cell', 0, match.start())
+        if fragment_start == -1:
+            fragment_start = max(0, match.start() - 500)
+        fragment_end = html_content.find('<div class="outer-cell', match.end())
+        if fragment_end == -1 or fragment_end - fragment_start > 5000:
+            fragment_end = min(len(html_content), match.end() + 1200)
+        fragment = html_content[fragment_start:fragment_end]
+        parsed_time_str = extract_timestamp_from_html_fragment(fragment) or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+        parsed_item = {
+            "title_text": search_query,
+            "action_type": "search",
+            "event_time": parsed_time_str,
+            "video_id": None,
+            "title_url": None,
+            "channel_name": None,
+            "channel_url": None,
+            "content_format": "unknown",
+            "intent_level": "active_search",
+            "search_query": search_query,
+        }
+        is_ad, ad_reason = is_google_ad_event(parsed_item, raw_text=fragment)
+        if ad_reason:
+            parsed_item["is_ad_event"] = True
+            parsed_item["ad_filter_reason"] = ad_reason
+        parsed_items.append(parsed_item)
+
+    return parsed_items
+
 def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
+    if file_kind == "search":
+        search_items = parse_youtube_search_html(html_content)
+        if search_items or "youtube.com/results?search_query=" in html_content:
+            return search_items
+
     # Fast extraction of bounded cells to prevent BeautifulSoup hanging on huge Takeout files.
     cells_html = []
     start_pos = 0
