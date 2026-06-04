@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-04 Interest classifier unclassified-rate reduction
+- Investigated why `기타/미분류` dominated both search and standard-video maps: the parser was loading data, but `classify_interest_topic()` only used narrow manual keyword rules and sent unmatched real-world terms to the fallback bucket.
+- Current dashboard sample showed search `기타/미분류=2520/3000` and standard-video `기타/미분류=150/232`; examples included `이글스`, `t1`, `페이커`, `김호영`, `락힙합`, `mbc 서울시장`, and `콜오브듀티`.
+- Expanded rules for Korean sports/baseball, e-sports/LOL, FPS games, broadcast news/election terms, business creator terms, music/idol terms, entertainment/person terms, and lifestyle moving/living terms.
+- Added a sample regression check so the newly covered terms no longer fall into `기타/미분류`.
+- Note: the running backend process must be restarted or the Takeout must be re-analyzed before the dashboard numbers reflect the new classifier rules.
+
 ## 2026-06-04 DetoxProgram-inspired dashboard highlight cards
 - Referenced the teammate project `tpwhd541211/DetoxProgram` beyond the graph itself and adapted the dashboard-style summary patterns that fit Unbelievable.
 - Added an `analysis highlights` card that compresses the strongest current interest categories into a TOP 5 list with category color, subcategory hint, count, and ratio bar.
