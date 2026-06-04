@@ -4,7 +4,7 @@ import os
 import logging
 from datetime import datetime
 from data_manager import DataManager
-from etch_ai import etch_ai_status_payload, etch_ai_predict_stub
+from etch_ai import etch_ai_status_payload, etch_ai_predict as run_etch_ai_predict
 from etch_config import (
     PRESSURE_UNIT,
     PRESSURE_INTERLOCK_MIN,
@@ -171,21 +171,43 @@ def receive_etch_sensor_data():
         data_source = ingest.get('dataSource', 'offline')
 
         if ingest.get('stored'):
+            modules = data.get('modules') or []
+            mod_run = mod_alarm = mod_proc = mod_chamber = 0
+            if isinstance(modules, list):
+                for m in modules:
+                    if not isinstance(m, dict):
+                        continue
+                    st = str(m.get('state') or '').upper()
+                    mid = str(m.get('id') or '').upper()
+                    if st == 'RUNNING':
+                        mod_run += 1
+                    if st == 'ALARM':
+                        mod_alarm += 1
+                    if st == 'PROCESSING':
+                        mod_proc += 1
+                        if mid in ('PM1', 'PM2', 'PM3', 'PM4'):
+                            mod_chamber += 1
             ai_input = {
                 'equipmentState': data.get('equipmentState'),
                 'alarmCode': data.get('alarmCode'),
                 'interlockOk': data.get('interlockOk'),
+                'accessSafe': data.get('accessSafe'),
                 'temperature': data.get('temperature'),
                 'humidity': data.get('humidity'),
                 'pressure': data.get('pressure'),
                 'vibration': data.get('vibration'),
                 'sensorsLive': data.get('sensorsLive', False),
                 'benchMode': data.get('benchMode', False),
+                'modules': modules,
+                'moduleRunningCount': mod_run,
+                'moduleAlarmCount': mod_alarm,
+                'moduleProcessingCount': mod_proc,
+                'chamberProcessingCount': mod_chamber,
                 'pressureMin': PRESSURE_INTERLOCK_MIN,
                 'pressureMax': PRESSURE_INTERLOCK_MAX,
                 'vibrationMax': 0.8,
             }
-            data_manager.set_ai_diagnosis(etch_ai_predict_stub(ai_input))
+            data_manager.set_ai_diagnosis(run_etch_ai_predict(ai_input))
 
         msg = {
             'live': '실가공(EtherCAT) 데이터 저장',
@@ -311,10 +333,10 @@ def etch_ai_status():
 
 
 @app.route('/api/etch/ai/predict', methods=['POST'])
-def etch_ai_predict():
+def etch_ai_predict_api():
     try:
         payload = request.get_json() or {}
-        result = etch_ai_predict_stub(payload)
+        result = run_etch_ai_predict(payload)
         data_manager.set_ai_diagnosis(result)
         return jsonify(result)
     except Exception as e:

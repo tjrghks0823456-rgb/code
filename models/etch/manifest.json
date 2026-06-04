@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "trained_at": "2026-06-04T06:34:23.489966+00:00",
+  "dataset": "tools\\ai\\output\\training_dataset.csv",
+  "rows": 3000,
+  "feature_names": [
+    "temperature",
+    "humidity",
+    "pressure",
+    "vibration",
+    "interlock_ok",
+    "access_safe",
+    "bench_mode",
+    "module_running_count",
+    "module_alarm_count",
+    "module_processing_count",
+    "chamber_processing_count",
+    "state_idle",
+    "state_ready",
+    "state_running",
+    "state_warning",
+    "state_alarm",
+    "state_maint"
+  ],
+  "alarm_classes": [
+    "A001",
+    "A002",
+    "A003",
+    "A004",
+    "A005",
+    "A006",
+    "NONE"
+  ],
+  "metrics": {
+    "anomaly_accuracy": 1.0,
+    "alarm_accuracy": 1.0
+  },
+  "alarm_report": "              precision    recall  f1-score   support\n\n        A001       1.00      1.00      1.00        23\n        A002       1.00      1.00      1.00        24\n        A003       1.00      1.00      1.00        17\n        A004       1.00      1.00      1.00        22\n        A005       1.00      1.00      1.00        26\n        A006       1.00      1.00      1.00        20\n        NONE       1.00      1.00      1.00       468\n\n    accuracy                           1.00       600\n   macro avg       1.00      1.00      1.00       600\nweighted avg       1.00      1.00      1.00       600\n"
+}
