@@ -18,11 +18,30 @@
             --border: #e5e7eb;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
         body {
             font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
             background: var(--bg);
             color: #111827;
-            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .app-shell {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .tab-viewport {
+            flex: 1 1 auto;
+            min-height: 0;
+            position: relative;
+            overflow: hidden;
         }
         .header {
             background: var(--header);
@@ -78,9 +97,32 @@
             border-bottom-color: var(--bg);
         }
 
-        .wrap { padding: 16px; max-width: 1400px; margin: 0 auto; }
-        .tab-panel { display: none; }
-        .tab-panel.active { display: block; }
+        .wrap {
+            padding: 12px 16px 16px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .tab-panel {
+            display: none;
+            position: absolute;
+            inset: 0;
+            min-height: 0;
+        }
+        .tab-panel.active {
+            display: flex;
+            flex-direction: column;
+        }
+        .tab-panel.active > .wrap {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
         .cards {
             display: grid;
@@ -133,11 +175,20 @@
         }
         .chart-box h2 { font-size: 0.95rem; margin-bottom: 12px; color: var(--header); }
         /* WPF HMI와 동일: 메인(센서·차트) 확대, 로그는 하단 고정 스트립 */
+        #tab-realtime.wrap,
         #tab-realtime {
-            display: flex;
+            display: none;
             flex-direction: column;
-            gap: 12px;
-            min-height: calc(100vh - 168px);
+            gap: 10px;
+            padding: 12px 16px 16px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #tab-realtime.active {
+            display: flex;
         }
         .rt-main {
             flex: 1 1 auto;
@@ -156,10 +207,50 @@
         .chart-main .chart-canvas {
             flex: 1 1 auto;
             height: auto;
-            min-height: 200px;
-            max-height: 420px;
+            min-height: 140px;
+            max-height: min(38vh, 360px);
             position: relative;
         }
+        .tab-scroll-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .tab-table-scroll {
+            flex: 1 1 auto;
+            min-height: 120px;
+            max-height: min(52vh, 480px);
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .tab-table-scroll table { margin: 0; }
+        #tab-ai.active .wrap { display: flex; flex-direction: column; gap: 10px; }
+        .ai-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        @media (max-width: 900px) {
+            .ai-layout { grid-template-columns: 1fr; }
+        }
+        .ai-layout .ai-box { margin-bottom: 0; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        .ai-layout .ai-box .ai-pre {
+            flex: 1 1 auto;
+            max-height: min(28vh, 220px);
+            overflow-y: auto;
+            font-size: 0.72rem;
+        }
+        #tab-events.active .log-box,
+        #tab-modules.active .log-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        #tab-history.active .wrap { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+        #tab-history .chart-box { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; margin-bottom: 0; }
+        #tab-history .chart-box .chart-canvas { flex: 1 1 auto; height: auto; min-height: 160px; max-height: min(42vh, 400px); }
         .log-strip { flex: 0 0 auto; }
         .log-strip .log-box { margin-bottom: 0; }
         .log-strip .table-scroll {
@@ -231,9 +322,13 @@
         .badge-state.st-offline { background: #f3f4f6; color: #6b7280; }
 
         footer.note {
-            font-size: 0.75rem; color: var(--muted);
-            padding: 12px 22px 24px;
+            flex: 0 0 auto;
+            font-size: 0.7rem; color: var(--muted);
+            padding: 6px 16px 8px;
             max-width: 1400px; margin: 0 auto;
+            width: 100%;
+            border-top: 1px solid var(--border);
+            background: var(--card);
         }
     </style>
 </head>
@@ -260,10 +355,12 @@
         <button type="button" data-tab="events" role="tab" aria-selected="false">이벤트</button>
         <button type="button" data-tab="modules" role="tab" aria-selected="false">모듈 상태</button>
         <button type="button" data-tab="recipe" role="tab" aria-selected="false">레시피</button>
-        <button type="button" data-tab="ai" role="tab" aria-selected="false">AI 진단(스텁)</button>
+        <button type="button" data-tab="ai" role="tab" aria-selected="false">AI 진단</button>
     </nav>
 
-    <div class="wrap tab-panel active" id="tab-realtime" role="tabpanel">
+    <main class="app-shell">
+    <div class="tab-viewport">
+    <div class="tab-panel active" id="tab-realtime" role="tabpanel">
         <section class="rt-main">
             <div class="cards">
                 <div class="card"><label>압력</label><div><span class="val" id="cPressure">-</span> <span class="unit">mTorr</span></div></div>
@@ -306,7 +403,8 @@
         </section>
     </div>
 
-    <div class="wrap tab-panel" id="tab-history" role="tabpanel" hidden>
+    <div class="tab-panel" id="tab-history" role="tabpanel" hidden>
+        <div class="wrap">
         <div class="kpi-row" id="kpiRow">
             <div class="kpi"><div class="lbl">버퍼 샘플 수</div><div class="num" id="kpiSamples">-</div></div>
             <div class="kpi"><div class="lbl">RUNNING 비율(추정)</div><div class="num" id="kpiRun">-</div></div>
@@ -316,16 +414,18 @@
         <p class="log-toolbar">Flask 메모리에 쌓인 시계열(최대 2500점). 서버 재시작 시 초기화됩니다.</p>
         <div class="chart-box">
             <h2>서버 저장 추세</h2>
-            <div class="chart-canvas" style="height:320px"><canvas id="serverTrendChart"></canvas></div>
+            <div class="chart-canvas"><canvas id="serverTrendChart"></canvas></div>
         </div>
         <button type="button" id="btnRefreshHistory" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-weight:600;">이력 다시 불러오기</button>
+        </div>
     </div>
 
-    <div class="wrap tab-panel" id="tab-events" role="tabpanel" hidden>
+    <div class="tab-panel" id="tab-events" role="tabpanel" hidden>
+        <div class="wrap">
         <div class="log-box">
             <h2>상태·알람·인터록 이벤트</h2>
             <div class="log-toolbar">최근 100건 · Flask 메모리 (재시작 시 초기화)</div>
-            <div style="overflow-x:auto;">
+            <div class="tab-table-scroll">
                 <table>
                     <thead><tr><th>시간</th><th>유형</th><th>메시지</th><th>상태</th><th>알람</th><th>사용자</th></tr></thead>
                     <tbody id="eventsBody"></tbody>
@@ -333,9 +433,11 @@
             </div>
             <div id="eventsEmpty" class="empty-msg">이벤트 없음</div>
         </div>
+        </div>
     </div>
 
-    <div class="wrap tab-panel" id="tab-modules" role="tabpanel" hidden>
+    <div class="tab-panel" id="tab-modules" role="tabpanel" hidden>
+        <div class="wrap">
         <div class="mod-toolbar">
             <label>데이터 소스
                 <select id="modSource">
@@ -350,7 +452,7 @@
         <div class="log-box">
             <h2>모듈 테이블 (WPF POST modules[])</h2>
             <div class="log-toolbar">API <code>GET /api/etch/modules/latest</code> · 약 2초 폴링</div>
-            <div style="overflow-x:auto;">
+            <div class="tab-table-scroll">
                 <table>
                     <thead><tr><th>ID</th><th>상태</th><th>도어</th><th>웨이퍼</th><th>상세</th></tr></thead>
                     <tbody id="modTableBody"></tbody>
@@ -358,9 +460,11 @@
             </div>
             <div id="modEmpty" class="empty-msg">모듈 데이터 없음. WPF에서 시뮬 허용 후 Start 하세요.</div>
         </div>
+        </div>
     </div>
 
-    <div class="wrap tab-panel" id="tab-recipe" role="tabpanel" hidden>
+    <div class="tab-panel" id="tab-recipe" role="tabpanel" hidden>
+        <div class="wrap">
         <div class="mod-toolbar">
             <label>데이터 소스
                 <select id="recSource">
@@ -391,24 +495,32 @@
             </div>
         </div>
         <div id="recEmpty" class="empty-msg">레시피 없음. WPF RUNNING 후 sensor-data의 recipe 필드를 확인하세요.</div>
+        </div>
     </div>
 
-    <div class="wrap tab-panel" id="tab-ai" role="tabpanel" hidden>
-        <div class="kpi-row">
+    <div class="tab-panel" id="tab-ai" role="tabpanel" hidden>
+        <div class="wrap">
+        <div class="kpi-row" style="margin-bottom:0;">
             <div class="kpi"><div class="lbl">이상 점수</div><div class="num" id="aiScoreNum">-</div></div>
             <div class="kpi"><div class="lbl">모델</div><div class="num" id="aiModelReady" style="font-size:0.95rem">-</div></div>
             <div class="kpi"><div class="lbl">갱신</div><div class="num" id="aiUpdatedAt" style="font-size:0.85rem">-</div></div>
         </div>
-        <div class="ai-box">
-            <h2>권고 (조회 전용 · 인터락 자동 제어 없음)</h2>
-            <p id="aiPredicted" style="font-size:0.9rem;font-weight:600;color:#7c2d12;margin-bottom:8px;">예상 알람: -</p>
-            <p id="aiSuggested" style="font-size:0.95rem;line-height:1.5;color:#111827;">-</p>
+        <div class="ai-layout">
+            <div class="ai-box">
+                <h2>권고 (조회 전용)</h2>
+                <p id="aiPredicted" style="font-size:0.9rem;font-weight:600;color:#7c2d12;margin-bottom:8px;">예상 알람: -</p>
+                <p id="aiSuggested" style="font-size:0.9rem;line-height:1.45;color:#111827;flex:1;overflow-y:auto;">-</p>
+            </div>
+            <div class="ai-box">
+                <h2>모델 상태</h2>
+                <div id="aiStatus" class="ai-pre">불러오는 중…</div>
+            </div>
         </div>
-        <div class="ai-box">
-            <h2>모델 상태</h2>
-            <div id="aiStatus" class="ai-pre">불러오는 중…</div>
         </div>
     </div>
+
+    </div><!-- .tab-viewport -->
+    </main>
 
     <footer class="note">
         API: <code>GET /api/sensors</code> · <code>modules/latest</code> · <code>recipe/active</code> · 압력 <strong>mTorr</strong>.
@@ -731,7 +843,12 @@
                     const on = p.id === 'tab-' + id;
                     p.classList.toggle('active', on);
                     p.hidden = !on;
+                    if (on) {
+                        const scroller = p.querySelector('.wrap') || p;
+                        scroller.scrollTop = 0;
+                    }
                 });
+                window.scrollTo(0, 0);
                 if (id === 'history') refreshServerHistory();
                 if (id === 'events') refreshEvents();
                 if (id === 'modules') refreshModulesTab();
@@ -999,7 +1116,9 @@
                 .then(r => r.json())
                 .then(x => {
                     document.getElementById('aiStatus').textContent = JSON.stringify(x, null, 2);
-                    document.getElementById('aiModelReady').textContent = x.ready ? '준비됨' : '스텁';
+                    const eng = (x.engine || '').toLowerCase();
+                    document.getElementById('aiModelReady').textContent =
+                        x.ready ? (eng === 'sklearn' ? 'ML' : '준비') : '스텁';
                 })
                 .catch(() => {
                     document.getElementById('aiStatus').textContent = '상태 조회 실패';
