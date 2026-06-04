@@ -122,6 +122,7 @@ SEARCH_TEXT_PATTERNS = [
     re.compile(r"^\s*searched for\s+(.+?)\s*$", re.IGNORECASE | re.DOTALL),
     re.compile(r"^\s*you searched for\s+(.+?)\s*$", re.IGNORECASE | re.DOTALL),
     re.compile(r"(?:검색어|검색)\s*[:：]\s*(.+?)(?:\n|$)", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*(?:검색함|검색)\s+(.+?)\s*$", re.IGNORECASE | re.DOTALL),
 ]
 
 
@@ -215,6 +216,18 @@ def _looks_like_watch_context(record: Dict[str, Any]) -> bool:
     )
 
 
+def _has_video_link_evidence(record: Dict[str, Any]) -> bool:
+    url_text = " ".join(
+        _flatten_strings({
+            "title_url": record.get("title_url"),
+            "titleUrl": record.get("titleUrl"),
+            "url": record.get("url"),
+            "URL": record.get("URL"),
+        })
+    ).lower()
+    return bool(record.get("video_id")) or "watch?v=" in url_text or "/shorts/" in url_text
+
+
 def is_promotional_search_text(value: Any) -> Optional[str]:
     query = clean_search_query(value)
     query_lower = query.lower()
@@ -283,10 +296,10 @@ def extract_search_query(item: Dict[str, Any], raw_text: str = "") -> Optional[s
 
     for source in [
         record.get("title"),
-        record.get("text_base"),
-        record.get("title_text"),
         raw_text,
         record.get("raw_takeout_text"),
+        record.get("text_base"),
+        record.get("title_text"),
     ]:
         candidate = _search_candidate_from_text(source)
         query = _valid_search_query(candidate)
@@ -294,6 +307,8 @@ def extract_search_query(item: Dict[str, Any], raw_text: str = "") -> Optional[s
             return query
 
     if _looks_like_search_context(record) and not _looks_like_watch_context(record):
+        if _has_video_link_evidence(record):
+            return None
         normalized_candidate = _first_string_field(record, ["search_query", "text_base", "title_text", "title"])
         return _valid_search_query(normalized_candidate)
 

@@ -1,5 +1,11 @@
 # Change Memos
 
+## 2026-06-04 Search HTML parser and mind-map UI correction
+- Fixed the search-history HTML parser so it prefers explicit query text from `Searched for ...`, Korean search lines, and `search_query` URL parameters instead of taking the first anchor text in a content cell.
+- Prevented search events with `watch?v=`, `/shorts/`, or `video_id` evidence from being accepted as direct search queries when no explicit query phrase exists. This stops search-result video titles from entering the search interest map.
+- Clarified shorts zero-state wording: `shorts_count=0` means no `/shorts/` URL was identified in the uploaded Takeout/run, not proof that the user never watched Shorts.
+- Replaced the rectangular interest-map detail lists on the dashboard with radial mind-map SVGs: central node, major category nodes, and minor subcategory leaves.
+
 ## 2026-06-04 Interest gap report and dashboard UI note
 - Updated `build_interest_gap_report()` to return `summary`, `search_vs_watch_gap`, `recommendation_flow_candidate_categories`, `intent_matched_categories`, and warnings while keeping the old `algorithm_drift_categories` key only as a compatibility alias.
 - Recalculated `interest_mismatch_score` from category-ratio L1 distance: standard-video search gap is primary, shorts gap is a 0.3 weighted helper only when shorts data exists.

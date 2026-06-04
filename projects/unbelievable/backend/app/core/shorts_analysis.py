@@ -166,14 +166,23 @@ def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     shorts_ratio = shorts_count / max(len(watch_events), 1)
 
     warnings = [
-        "Shorts analysis is estimated from Google Takeout event_time and title metadata.",
-        "Source surfaces such as home feed, recommendations, or subscriptions remain unknown unless explicitly present.",
-        "passive_feed_score is a heuristic estimate; Google Takeout does not confirm whether shorts came from a passive feed.",
+        "숏츠 분석은 Google Takeout의 event_time, title, URL 메타데이터를 기반으로 추정합니다.",
+        "홈피드/추천/구독탭 같은 유입 경로는 Takeout만으로 확정하지 않습니다.",
+        "passive_feed_score는 휴리스틱 추정치이며 숏츠 유입 경로 확정값이 아닙니다.",
     ]
+    shorts_detection_status = "detected" if shorts_count > 0 else "not_detected"
+    shorts_detection_note = "이번 업로드에서 /shorts/ URL로 식별된 숏츠 이벤트가 확인되었습니다."
     if shorts_count == 0:
-        warnings.append("No shorts events were available for shorts-specific analysis.")
+        shorts_detection_note = (
+            "이번 업로드에서 /shorts/ URL로 식별된 숏츠 이벤트가 0건입니다. "
+            "실제로 숏츠를 보지 않았다는 뜻은 아니며, Takeout이 숏츠를 일반 watch URL로 저장했거나 "
+            "이전 분석 run_id를 보고 있을 수 있습니다."
+        )
+        warnings.append(shorts_detection_note)
     elif shorts_count < MEANINGFUL_LOOP_MIN_COUNT:
-        warnings.append("Shorts sample is small, so loop and repetition scores should be read as reference signals.")
+        shorts_detection_status = "limited"
+        shorts_detection_note = "숏츠 이벤트 수가 적어 반복 루프/시간대 집중도는 참고용입니다."
+        warnings.append(shorts_detection_note)
 
     keyword_counter = _extract_keywords(shorts_events)
     repeated_keyword_count = sum(1 for count in keyword_counter.values() if count >= 3)
@@ -252,6 +261,8 @@ def build_shorts_analysis(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "shorts_count": shorts_count,
         "total_shorts_count": shorts_count,
+        "shorts_detection_status": shorts_detection_status,
+        "shorts_detection_note": shorts_detection_note,
         "shorts_ratio": round(shorts_ratio, 3),
         "shorts_ratio_percent": round(shorts_ratio * 100.0, 1),
         "shorts_stimulation_risk": round(shorts_stimulation_risk, 1),

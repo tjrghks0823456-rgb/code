@@ -382,6 +382,54 @@ def parse_takeout_html_timestamp(timestamp_str: str) -> Optional[str]:
 
     return None
 
+def extract_html_search_query(cell, raw_text: str) -> Optional[str]:
+    lines = [line.strip() for line in cell.stripped_strings if line.strip()]
+    for idx, line in enumerate(lines):
+        lower_line = line.lower()
+        if lower_line.startswith(("searched for ", "you searched for ", "검색어:", "검색:")):
+            query = extract_search_query(
+                {
+                    "title": line,
+                    "action_type": "search",
+                    "source_type": "search_history",
+                    "intent_level": "active_search",
+                }
+            )
+            if query:
+                return query
+        if lower_line in {"searched for", "you searched for", "검색", "검색함"} and idx + 1 < len(lines):
+            query = extract_search_query(
+                {
+                    "title": f"Searched for {lines[idx + 1]}",
+                    "action_type": "search",
+                    "source_type": "search_history",
+                    "intent_level": "active_search",
+                }
+            )
+            if query:
+                return query
+
+    for link in cell.find_all("a"):
+        href = link.get("href", "")
+        try:
+            parsed = urllib.parse.urlparse(href)
+            params = urllib.parse.parse_qs(parsed.query)
+            query_value = (params.get("search_query") or params.get("q") or [""])[0]
+            query = extract_search_query(
+                {
+                    "query": urllib.parse.unquote_plus(query_value),
+                    "action_type": "search",
+                    "source_type": "search_history",
+                    "intent_level": "active_search",
+                }
+            )
+            if query:
+                return query
+        except Exception:
+            continue
+
+    return None
+
 def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
     # Fast extraction of bounded cells to prevent BeautifulSoup hanging on huge Takeout files.
     cells_html = []
@@ -412,14 +460,16 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
         video_id = None
         channel_name = None
         channel_url = None
+        html_search_query = None
 
         a_tags = cell.find_all("a")
 
         if file_kind == "search":
             action_type = "search"
-            if len(a_tags) >= 1:
-                title_text = a_tags[0].get_text().strip()
-                video_id = extract_video_id(a_tags[0].get("href", ""))
+            html_search_query = extract_html_search_query(cell, text)
+            if html_search_query:
+                title_text = html_search_query
+                video_id = None
         elif len(a_tags) >= 1:
             title_text = a_tags[0].get_text().strip()
             video_id = extract_video_id(a_tags[0].get("href", ""))
@@ -437,16 +487,18 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
                 channel_url = a_tags[1].get("href", "")
         elif "Searched for " in text:
             action_type = "search"
-            if len(a_tags) >= 1:
-                title_text = a_tags[0].get_text().strip()
-                video_id = extract_video_id(a_tags[0].get("href", ""))
+            html_search_query = extract_html_search_query(cell, text)
+            if html_search_query:
+                title_text = html_search_query
+                video_id = None
 
         if not title_text:
             if text.startswith("Watched "):
                 title_text = text[len("Watched "):].split("\n")[0].strip()
                 action_type = "view"
             elif text.startswith("Searched for "):
-                title_text = text[len("Searched for "):].split("\n")[0].strip()
+                html_search_query = extract_html_search_query(cell, text)
+                title_text = html_search_query or ""
                 action_type = "search"
 
         lines = [line.strip() for line in cell.stripped_strings if line.strip()]
@@ -465,14 +517,14 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
             "action_type": action_type,
             "event_time": parsed_time_str,
             "video_id": video_id,
-            "title_url": a_tags[0].get("href", "") if len(a_tags) >= 1 else None,
+            "title_url": None if action_type == "search" else (a_tags[0].get("href", "") if len(a_tags) >= 1 else None),
             "channel_name": channel_name,
             "channel_url": channel_url
         }
         parsed_item["content_format"] = classify_content_format(parsed_item)
         parsed_item["intent_level"] = infer_intent_level(parsed_item)
         is_ad, ad_reason = is_google_ad_event(parsed_item, raw_text=text)
-        search_query = extract_search_query(parsed_item, raw_text=text) if action_type == "search" else None
+        search_query = html_search_query if action_type == "search" else None
         if action_type == "search" and search_query:
             parsed_item["search_query"] = search_query
             parsed_item["title_text"] = search_query

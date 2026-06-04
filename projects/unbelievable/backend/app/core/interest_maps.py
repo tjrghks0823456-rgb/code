@@ -463,11 +463,17 @@ def build_shorts_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "숏츠 관심사 맵은 직접 검색 의도가 아니라 짧은 영상 반복 노출 패턴을 기반으로 계산됩니다."
     ]
     if total == 0:
-        warnings.append("숏츠 시청 기록이 부족합니다.")
+        warnings.append("이번 업로드에서 /shorts/ URL로 식별된 숏츠 이벤트가 0건입니다. Takeout 저장 방식 또는 이전 run_id 여부를 확인해야 합니다.")
 
     return {
         "total_shorts_count": total,
         "shorts_count": total,
+        "shorts_detection_status": "detected" if total else "not_detected",
+        "shorts_detection_note": (
+            "이번 업로드에서 /shorts/ URL 기반 숏츠 이벤트가 확인되었습니다."
+            if total
+            else "이번 업로드에서 /shorts/ URL로 식별된 숏츠 이벤트가 0건입니다. 실제 소비가 없다는 확정은 아닙니다."
+        ),
         "shorts_ratio": round(total / denominator, 4) if denominator else 0.0,
         "shorts_ratio_percent": round((total / denominator) * 100.0, 1) if denominator else 0.0,
         "top_shorts_keywords": _keyword_rows(title_counter),

@@ -17,7 +17,8 @@ import { loadSelfSurveyResult, SelfSurveyResult } from "../../utils/surveyStorag
 type ApiData = any;
 type SearchKeyword = { keyword: string; count: number; category?: string };
 type CategoryShare = { name: string; value: number; tone: string; count?: number };
-type InterestCategory = { category?: string; name?: string; value?: number; count?: number };
+type InterestSubcategory = { name?: string; ratio?: number; value?: number; entities?: string[]; raw_items?: string[]; confidence?: string };
+type InterestCategory = { category?: string; name?: string; value?: number; ratio?: number; count?: number; subcategories?: InterestSubcategory[] };
 
 function getRiskLabel(score: number) {
   if (score < 20) return "안정";
@@ -43,6 +44,12 @@ const riskSignals = [
   { label: "편향 주의", tone: "bg-orange-500" },
   { label: "강한 필터버블", tone: "bg-rose-600" }
 ];
+
+function shortLabel(value: any, max = 8) {
+  const text = String(value || "").trim();
+  if (text.length <= max) return text || "미분류";
+  return `${text.slice(0, max)}...`;
+}
 
 function DashboardContent() {
   const router = useRouter();
@@ -241,38 +248,86 @@ function DashboardContent() {
     const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
     return distribution.slice(0, 3).map((item) => item.category || item.name).filter(Boolean);
   };
-  const renderInterestMapDetails = (label: string, map: any, emptyText: string) => {
+  const renderInterestMindMap = (label: string, map: any, emptyText: string, tone: "search" | "video" | "shorts") => {
     const distribution = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
+    const palette = {
+      search: { bg: "#effaf2", center: "#177a3a", node: "#45b96a", leaf: "#a4dfb4", line: "#43a464", text: "#ffffff", leafText: "#14532d" },
+      video: { bg: "#eef8fb", center: "#0f766e", node: "#22a6a0", leaf: "#a7e6df", line: "#148f86", text: "#ffffff", leafText: "#134e4a" },
+      shorts: { bg: "#fff1f2", center: "#be123c", node: "#fb7185", leaf: "#fecdd3", line: "#e11d48", text: "#ffffff", leafText: "#881337" }
+    }[tone];
+    const center = { x: 450, y: 250 };
+    const positions = [
+      { x: 450, y: 86 },
+      { x: 690, y: 145 },
+      { x: 700, y: 355 },
+      { x: 450, y: 420 },
+      { x: 200, y: 355 },
+      { x: 210, y: 145 }
+    ];
+
     return (
-      <details className="rounded-2xl border border-slate-200 bg-white p-4">
-        <summary className="cursor-pointer text-sm font-black text-slate-950">{label}</summary>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm font-black text-slate-950">{label}</p>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">
+            {distribution.length > 0 ? `${distribution.length}개 대분류` : "데이터 없음"}
+          </span>
+        </div>
         {distribution.length > 0 ? (
-          <div className="mt-4 space-y-3">
-            {distribution.slice(0, 4).map((category: any) => (
-              <div key={category.category || category.name} className="rounded-xl bg-[#fbfaf7] p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-black text-slate-900">{category.category || category.name}</p>
-                  <span className="text-xs font-bold text-slate-500">{Math.round(Number(category.ratio || category.value || 0))}%</span>
-                </div>
-                <div className="mt-2 space-y-2">
-                  {(category.subcategories || []).slice(0, 3).map((sub: any) => (
-                    <div key={sub.name} className="text-xs font-semibold leading-5 text-slate-600">
-                      <span className="font-black text-slate-800">{sub.name}</span>
-                      {Array.isArray(sub.entities) && sub.entities.length > 0 && <span> · {sub.entities.slice(0, 3).join(", ")}</span>}
-                      {Array.isArray(sub.raw_items) && sub.raw_items.length > 0 && (
-                        <p className="mt-1 text-slate-500">근거: {sub.raw_items.slice(0, 2).join(" / ")}</p>
-                      )}
-                      <p className="text-[11px] font-bold text-slate-400">confidence: {sub.confidence || "low"}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto rounded-2xl" style={{ backgroundColor: palette.bg }}>
+            <svg viewBox="0 0 900 500" role="img" aria-label={`${label} 마인드맵`} className="min-w-[760px]">
+              <rect width="900" height="500" fill={palette.bg} />
+              <circle cx="84" cy="250" r="12" fill={palette.leaf} opacity="0.45" />
+              <circle cx="816" cy="250" r="12" fill={palette.leaf} opacity="0.45" />
+              {distribution.slice(0, 6).map((category: InterestCategory, index: number) => {
+                const position = positions[index];
+                const name = category.category || category.name || "미분류";
+                const ratio = Math.round(Number(category.ratio ?? category.value ?? 0));
+                const radius = Math.max(46, Math.min(74, 46 + ratio * 0.55));
+                const dx = position.x - center.x;
+                const dy = position.y - center.y;
+                const length = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+                const ux = dx / length;
+                const uy = dy / length;
+                const px = -uy;
+                const py = ux;
+                const subs = Array.isArray(category.subcategories) ? category.subcategories.slice(0, 3) : [];
+                return (
+                  <g key={`${name}-${index}`}>
+                    <line x1={center.x} y1={center.y} x2={position.x} y2={position.y} stroke={palette.line} strokeWidth="3" opacity="0.72" />
+                    {subs.map((sub: InterestSubcategory, subIndex: number) => {
+                      const spread = (subIndex - (subs.length - 1) / 2) * 70;
+                      const leafX = position.x + ux * 92 + px * spread;
+                      const leafY = position.y + uy * 92 + py * spread;
+                      return (
+                        <g key={`${name}-${sub.name}-${subIndex}`}>
+                          <line x1={position.x} y1={position.y} x2={leafX} y2={leafY} stroke={palette.line} strokeWidth="2" opacity="0.55" />
+                          <ellipse cx={leafX} cy={leafY} rx="52" ry="25" fill={palette.leaf} stroke={palette.line} strokeWidth="1.4" />
+                          <text x={leafX} y={leafY - 2} textAnchor="middle" fontSize="15" fontWeight="800" fill={palette.leafText}>{shortLabel(sub.name, 7)}</text>
+                          <text x={leafX} y={leafY + 15} textAnchor="middle" fontSize="10" fontWeight="700" fill={palette.leafText} opacity="0.72">{sub.confidence || "low"}</text>
+                        </g>
+                      );
+                    })}
+                    <circle cx={position.x} cy={position.y} r={radius} fill={palette.node} stroke={palette.line} strokeWidth="2" />
+                    <text x={position.x} y={position.y - 5} textAnchor="middle" fontSize="20" fontWeight="900" fill={palette.text}>{shortLabel(name, 7)}</text>
+                    <text x={position.x} y={position.y + 18} textAnchor="middle" fontSize="13" fontWeight="800" fill={palette.text} opacity="0.9">{ratio}%</text>
+                  </g>
+                );
+              })}
+              <circle cx={center.x} cy={center.y} r="82" fill={palette.center} />
+              <text x={center.x} y={center.y - 6} textAnchor="middle" fontSize="28" fontWeight="900" fill="white">{label.replace(" 맵", "")}</text>
+              <text x={center.x} y={center.y + 24} textAnchor="middle" fontSize="14" fontWeight="700" fill="white" opacity="0.82">Interest Map</text>
+            </svg>
           </div>
         ) : (
-          <p className="mt-4 text-sm font-bold text-slate-500">{emptyText}</p>
+          <div className="rounded-2xl px-4 py-10 text-center" style={{ backgroundColor: palette.bg }}>
+            <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full text-center text-sm font-black text-white" style={{ backgroundColor: palette.center }}>
+              데이터 부족
+            </div>
+            <p className="mt-4 text-sm font-bold text-slate-500">{emptyText}</p>
+          </div>
         )}
-      </details>
+      </div>
     );
   };
   const categoryShares: CategoryShare[] = Array.isArray(insights.category_shares) ? insights.category_shares : [];
@@ -459,7 +514,8 @@ function DashboardContent() {
             </>
           ) : (
             <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-6 text-sm font-bold leading-6 text-slate-500">
-              이번 데이터에는 숏츠 분석에 사용할 이벤트가 부족합니다. 일반 영상, 검색, 구독 정보 분석은 그대로 유지됩니다.
+              {shortsAnalysis.shorts_detection_note || "이번 업로드에서 /shorts/ URL로 식별된 숏츠 이벤트가 0건입니다. 실제 숏츠 소비가 없다는 확정은 아니며, Takeout 저장 방식 또는 이전 run_id 여부를 확인해야 합니다."}
+              <span className="mt-2 block text-xs text-slate-400">일반 영상, 검색, 구독 정보 분석은 그대로 유지됩니다.</span>
             </div>
           )}
         </Card>
@@ -539,10 +595,10 @@ function DashboardContent() {
               {interestAiSummary.next_action_hint || "다음 시청 전 검색어를 먼저 정해 추천 흐름을 끊어보세요."}
             </p>
           </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            {renderInterestMapDetails("검색 기반 맵", searchInterestMap, "검색어로 인정 가능한 데이터가 부족합니다.")}
-            {renderInterestMapDetails("일반 시청 기반 맵", standardVideoInterestMap, "일반 영상 데이터가 부족합니다.")}
-            {renderInterestMapDetails("숏츠 반복 맵", shortsInterestMap, "숏츠 데이터가 부족하여 참고용으로 표시됩니다.")}
+          <div className="mt-4 grid gap-4">
+            {renderInterestMindMap("검색 기반 맵", searchInterestMap, "검색어로 인정 가능한 데이터가 부족합니다.", "search")}
+            {renderInterestMindMap("일반 시청 기반 맵", standardVideoInterestMap, "일반 영상 데이터가 부족합니다.", "video")}
+            {renderInterestMindMap("숏츠 반복 맵", shortsInterestMap, shortsInterestMap.shorts_detection_note || "숏츠 데이터는 /shorts/ URL 기준으로만 확인됩니다.", "shorts")}
           </div>
         </Card>
 
