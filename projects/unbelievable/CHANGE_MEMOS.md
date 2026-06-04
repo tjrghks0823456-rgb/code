@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-04 DetoxProgram-style interest graph UI
+- Referenced the teammate project `tpwhd541211/DetoxProgram` and adapted its interest knowledge graph direction for Unbelievable's dashboard maps.
+- Replaced the fixed radial mind-map SVG with a force-style interactive network graph: center node, category nodes, subcategory nodes, and weighted edges.
+- Added category color grouping and a compact legend for search, standard-video, and shorts interest maps.
+- Added a selected-node evidence panel that can show ratio, entities, raw examples, and confidence when a node has supporting metadata.
+- Verified in browser on the latest dashboard run that the old radial `Interest Map` text is gone and the new node/edge graph renders with category legend and evidence panel.
+
 ## 2026-06-04 Search Takeout parser and mind-map UI follow-up
 - Fixed YouTube search-history HTML parsing to read actual `youtube.com/results?search_query=` entries instead of counting mixed ad/watch cells.
 - Corrected search ad filtering so query-only search records are not misclassified as `low_value_search`.

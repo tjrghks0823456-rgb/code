@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowRight, Clock3, Flame, RefreshCcw, Repeat2, Search, Sparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../components/Button";
@@ -18,6 +18,19 @@ type ApiData = any;
 type SearchKeyword = { keyword: string; count: number; category?: string };
 type InterestSubcategory = { name?: string; ratio?: number; value?: number; entities?: string[]; raw_items?: string[]; confidence?: string };
 type InterestCategory = { category?: string; name?: string; value?: number; ratio?: number; count?: number; subcategories?: InterestSubcategory[] };
+type InterestGraphNode = {
+  id: number;
+  label: string;
+  group: string;
+  size: number;
+  depth: number;
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+  meta?: Record<string, any>;
+};
+type InterestGraphEdge = { source: number; target: number; value?: number };
 
 function getRiskLabel(score: number) {
   if (score < 20) return "안정";
@@ -48,6 +61,410 @@ function shortLabel(value: any, max = 8) {
   const text = String(value || "").trim();
   if (text.length <= max) return text || "미분류";
   return `${text.slice(0, max)}...`;
+}
+
+const INTEREST_GRAPH_COLORS: Record<string, string> = {
+  center: "#0f172a",
+  sports: "#16a34a",
+  game: "#7c3aed",
+  society: "#2563eb",
+  finance: "#0f766e",
+  tech: "#0891b2",
+  study: "#d97706",
+  entertainment: "#db2777",
+  shopping: "#ea580c",
+  travel: "#65a30d",
+  health: "#dc2626",
+  lifestyle: "#64748b",
+  other: "#94a3b8"
+};
+
+const INTEREST_GRAPH_LABELS: Record<string, string> = {
+  sports: "스포츠",
+  game: "게임",
+  society: "정치/사회",
+  finance: "경제/금융",
+  tech: "IT/테크",
+  study: "학습",
+  entertainment: "엔터",
+  shopping: "쇼핑",
+  travel: "여행/맛집",
+  health: "건강",
+  lifestyle: "라이프",
+  other: "기타"
+};
+
+const GRAPH_TONE_SURFACES: Record<"search" | "video" | "shorts", { bg: string; chip: string; ring: string }> = {
+  search: { bg: "#f3fbf6", chip: "bg-emerald-50 text-emerald-700", ring: "#bbf7d0" },
+  video: { bg: "#f1fbfc", chip: "bg-cyan-50 text-cyan-700", ring: "#a5f3fc" },
+  shorts: { bg: "#fff5f6", chip: "bg-rose-50 text-rose-700", ring: "#fecdd3" }
+};
+
+function interestGroupFor(category: string) {
+  const value = String(category || "").toLowerCase();
+  if (value.includes("스포츠") || value.includes("sport")) return "sports";
+  if (value.includes("게임") || value.includes("game")) return "game";
+  if (value.includes("정치") || value.includes("사회") || value.includes("news")) return "society";
+  if (value.includes("경제") || value.includes("금융") || value.includes("finance")) return "finance";
+  if (value.includes("it") || value.includes("테크") || value.includes("computer") || value.includes("electronics")) return "tech";
+  if (value.includes("학습") || value.includes("자격") || value.includes("교육")) return "study";
+  if (value.includes("엔터") || value.includes("음악") || value.includes("연예") || value.includes("entertainment")) return "entertainment";
+  if (value.includes("쇼핑") || value.includes("제품") || value.includes("shopping")) return "shopping";
+  if (value.includes("여행") || value.includes("맛집") || value.includes("travel")) return "travel";
+  if (value.includes("건강") || value.includes("운동") || value.includes("health")) return "health";
+  if (value.includes("라이프") || value.includes("생활")) return "lifestyle";
+  return "other";
+}
+
+function buildInterestGraphData(label: string, map: any, tone: "search" | "video" | "shorts") {
+  const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
+  const nodes: InterestGraphNode[] = [];
+  const edges: InterestGraphEdge[] = [];
+  let nextId = 1;
+
+  nodes.push({
+    id: nextId++,
+    label: `${label.replace(" 맵", "")}\nInterest`,
+    group: "center",
+    size: 34,
+    depth: 0,
+    meta: { kind: label, total: map?.total_search_count || map?.total_video_count || map?.total_shorts_count || 0 }
+  });
+
+  distribution.slice(0, 7).forEach((category, index) => {
+    const categoryName = category.category || category.name || "기타/미분류";
+    const ratio = Number(category.ratio ?? category.value ?? 0);
+    const categoryId = nextId++;
+    const group = interestGroupFor(categoryName);
+
+    nodes.push({
+      id: categoryId,
+      label: `${shortLabel(categoryName, 8)}\n${Math.round(ratio)}%`,
+      group,
+      size: Math.max(17, Math.min(34, 17 + ratio * 0.25)),
+      depth: 1,
+      meta: {
+        name: categoryName,
+        ratio,
+        count: category.count,
+        subcategories: category.subcategories || []
+      }
+    });
+    edges.push({ source: 1, target: categoryId, value: Math.max(1, ratio) });
+
+    const subs = Array.isArray(category.subcategories) ? category.subcategories.slice(0, index < 3 ? 3 : 2) : [];
+    subs.forEach((sub) => {
+      const subName = sub.name || "미분류";
+      const subRatio = Number(sub.ratio ?? sub.value ?? 0);
+      const subId = nextId++;
+      nodes.push({
+        id: subId,
+        label: shortLabel(subName, 9),
+        group,
+        size: Math.max(10, Math.min(20, 10 + subRatio * 0.16)),
+        depth: 2,
+        meta: {
+          name: subName,
+          ratio: subRatio,
+          entities: sub.entities || [],
+          raw_items: sub.raw_items || [],
+          confidence: sub.confidence
+        }
+      });
+      edges.push({ source: categoryId, target: subId, value: Math.max(1, subRatio || 1) });
+    });
+  });
+
+  return { nodes, edges, categoryCount: distribution.length, tone };
+}
+
+function InterestNetworkGraph({
+  label,
+  map,
+  emptyText,
+  tone
+}: {
+  label: string;
+  map: any;
+  emptyText: string;
+  tone: "search" | "video" | "shorts";
+}) {
+  const graphData = useMemo(() => buildInterestGraphData(label, map, tone), [label, map, tone]);
+  const [nodes, setNodes] = useState<InterestGraphNode[]>([]);
+  const [selectedNode, setSelectedNode] = useState<InterestGraphNode | null>(null);
+  const nodesRef = useRef<InterestGraphNode[]>([]);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const dragNodeRef = useRef<number | null>(null);
+  const width = 900;
+  const height = 520;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const surface = GRAPH_TONE_SURFACES[tone];
+
+  useEffect(() => {
+    if (graphData.nodes.length <= 1) {
+      nodesRef.current = [];
+      setNodes([]);
+      setSelectedNode(null);
+      return;
+    }
+
+    const categoryCount = graphData.nodes.filter((node) => node.depth === 1).length || 1;
+    const subAngles: Record<number, number> = {};
+    const initialized = graphData.nodes.map((node, index) => {
+      if (node.depth === 0) {
+        return { ...node, x: centerX, y: centerY, vx: 0, vy: 0 };
+      }
+
+      if (node.depth === 1) {
+        const categoryIndex = graphData.nodes.filter((candidate) => candidate.depth === 1 && candidate.id < node.id).length;
+        const angle = (categoryIndex / categoryCount) * Math.PI * 2 - Math.PI / 2;
+        subAngles[node.id] = angle;
+        return {
+          ...node,
+          x: centerX + Math.cos(angle) * 210,
+          y: centerY + Math.sin(angle) * 160,
+          vx: 0,
+          vy: 0
+        };
+      }
+
+      const edge = graphData.edges.find((candidate) => candidate.target === node.id);
+      const parent = graphData.nodes.find((candidate) => candidate.id === edge?.source);
+      const parentAngle = parent ? subAngles[parent.id] ?? ((index / graphData.nodes.length) * Math.PI * 2) : (index / graphData.nodes.length) * Math.PI * 2;
+      const siblingIndex = graphData.edges.filter((candidate) => candidate.source === edge?.source && candidate.target < node.id).length;
+      const angle = parentAngle + (siblingIndex - 1) * 0.36;
+      return {
+        ...node,
+        x: centerX + Math.cos(angle) * 330,
+        y: centerY + Math.sin(angle) * 235,
+        vx: 0,
+        vy: 0
+      };
+    });
+
+    nodesRef.current = initialized;
+    setNodes(initialized);
+    setSelectedNode(null);
+  }, [graphData, centerX, centerY]);
+
+  useEffect(() => {
+    if (graphData.nodes.length <= 1) return;
+    let frameId = 0;
+    let frameCount = 0;
+
+    const tick = () => {
+      const current = nodesRef.current;
+      if (!current.length) return;
+
+      for (let i = 0; i < current.length; i += 1) {
+        for (let j = i + 1; j < current.length; j += 1) {
+          const a = current[i];
+          const b = current[j];
+          const dx = (b.x || 0) - (a.x || 0);
+          const dy = (b.y || 0) - (a.y || 0);
+          const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          const repulsion = (a.depth === 0 || b.depth === 0 ? 6200 : 3600) / (distance * distance);
+          const fx = (dx / distance) * repulsion;
+          const fy = (dy / distance) * repulsion;
+          if (a.depth !== 0 && a.id !== dragNodeRef.current) {
+            a.vx = (a.vx || 0) - fx;
+            a.vy = (a.vy || 0) - fy;
+          }
+          if (b.depth !== 0 && b.id !== dragNodeRef.current) {
+            b.vx = (b.vx || 0) + fx;
+            b.vy = (b.vy || 0) + fy;
+          }
+        }
+      }
+
+      graphData.edges.forEach((edge) => {
+        const source = current.find((node) => node.id === edge.source);
+        const target = current.find((node) => node.id === edge.target);
+        if (!source || !target) return;
+        const dx = (target.x || 0) - (source.x || 0);
+        const dy = (target.y || 0) - (source.y || 0);
+        const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        const desired = source.depth === 0 ? 205 : 125;
+        const force = (distance - desired) * (source.depth === 0 ? 0.018 : 0.026);
+        const fx = (dx / distance) * force;
+        const fy = (dy / distance) * force;
+        if (source.depth !== 0 && source.id !== dragNodeRef.current) {
+          source.vx = (source.vx || 0) + fx;
+          source.vy = (source.vy || 0) + fy;
+        }
+        if (target.depth !== 0 && target.id !== dragNodeRef.current) {
+          target.vx = (target.vx || 0) - fx;
+          target.vy = (target.vy || 0) - fy;
+        }
+      });
+
+      const updated = current.map((node) => {
+        if (node.depth === 0) {
+          return { ...node, x: centerX, y: centerY, vx: 0, vy: 0 };
+        }
+        if (node.id === dragNodeRef.current) return { ...node };
+
+        const gravity = node.depth === 1 ? 0.006 : 0.003;
+        const vx = ((node.vx || 0) + (centerX - (node.x || centerX)) * gravity) * 0.86;
+        const vy = ((node.vy || 0) + (centerY - (node.y || centerY)) * gravity) * 0.86;
+        const margin = node.size + 42;
+        return {
+          ...node,
+          vx,
+          vy,
+          x: Math.max(margin, Math.min(width - margin, (node.x || centerX) + vx)),
+          y: Math.max(margin, Math.min(height - margin, (node.y || centerY) + vy))
+        };
+      });
+
+      nodesRef.current = updated;
+      setNodes(updated);
+      frameCount += 1;
+      if (frameCount < 260 || dragNodeRef.current !== null) {
+        frameId = requestAnimationFrame(tick);
+      }
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [graphData, centerX, centerY]);
+
+  const handleMouseDown = (event: React.MouseEvent, nodeId: number) => {
+    event.stopPropagation();
+    dragNodeRef.current = nodeId;
+  };
+
+  const handleMouseMove = (event: React.MouseEvent) => {
+    if (dragNodeRef.current === null || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * width;
+    const y = ((event.clientY - rect.top) / rect.height) * height;
+    nodesRef.current = nodesRef.current.map((node) => (
+      node.id === dragNodeRef.current ? { ...node, x, y, vx: 0, vy: 0 } : node
+    ));
+    setNodes([...nodesRef.current]);
+  };
+
+  const handleMouseUp = () => {
+    dragNodeRef.current = null;
+  };
+
+  const usedGroups = Array.from(new Set(nodes.filter((node) => node.depth > 0).map((node) => node.group)));
+  const selectedMeta = selectedNode?.meta || {};
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-black text-slate-950">{label}</p>
+        <span className={["rounded-full px-2.5 py-1 text-[10px] font-black", surface.chip].join(" ")}>
+          {graphData.categoryCount > 0 ? `${graphData.categoryCount}개 대분류` : "데이터 없음"}
+        </span>
+      </div>
+      {graphData.nodes.length > 1 ? (
+        <>
+          <div
+            className="relative h-[430px] overflow-hidden rounded-2xl border border-slate-100"
+            style={{ background: `radial-gradient(circle at center, #ffffff 0%, ${surface.bg} 72%)` }}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} className="h-full w-full">
+              <circle cx={centerX} cy={centerY} r="148" fill={surface.ring} opacity="0.18" />
+              {graphData.edges.map((edge, index) => {
+                const source = nodes.find((node) => node.id === edge.source);
+                const target = nodes.find((node) => node.id === edge.target);
+                if (!source || !target) return null;
+                return (
+                  <line
+                    key={`${edge.source}-${edge.target}-${index}`}
+                    x1={source.x}
+                    y1={source.y}
+                    x2={target.x}
+                    y2={target.y}
+                    stroke={source.depth === 0 ? "#94a3b8" : INTEREST_GRAPH_COLORS[target.group] || "#94a3b8"}
+                    strokeWidth={source.depth === 0 ? 3.6 : 2.2}
+                    strokeOpacity={source.depth === 0 ? 0.36 : 0.24}
+                  />
+                );
+              })}
+              {nodes.map((node) => {
+                const color = INTEREST_GRAPH_COLORS[node.group] || INTEREST_GRAPH_COLORS.other;
+                const selected = selectedNode?.id === node.id;
+                const size = selected ? node.size + 4 : node.size;
+                return (
+                  <g
+                    key={node.id}
+                    transform={`translate(${node.x}, ${node.y})`}
+                    className="cursor-grab active:cursor-grabbing"
+                    onMouseDown={(event) => handleMouseDown(event, node.id)}
+                    onClick={() => setSelectedNode(node)}
+                  >
+                    <circle r={size + 9} fill={color} opacity={node.depth === 0 ? 0.13 : 0.09} />
+                    <circle
+                      r={size}
+                      fill={color}
+                      stroke="#ffffff"
+                      strokeWidth={node.depth === 0 ? 3 : 2}
+                      style={{ filter: "drop-shadow(0 8px 14px rgba(15, 23, 42, 0.16))" }}
+                    />
+                    <text
+                      y={node.depth === 0 ? -3 : size + 17}
+                      textAnchor="middle"
+                      className={node.depth === 0 ? "text-[17px] font-black" : "text-[11px] font-black"}
+                      fill={node.depth === 0 ? "#ffffff" : "#334155"}
+                      style={node.depth === 0 ? undefined : { paintOrder: "stroke", stroke: "#ffffff", strokeWidth: 4 }}
+                    >
+                      {String(node.label).split("\n").map((line, index) => (
+                        <tspan key={line + index} x={0} dy={index === 0 ? 0 : 16}>
+                          {line}
+                        </tspan>
+                      ))}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {usedGroups.map((group) => (
+              <span key={group} className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: INTEREST_GRAPH_COLORS[group] || INTEREST_GRAPH_COLORS.other }} />
+                {INTEREST_GRAPH_LABELS[group] || "기타"}
+              </span>
+            ))}
+          </div>
+          <div className="mt-3 rounded-2xl border border-slate-100 bg-[#fbfaf7] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-black text-slate-900">{selectedMeta.name || selectedNode?.label?.replace("\n", " ") || "대표 관심사"}</p>
+              {selectedMeta.ratio !== undefined && (
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">
+                  {Math.round(Number(selectedMeta.ratio || 0))}%
+                </span>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
+              {(selectedMeta.entities || []).slice(0, 4).map((entity: string) => (
+                <span key={entity} className="rounded-full bg-white px-2 py-1">{entity}</span>
+              ))}
+              {(selectedMeta.raw_items || []).slice(0, 3).map((item: string) => (
+                <span key={item} className="rounded-full bg-white px-2 py-1">{shortLabel(item, 18)}</span>
+              ))}
+              {selectedMeta.confidence && <span className="rounded-full bg-white px-2 py-1">confidence: {selectedMeta.confidence}</span>}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="rounded-2xl px-4 py-10 text-center" style={{ backgroundColor: surface.bg }}>
+          <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-slate-900 text-center text-sm font-black text-white">
+            데이터 부족
+          </div>
+          <p className="mt-4 text-sm font-bold text-slate-500">{emptyText}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function DashboardContent() {
@@ -247,88 +664,9 @@ function DashboardContent() {
     const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
     return distribution.slice(0, 3).map((item) => item.category || item.name).filter(Boolean);
   };
-  const renderInterestMindMap = (label: string, map: any, emptyText: string, tone: "search" | "video" | "shorts") => {
-    const distribution = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
-    const palette = {
-      search: { bg: "#effaf2", center: "#177a3a", node: "#45b96a", leaf: "#a4dfb4", line: "#43a464", text: "#ffffff", leafText: "#14532d" },
-      video: { bg: "#eef8fb", center: "#0f766e", node: "#22a6a0", leaf: "#a7e6df", line: "#148f86", text: "#ffffff", leafText: "#134e4a" },
-      shorts: { bg: "#fff1f2", center: "#be123c", node: "#fb7185", leaf: "#fecdd3", line: "#e11d48", text: "#ffffff", leafText: "#881337" }
-    }[tone];
-    const center = { x: 450, y: 250 };
-    const positions = [
-      { x: 450, y: 86 },
-      { x: 690, y: 145 },
-      { x: 700, y: 355 },
-      { x: 450, y: 420 },
-      { x: 200, y: 355 },
-      { x: 210, y: 145 }
-    ];
-
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-sm font-black text-slate-950">{label}</p>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">
-            {distribution.length > 0 ? `${distribution.length}개 대분류` : "데이터 없음"}
-          </span>
-        </div>
-        {distribution.length > 0 ? (
-          <div className="overflow-x-auto rounded-2xl" style={{ backgroundColor: palette.bg }}>
-            <svg viewBox="0 0 900 500" role="img" aria-label={`${label} 마인드맵`} className="min-w-[760px]">
-              <rect width="900" height="500" fill={palette.bg} />
-              <circle cx="84" cy="250" r="12" fill={palette.leaf} opacity="0.45" />
-              <circle cx="816" cy="250" r="12" fill={palette.leaf} opacity="0.45" />
-              {distribution.slice(0, 6).map((category: InterestCategory, index: number) => {
-                const position = positions[index];
-                const name = category.category || category.name || "미분류";
-                const ratio = Math.round(Number(category.ratio ?? category.value ?? 0));
-                const radius = Math.max(46, Math.min(74, 46 + ratio * 0.55));
-                const dx = position.x - center.x;
-                const dy = position.y - center.y;
-                const length = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-                const ux = dx / length;
-                const uy = dy / length;
-                const px = -uy;
-                const py = ux;
-                const subs = Array.isArray(category.subcategories) ? category.subcategories.slice(0, 3) : [];
-                return (
-                  <g key={`${name}-${index}`}>
-                    <line x1={center.x} y1={center.y} x2={position.x} y2={position.y} stroke={palette.line} strokeWidth="3" opacity="0.72" />
-                    {subs.map((sub: InterestSubcategory, subIndex: number) => {
-                      const spread = (subIndex - (subs.length - 1) / 2) * 70;
-                      const leafX = position.x + ux * 92 + px * spread;
-                      const leafY = position.y + uy * 92 + py * spread;
-                      return (
-                        <g key={`${name}-${sub.name}-${subIndex}`}>
-                          <line x1={position.x} y1={position.y} x2={leafX} y2={leafY} stroke={palette.line} strokeWidth="2" opacity="0.55" />
-                          <ellipse cx={leafX} cy={leafY} rx="52" ry="25" fill={palette.leaf} stroke={palette.line} strokeWidth="1.4" />
-                          <text x={leafX} y={leafY - 2} textAnchor="middle" fontSize="15" fontWeight="800" fill={palette.leafText}>{shortLabel(sub.name, 7)}</text>
-                          <text x={leafX} y={leafY + 15} textAnchor="middle" fontSize="10" fontWeight="700" fill={palette.leafText} opacity="0.72">{sub.confidence || "low"}</text>
-                        </g>
-                      );
-                    })}
-                    <circle cx={position.x} cy={position.y} r={radius} fill={palette.node} stroke={palette.line} strokeWidth="2" />
-                    <text x={position.x} y={position.y - 5} textAnchor="middle" fontSize="20" fontWeight="900" fill={palette.text}>{shortLabel(name, 7)}</text>
-                    <text x={position.x} y={position.y + 18} textAnchor="middle" fontSize="13" fontWeight="800" fill={palette.text} opacity="0.9">{ratio}%</text>
-                  </g>
-                );
-              })}
-              <circle cx={center.x} cy={center.y} r="82" fill={palette.center} />
-              <text x={center.x} y={center.y - 6} textAnchor="middle" fontSize="28" fontWeight="900" fill="white">{label.replace(" 맵", "")}</text>
-              <text x={center.x} y={center.y + 24} textAnchor="middle" fontSize="14" fontWeight="700" fill="white" opacity="0.82">Interest Map</text>
-            </svg>
-          </div>
-        ) : (
-          <div className="rounded-2xl px-4 py-10 text-center" style={{ backgroundColor: palette.bg }}>
-            <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full text-center text-sm font-black text-white" style={{ backgroundColor: palette.center }}>
-              데이터 부족
-            </div>
-            <p className="mt-4 text-sm font-bold text-slate-500">{emptyText}</p>
-          </div>
-        )}
-      </div>
-    );
-  };
+  const renderInterestMindMap = (label: string, map: any, emptyText: string, tone: "search" | "video" | "shorts") => (
+    <InterestNetworkGraph label={label} map={map} emptyText={emptyText} tone={tone} />
+  );
   const reportInsights: string[] = Array.isArray(insights.report_insights) ? insights.report_insights : [];
   const directInterestSummary = insights.direct_interest_summary || "검색 기록 부족";
   const recommendationFlowSummary = insights.recommendation_flow_summary || insights.algorithm_interest_summary || "분류 데이터 부족";
