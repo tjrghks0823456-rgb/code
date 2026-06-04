@@ -667,6 +667,16 @@ function DashboardContent() {
   const renderInterestMindMap = (label: string, map: any, emptyText: string, tone: "search" | "video" | "shorts") => (
     <InterestNetworkGraph label={label} map={map} emptyText={emptyText} tone={tone} />
   );
+  const distributionFor = (map: any): InterestCategory[] => (
+    Array.isArray(map?.category_distribution) ? map.category_distribution : []
+  );
+  const standardDistribution = distributionFor(standardVideoInterestMap);
+  const searchDistribution = distributionFor(searchInterestMap);
+  const highlightInterests = (standardDistribution.length > 0 ? standardDistribution : searchDistribution).slice(0, 5);
+  const gapRows = Array.isArray(interestGapReport.search_vs_watch_gap)
+    ? interestGapReport.search_vs_watch_gap.slice(0, 5)
+    : [];
+  const normalizePercent = (value: any) => Math.max(0, Math.min(100, Math.round(Number(value || 0))));
   const reportInsights: string[] = Array.isArray(insights.report_insights) ? insights.report_insights : [];
   const directInterestSummary = insights.direct_interest_summary || "검색 기록 부족";
   const recommendationFlowSummary = insights.recommendation_flow_summary || insights.algorithm_interest_summary || "분류 데이터 부족";
@@ -683,6 +693,27 @@ function DashboardContent() {
     night: "밤",
     unknown: "불명"
   };
+  const detoxGuideItems = [
+    {
+      title: "직접 검색 루틴",
+      tag: "검색",
+      description: interestAiSummary.next_action_hint || "시청 전에 오늘 직접 확인할 검색어를 먼저 정해보세요."
+    },
+    {
+      title: "관심사 균형 점검",
+      tag: "균형",
+      description: topFlowCandidate?.category
+        ? `${topFlowCandidate.category} 주제는 검색 대비 시청에서 더 크게 나타납니다. 반대 관점이나 기초 자료를 함께 확인해보세요.`
+        : "검색과 시청에서 반복되는 주제를 비교해 관심사 균형을 점검해보세요."
+    },
+    {
+      title: "숏츠 소비 확인",
+      tag: "숏츠",
+      description: shortsCount > 0
+        ? `이번 데이터에서 숏츠 ${shortsCount}개가 감지되었습니다. 짧은 영상은 별도 흐름으로 보고 쉬는 구간을 만들어보세요.`
+        : "이번 Takeout에서는 /shorts/ URL 기준 숏츠가 거의 감지되지 않았습니다. 일반 영상 분석은 그대로 유지됩니다."
+    }
+  ];
 
   return (
     <PageShell active="dashboard">
@@ -937,6 +968,137 @@ function DashboardContent() {
             {renderInterestMindMap("숏츠 반복 맵", shortsInterestMap, shortsInterestMap.shorts_detection_note || "숏츠 데이터는 /shorts/ URL 기준으로만 확인됩니다.", "shorts")}
           </div>
         </Card>
+
+        <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <Card className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">ui snapshot</p>
+                <h2 className="mt-2 text-2xl font-black text-slate-950">분석 하이라이트</h2>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+                  최근 데이터에서 눈에 띄는 관심사를 TOP 5로 압축했습니다.
+                </p>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-right">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">top</p>
+                <p className="mt-1 text-3xl font-black text-emerald-800">{highlightInterests.length}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {highlightInterests.length > 0 ? (
+                highlightInterests.map((item, index) => {
+                  const categoryName = String(item.category || item.name || "기타/미분류");
+                  const ratio = Number(item.ratio ?? item.value ?? 0);
+                  const count = Number(item.count || 0);
+                  const color = INTEREST_GRAPH_COLORS[interestGroupFor(categoryName)] || INTEREST_GRAPH_COLORS.other;
+                  const subLabel = item.subcategories?.[0]?.name || "세부 분류 없음";
+
+                  return (
+                    <div key={`${categoryName}-${index}`} className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black text-white" style={{ backgroundColor: color }}>
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="truncate text-sm font-black text-slate-950">{categoryName}</p>
+                            <span className="text-xs font-black text-slate-500">{Math.round(ratio)}%</span>
+                          </div>
+                          <p className="mt-1 truncate text-xs font-bold text-slate-500">
+                            {subLabel}{count > 0 ? ` · ${count}건` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                        <div className="h-full rounded-full" style={{ width: `${normalizePercent(ratio)}%`, backgroundColor: color }} />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-6 text-sm font-bold text-slate-500">
+                  표시할 관심사 분포가 아직 부족합니다.
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">timeline</p>
+                <h2 className="mt-2 text-2xl font-black text-slate-950">관심사 변화 타임라인</h2>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+                  직접 검색과 실제 시청 비중 차이를 비교해 흐름이 커진 주제를 보여줍니다.
+                </p>
+
+                <div className="mt-5 space-y-3">
+                  {gapRows.length > 0 ? (
+                    gapRows.map((item: any, index: number) => {
+                      const categoryName = String(item.category || "기타/미분류");
+                      const searchRatio = normalizePercent(item.search_ratio);
+                      const watchRatio = normalizePercent(item.watch_ratio);
+                      const gap = Number(item.gap || 0);
+                      const color = INTEREST_GRAPH_COLORS[interestGroupFor(categoryName)] || INTEREST_GRAPH_COLORS.other;
+
+                      return (
+                        <div key={`${categoryName}-${index}`} className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-black text-slate-950">{categoryName}</p>
+                            <span className={["rounded-full px-2.5 py-1 text-[10px] font-black", gap >= 0 ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"].join(" ")}>
+                              {gap >= 0 ? `+${gap.toFixed(1)}` : gap.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            <div>
+                              <div className="flex justify-between text-[10px] font-black text-slate-400">
+                                <span>검색</span>
+                                <span>{searchRatio}%</span>
+                              </div>
+                              <div className="mt-1 h-2 overflow-hidden rounded-full bg-white">
+                                <div className="h-full rounded-full bg-slate-400" style={{ width: `${searchRatio}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-[10px] font-black text-slate-400">
+                                <span>시청</span>
+                                <span>{watchRatio}%</span>
+                              </div>
+                              <div className="mt-1 h-2 overflow-hidden rounded-full bg-white">
+                                <div className="h-full rounded-full" style={{ width: `${watchRatio}%`, backgroundColor: color }} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-6 text-sm font-bold text-slate-500">
+                      검색과 시청을 비교할 데이터가 아직 부족합니다.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-300">detox guide</p>
+                <h3 className="mt-2 text-xl font-black">오늘의 디톡스 가이드</h3>
+                <div className="mt-5 space-y-3">
+                  {detoxGuideItems.map((item) => (
+                    <div key={item.title} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-black">{item.title}</p>
+                        <span className="rounded-full bg-teal-300/20 px-2.5 py-1 text-[10px] font-black text-teal-200">{item.tag}</span>
+                      </div>
+                      <p className="mt-2 text-xs font-semibold leading-5 text-slate-300">{item.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </section>
 
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <RadarChart data={chartData} scoreWarnings={scoreWarnings} />

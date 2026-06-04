@@ -1,5 +1,12 @@
 # Change Memos
 
+## 2026-06-04 DetoxProgram-inspired dashboard highlight cards
+- Referenced the teammate project `tpwhd541211/DetoxProgram` beyond the graph itself and adapted the dashboard-style summary patterns that fit Unbelievable.
+- Added an `analysis highlights` card that compresses the strongest current interest categories into a TOP 5 list with category color, subcategory hint, count, and ratio bar.
+- Added an `interest change timeline` card that compares search ratio versus standard-video watch ratio so the user can see which topics grew in viewing compared with direct search.
+- Added a dark `today's detox guide` panel with three compact actions: direct-search routine, interest-balance check, and shorts-consumption check.
+- Verified TypeScript with `tsc --noEmit` and checked the running dashboard in the browser for the new section labels and no horizontal overflow.
+
 ## 2026-06-04 DetoxProgram-style interest graph UI
 - Referenced the teammate project `tpwhd541211/DetoxProgram` and adapted its interest knowledge graph direction for Unbelievable's dashboard maps.
 - Replaced the fixed radial mind-map SVG with a force-style interactive network graph: center node, category nodes, subcategory nodes, and weighted edges.
