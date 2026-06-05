@@ -363,6 +363,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(_APP_DIR, 'templates'), exist_ok=True)
     os.makedirs(os.path.join(_APP_DIR, 'models'), exist_ok=True)
 
+    print("식각 HMI (etchflask) — FarmUI와 별도. 동시에 5000 포트 사용 불가.")
     print("식각 HMI — DB:", "SQLite ON" if use_database else "메모리", "|", _ETCH_SQLITE)
     print(f"[etchflask] 앱 폴더: {_APP_DIR}")
     print(f"[etchflask] 대시보드 파일: {_DASHBOARD_HTML} (존재: {os.path.isfile(_DASHBOARD_HTML)})")

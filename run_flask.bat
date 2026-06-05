@@ -8,6 +8,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+echo [etchflask] 식각 Flask ONLY — FarmUI(C:\farmui)와 동시 실행 시 포트 5000 충돌
 echo [etchflask] Flask 서버 시작 (현장 PC — 0.0.0.0:5000)
 echo   현장 브라우저: http://127.0.0.1:5000
 echo   모니터링 PC:   http://^<이 PC LAN IP^>:5000  ^(ipconfig 참고^)

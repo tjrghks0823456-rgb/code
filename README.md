@@ -1,6 +1,9 @@
-# Etch HMI — Flask 모니터링 서버
+# Etch HMI — Flask 모니터링 서버 (`etchflask`)
 
 식각 장비 **원격 모니터링**용 웹 대시보드. 제어는 현장 **WPF HMI**에서 수행합니다.
+
+> **FarmUI(스마트팜)와 별도 프로그램** — 포트 5000 공유 가능하나 동시 실행 불가.  
+> FarmUI는 `C:\farmui\farmui` · 상세 [FARMUI_분리안내.md](FARMUI_분리안내.md)
 
 ## 빠른 실행
 
