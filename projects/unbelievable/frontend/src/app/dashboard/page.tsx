@@ -116,6 +116,13 @@ function interestGroupFor(category: string) {
   return "other";
 }
 
+function graphCenterLabel(label: string) {
+  if (label.includes("숏츠")) return "숏츠 반복\n맵";
+  if (label.includes("일반")) return "일반 시청\n맵";
+  if (label.includes("검색어")) return "검색어\n맵";
+  return "검색 기반\n맵";
+}
+
 function buildInterestGraphData(label: string, map: any, tone: "search" | "video" | "shorts") {
   const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
   const nodes: InterestGraphNode[] = [];
@@ -124,7 +131,7 @@ function buildInterestGraphData(label: string, map: any, tone: "search" | "video
 
   nodes.push({
     id: nextId++,
-    label: `${label.replace(" 맵", "")}\nInterest`,
+    label: graphCenterLabel(label),
     group: "center",
     size: 34,
     depth: 0,
@@ -352,6 +359,10 @@ function InterestNetworkGraph({
 
   const usedGroups = Array.from(new Set(nodes.filter((node) => node.depth > 0).map((node) => node.group)));
   const selectedMeta = selectedNode?.meta || {};
+  const coverage = map?.classification_coverage || {};
+  const classifiedRatio = Math.round(Number(coverage.classified_ratio || 0));
+  const unclassifiedCount = Number(coverage.unclassified_count || 0);
+  const unclassifiedSamples = Array.isArray(coverage.unclassified_samples) ? coverage.unclassified_samples : [];
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -361,6 +372,26 @@ function InterestNetworkGraph({
           {graphData.categoryCount > 0 ? `${graphData.categoryCount}개 대분류` : "데이터 없음"}
         </span>
       </div>
+      {graphData.nodes.length > 1 && coverage.classified_ratio !== undefined && (
+        <div className="mb-3 rounded-2xl border border-slate-100 bg-[#fbfaf7] px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-black text-slate-500">
+            <span>분류 커버리지 {classifiedRatio}%</span>
+            <span>미분류 {unclassifiedCount}건</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+            <div className="h-full rounded-full bg-teal-500" style={{ width: `${Math.max(0, Math.min(100, classifiedRatio))}%` }} />
+          </div>
+          {unclassifiedSamples.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {unclassifiedSamples.slice(0, 5).map((sample: string) => (
+                <span key={sample} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-400">
+                  {shortLabel(sample, 14)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {graphData.nodes.length > 1 ? (
         <>
           <div

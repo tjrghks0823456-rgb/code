@@ -208,3 +208,12 @@
 - 프론트 반영: `dashboard/page.tsx`에서 `insightMock` import를 제거하고 `processedData.insights`를 사용하도록 변경했다. 검색어나 NLP 주제가 부족하면 임시값 대신 데이터 부족 상태를 표시한다.
 - 설정 정리: `apiConfig.ts`를 추가해 `API_BASE_URL`과 `DEFAULT_USER_ID`를 공통 관리하고, dashboard/upload/mission의 하드코딩된 API 주소를 이 설정으로 교체했다.
 - 확인 방법: 백엔드 `compileall`, 프론트 TypeScript `tsc --noEmit`, 승인 권한의 Next production build를 모두 통과했다.
+
+### 11. 관심사 미분류 원인 표시와 분류 커버리지 UI 보강
+- 무엇을 수정했나: `interest_maps.py`의 관심사 분류 키워드를 보강하고, 검색/일반 시청/숏츠 관심사 맵 응답에 `classification_coverage`를 추가했다. 이제 분류된 건수, 미분류 건수, 분류 비율, 미분류 샘플을 API가 함께 내려준다.
+- 왜 수정했나: 검색 기반/일반 시청 기반 맵에서 `기타/미분류`가 크게 보였는데, 원인은 검색어 자체가 인명/곡명/짧은 단어/영문 제목처럼 규칙 기반 분류기로는 확정하기 어려운 항목이 많았기 때문이다. 미분류를 숨기면 정확도가 좋아 보이는 착시가 생기므로, 커버리지와 샘플을 같이 보여주도록 했다.
+- 분류 보강 내용: `LG전자 그램/Core Ultra/RAM/SSD/WIN11`은 IT/테크-노트북/PC, `시나공 정보처리산업기사`는 학습/자격증-정보처리, `Smile boy/Into Your Summer/Flying High With U/BUMPA/Pokerface/Goose Senbi`는 엔터테인먼트-음악/아이돌, `차쥐뿔/고마워요 누나`는 엔터테인먼트-예능/인물로 분류되도록 보강했다.
+- 프론트 반영: `dashboard/page.tsx`의 관심사 맵 상단에 `분류 커버리지`, `미분류 건수`, 미분류 샘플 pill을 표시했다. 중앙-주변 노드형 맵의 중앙 라벨도 `검색 기반 맵`, `일반 시청 맵`, `숏츠 반복 맵`처럼 한글 2줄 라벨로 정리했다.
+- 실제 검증 결과: 최신 재분석 run_id `51332459-1e82-4e89-a629-a38696d97bc3` 기준 광고 61개가 제외되었고, 검색 맵은 3000건 중 743건 분류(24.8%), 일반 시청 맵은 232건 중 112건 분류(48.3%)로 집계되었다. 숏츠는 `/shorts/` URL 식별 건수가 0건이라 데이터 부족 상태로 표시된다.
+- 확인 방법: 백엔드 `.\venv\Scripts\python.exe -m compileall app\core\interest_maps.py`, 프론트 `node.exe .\node_modules\typescript\bin\tsc --noEmit`를 통과했다. 브라우저에서 `http://127.0.0.1:3002/dashboard?run_id=51332459-1e82-4e89-a629-a38696d97bc3`를 열어 커버리지 표시, 광고 제외 안내, 노드형 맵, 가로 overflow 없음까지 확인했다.
+- 다음 단계 TODO: 여전히 높은 미분류를 줄이려면 Gemini API나 YouTube 메타데이터를 붙여 인명/곡명/채널명처럼 문맥 없이는 어려운 항목을 2차 분류해야 한다. 규칙 기반 사전만 계속 늘리면 유지보수성이 떨어지므로 AI 보조 분류를 다음 단계 후보로 둔다.

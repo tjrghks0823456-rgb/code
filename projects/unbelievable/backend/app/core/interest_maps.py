@@ -15,6 +15,8 @@ from app.core.content_filters import (
 
 
 UNKNOWN_VALUES = {"", "unknown", "none", "null", "n/a"}
+UNKNOWN_CATEGORY = "기타/미분류"
+UNKNOWN_SUBCATEGORY = "미분류"
 
 INTEREST_RULES = [
     {"category": "게임", "subcategory": "모바일게임", "keywords": ["fc모바일", "fc 모바일"], "entities": ["FC모바일"], "secondary_tags": ["스포츠", "축구"]},
@@ -37,7 +39,7 @@ INTEREST_RULES = [
     {"category": "IT/테크", "subcategory": "AI", "keywords": ["ai", "gemini", "chatgpt", "openai", "llm", "머신러닝", "인공지능"]},
     {"category": "IT/테크", "subcategory": "클라우드", "keywords": ["google cloud", "gcp", "aws", "azure", "클라우드"]},
     {"category": "IT/테크", "subcategory": "프로그래밍", "keywords": ["코딩", "프로그래밍", "개발자", "python", "javascript", "react", "next.js", "fastapi"]},
-    {"category": "IT/테크", "subcategory": "노트북/PC", "keywords": ["노트북", "pc", "컴퓨터", "맥북", "그래픽카드"]},
+    {"category": "IT/테크", "subcategory": "노트북/PC", "keywords": ["노트북", "pc", "컴퓨터", "맥북", "그래픽카드", "그램", "lg전자", "core ultra", "ram", "ssd", "win11"]},
     {"category": "IT/테크", "subcategory": "모바일/기기", "keywords": ["갤럭시", "아이폰", "android", "스마트폰", "태블릿"]},
     {"category": "쇼핑/제품", "subcategory": "제품탐색", "keywords": ["추천", "리뷰", "제품", "가격", "비교", "언박싱"]},
     {"category": "쇼핑/제품", "subcategory": "구매/할인", "keywords": ["구매", "할인", "쿠폰", "세일", "핫딜", "특가", "공식몰"]},
@@ -48,14 +50,14 @@ INTEREST_RULES = [
     {"category": "경제/금융", "subcategory": "재테크", "keywords": ["재테크", "투자", "대출", "금리"]},
     {"category": "경제/금융", "subcategory": "기타 경제", "keywords": ["장사의신", "자영업", "창업", "사업", "매출", "장사"]},
     {"category": "경제/금융", "subcategory": "세금", "keywords": ["세금", "종합소득세", "연말정산", "간편장부", "간편장부대상자", "소득세", "사업자 세금"]},
-    {"category": "학습/자격증", "subcategory": "정보처리", "keywords": ["정보처리기사", "정처기"]},
+    {"category": "학습/자격증", "subcategory": "정보처리", "keywords": ["정보처리기사", "정보처리산업기사", "정처기", "시나공"]},
     {"category": "학습/자격증", "subcategory": "코딩학습", "keywords": ["코딩 강의", "프로그래밍 강의", "튜토리얼", "입문"]},
     {"category": "학습/자격증", "subcategory": "대학과제", "keywords": ["대학과제", "과제", "레포트", "보고서"]},
     {"category": "학습/자격증", "subcategory": "자격증", "keywords": ["자격증", "컴활", "한국사"]},
     {"category": "학습/자격증", "subcategory": "영어/어학", "keywords": ["영어", "토익", "토플", "일본어", "중국어", "회화"]},
-    {"category": "엔터테인먼트", "subcategory": "음악/아이돌", "keywords": ["음악", "노래", "뮤직", "아이돌", "밴드", "힙합", "락힙합", "록", "rock", "ost", "딘딘", "리센느", "지누션", "여돌", "스텔라이브", "정국", "뉴진스", "아이브", "세븐틴", "my whole world", "사랑이라 했던 말"]},
+    {"category": "엔터테인먼트", "subcategory": "음악/아이돌", "keywords": ["음악", "노래", "뮤직", "아이돌", "밴드", "힙합", "락힙합", "록", "rock", "ost", "딘딘", "리센느", "지누션", "여돌", "스텔라이브", "정국", "뉴진스", "아이브", "세븐틴", "my whole world", "사랑이라 했던 말", "smile boy", "스마일보이", "into your summer", "flying high with u", "bumpa", "pokerface", "goose senbi", "허키"]},
     {"category": "엔터테인먼트", "subcategory": "영화/드라마", "keywords": ["영화", "드라마", "예고편", "넷플릭스", "ott"]},
-    {"category": "엔터테인먼트", "subcategory": "예능/인물", "keywords": ["예능", "인터뷰", "김호영", "박명수", "유재석", "유병재", "강동원", "정지훈", "이민우", "복냥즈", "배우", "천만 배우", "수상소감", "웃긴", "침착맨", "라이브"]},
+    {"category": "엔터테인먼트", "subcategory": "예능/인물", "keywords": ["예능", "인터뷰", "김호영", "박명수", "유재석", "유병재", "강동원", "정지훈", "이민우", "복냥즈", "차쥐뿔", "\ucc28\uc950\ubfcc", "고마워요 누나", "배우", "천만 배우", "수상소감", "웃긴", "침착맨", "라이브"]},
     {"category": "여행/맛집", "subcategory": "여행", "keywords": ["여행", "호텔", "항공", "숙소", "호캉스", "해외여행", "국내여행"]},
     {"category": "여행/맛집", "subcategory": "맛집/카페", "keywords": ["맛집", "카페", "식당", "브런치", "디저트"]},
     {"category": "건강/운동", "subcategory": "운동", "keywords": ["운동", "헬스", "근력", "스트레칭", "러닝", "요가"]},
@@ -331,6 +333,38 @@ def _category_distribution(
     return distribution
 
 
+def _classification_coverage(
+    category_counter: Counter,
+    subcategory_details: Dict[str, Dict[str, Dict[str, Any]]],
+    total: int,
+) -> Dict[str, Any]:
+    if total <= 0:
+        return {
+            "classified_count": 0,
+            "unclassified_count": 0,
+            "classified_ratio": 0.0,
+            "unclassified_ratio": 0.0,
+            "unclassified_samples": [],
+        }
+
+    unclassified_count = int(category_counter.get(UNKNOWN_CATEGORY, 0))
+    classified_count = max(0, total - unclassified_count)
+    samples = _dedupe(
+        subcategory_details
+        .get(UNKNOWN_CATEGORY, {})
+        .get(UNKNOWN_SUBCATEGORY, {})
+        .get("raw_items", [])
+    )[:12]
+
+    return {
+        "classified_count": classified_count,
+        "unclassified_count": unclassified_count,
+        "classified_ratio": round((classified_count / total) * 100.0, 1),
+        "unclassified_ratio": round((unclassified_count / total) * 100.0, 1),
+        "unclassified_samples": samples,
+    }
+
+
 def _keyword_rows(counter: Counter, top_limit: int = 8) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for keyword, count in counter.most_common(top_limit):
@@ -386,6 +420,7 @@ def build_search_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "top_keywords": top_keywords,
         "keywords": top_keywords,
         "category_distribution": _category_distribution(category_counter, subcategory_counter, subcategory_details, total),
+        "classification_coverage": _classification_coverage(category_counter, subcategory_details, total),
         "excluded_ad_count": excluded_ad_count,
         "warnings": warnings,
     }
@@ -429,6 +464,7 @@ def build_standard_video_interest_map(events: List[Dict[str, Any]]) -> Dict[str,
             for name, count in channel_counter.most_common(8)
         ],
         "category_distribution": _category_distribution(category_counter, subcategory_counter, subcategory_details, total),
+        "classification_coverage": _classification_coverage(category_counter, subcategory_details, total),
         "warnings": warnings,
     }
 
@@ -479,6 +515,7 @@ def build_shorts_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "shorts_ratio_percent": round((total / denominator) * 100.0, 1) if denominator else 0.0,
         "top_shorts_keywords": _keyword_rows(title_counter),
         "category_distribution": _category_distribution(category_counter, subcategory_counter, subcategory_details, total),
+        "classification_coverage": _classification_coverage(category_counter, subcategory_details, total),
         "repeat_topic_score": round((title_counter.most_common(1)[0][1] / total) * 100.0, 1) if total else 0.0,
         "warnings": warnings,
     }
