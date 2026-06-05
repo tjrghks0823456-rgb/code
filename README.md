@@ -1,6 +1,6 @@
 # Code Portfolio
 
-반도체 장비 제어, AI, 데이터, GUI, 시스템 통신 수업과 개인 프로젝트를 정리한 포트폴리오 저장소입니다.
+반도체 장비 제어, AI, 데이터 분석, GUI, 시스템 통신, 웹 백엔드/프론트엔드 프로젝트를 정리한 포트폴리오 저장소입니다.
 
 이 저장소는 과목명을 첫 기준으로 두기보다, GitHub에서 바로 확인하기 좋은 **프로젝트 중심 구조**를 사용합니다. 과목 정보는 각 프로젝트 README와 `coursework/`에 보조 정보로 남깁니다.
 
@@ -8,7 +8,7 @@
 
 ```text
 code/
-├─ projects/       # 완성 프로젝트와 포트폴리오로 보여줄 앱
+├─ projects/       # 완성 프로젝트와 포트폴리오로 보여줄 앱/서비스 자료
 ├─ coursework/     # 과목별 실습, 예제, 빈 분류 자리
 ├─ shared/         # 여러 프로젝트에서 공통으로 쓸 자료
 ├─ docs/           # 저장소 운영/구조 문서
@@ -21,9 +21,13 @@ code/
 | --- | --- | --- | --- |
 | [course-registration-system](projects/course-registration-system/) | 학생, 교수, 과목 모델을 사용한 수강신청 시스템 | C# | Programming Basics |
 | [emotion-music-recommendation](projects/emotion-music-recommendation/) | 감정 기반 음악 추천 Flask 앱과 발표 자료 | Python, Flask, MySQL | AI Programming |
+| [unbelievable](projects/unbelievable/) | 시청 기록 기반 콘텐츠 소비 경향 분석, DSAO 유형, 자율 디톡스 미션을 제공하는 웹 MVP | Python, FastAPI, Next.js, TypeScript | AI/Data/Web |
+| [digital-detox](projects/digital-detox/) | 디지털 콘텐츠 사용 습관 개선 흐름을 정리한 서비스 기획·플로우차트 자료 | Service Design, Flowchart | Digital Wellbeing |
 | [semitool-hmi](projects/semitool-hmi/) | 반도체 장비 HMI, EtherCAT 제어, 공정 시나리오 통합 프로젝트 | C#, WinForms, EtherCAT | Equipment Control |
+| [sbb](projects/sbb/) | 질문/답변, 센서 데이터, 장비 모델, 알람 관리를 다루는 Spring Boot 웹 예제 | Java, Spring Boot, JPA, Thymeleaf, H2 | Web Backend |
 | [flask-csharp-integration](projects/flask-csharp-integration/) | Flask 백엔드와 C# 클라이언트를 연동한 모니터링 시스템 | Python, Flask, C# | System Communication |
 | [equipment-management-winforms](projects/equipment-management-winforms/) | MySQL 기반 장비 등록/삭제, 대여/반납, 고장 처리, 이력 조회, 관리자 일정 관리 WinForms 앱 | C#, WinForms, MySQL | GUI |
+| [색 변화 버튼](<projects/색 변화 버튼/>) | .NET 8 WPF에서 버튼 이벤트와 상태별 색상 변경을 연습한 GUI 앱 | C#, WPF, .NET 8 | GUI |
 | [winforms-gui-portfolio](projects/winforms-gui-portfolio/) | 로그인, 숫자 맞추기, 계산기, Todo로 WinForms 이벤트/UI 패턴을 연습한 런처형 앱 | C#, WinForms | GUI |
 
 ## Coursework
