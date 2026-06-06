@@ -542,6 +542,19 @@
             decimals: 1
         };
 
+        function esc(v) {
+            return String(v ?? '-')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function chartsAvailable() {
+            return typeof Chart !== 'undefined';
+        }
+
         function applyPressureLimitsFromApi(data) {
             if (data.pressureInterlockMin != null) pressureLimits.interlockMin = Number(data.pressureInterlockMin);
             if (data.pressureInterlockMax != null) pressureLimits.interlockMax = Number(data.pressureInterlockMax);
@@ -611,6 +624,17 @@
         let serverChart = null;
 
         function initChart() {
+            if (!chartsAvailable()) {
+                document.querySelectorAll('.chart-canvas').forEach(el => {
+                    el.textContent = 'Chart.js 로딩 실패 - 네트워크/CDN 상태를 확인하세요.';
+                    el.style.display = 'flex';
+                    el.style.alignItems = 'center';
+                    el.style.justifyContent = 'center';
+                    el.style.color = '#991b1b';
+                    el.style.fontWeight = '700';
+                });
+                return;
+            }
             const ctx = document.getElementById('trendChart').getContext('2d');
             chart = new Chart(ctx, {
                 type: 'line',
@@ -648,6 +672,7 @@
         }
 
         function pushHistory(label, pressure, vib, temp, humi) {
+            if (!chart) return;
             history.t.push(label);
             history.pressure.push(pressure);
             history.vib.push(vib);
@@ -674,15 +699,15 @@
             const tb = document.getElementById('logBody');
             tb.innerHTML = logRows.map(r =>
                 '<tr>' +
-                '<td>' + r.time + '</td>' +
-                '<td>' + r.state + '</td>' +
-                '<td>' + r.alarm + '</td>' +
-                '<td>' + r.interlock + '</td>' +
-                '<td>' + r.pressure + '</td>' +
-                '<td>' + r.vib + '</td>' +
-                '<td>' + r.temp + '</td>' +
-                '<td>' + r.humi + '</td>' +
-                '<td>' + r.access + '</td>' +
+                '<td>' + esc(r.time) + '</td>' +
+                '<td>' + esc(r.state) + '</td>' +
+                '<td>' + esc(r.alarm) + '</td>' +
+                '<td>' + esc(r.interlock) + '</td>' +
+                '<td>' + esc(r.pressure) + '</td>' +
+                '<td>' + esc(r.vib) + '</td>' +
+                '<td>' + esc(r.temp) + '</td>' +
+                '<td>' + esc(r.humi) + '</td>' +
+                '<td>' + esc(r.access) + '</td>' +
                 '</tr>'
             ).join('');
             document.getElementById('logEmpty').style.display = logRows.length ? 'none' : 'block';
@@ -917,17 +942,17 @@
                 const id = m.id || m.moduleId || '-';
                 const st = m.state || m.stateText || '-';
                 const cls = modStateClass(st);
-                return '<tr><td><strong>' + id + '</strong></td>' +
-                    '<td><span class="badge-state ' + cls + '">' + st + '</span></td>' +
-                    '<td>' + fmtDoor(m.doorClosed) + '</td>' +
-                    '<td>' + fmtWafer(m.hasWafer) + '</td>' +
-                    '<td>' + (m.detail || '-') + '</td></tr>';
+                return '<tr><td><strong>' + esc(id) + '</strong></td>' +
+                    '<td><span class="badge-state ' + esc(cls) + '">' + esc(st) + '</span></td>' +
+                    '<td>' + esc(fmtDoor(m.doorClosed)) + '</td>' +
+                    '<td>' + esc(fmtWafer(m.hasWafer)) + '</td>' +
+                    '<td>' + esc(m.detail || '-') + '</td></tr>';
             }).join('');
             grid.innerHTML = modules.map(m => {
                 const id = m.id || m.moduleId || '?';
                 const st = m.state || m.stateText || '-';
                 const cls = modStateClass(st);
-                return '<div class="mod-chip ' + cls + '"><div class="mid">' + id + '</div><div class="st">' + st + '</div></div>';
+                return '<div class="mod-chip ' + esc(cls) + '"><div class="mid">' + esc(id) + '</div><div class="st">' + esc(st) + '</div></div>';
             }).join('');
         }
 
@@ -1006,6 +1031,9 @@
         document.getElementById('recSource').addEventListener('change', refreshRecipeTab);
 
         function initServerChart() {
+            if (!chartsAvailable()) {
+                return;
+            }
             const ctx = document.getElementById('serverTrendChart').getContext('2d');
             serverChart = new Chart(ctx, {
                 type: 'line',
@@ -1105,7 +1133,7 @@
                     empty.style.display = 'none';
                     tb.innerHTML = j.items.map(e => {
                         const tt = e.time || '-';
-                        return '<tr><td>' + tt + '</td><td>' + (e.kind || '-') + '</td><td>' + (e.message || '') + '</td><td>' + (e.equipmentState || '-') + '</td><td>' + (e.alarmCode || '-') + '</td><td>' + (e.username || '-') + '</td></tr>';
+                        return '<tr><td>' + esc(tt) + '</td><td>' + esc(e.kind || '-') + '</td><td>' + esc(e.message || '') + '</td><td>' + esc(e.equipmentState || '-') + '</td><td>' + esc(e.alarmCode || '-') + '</td><td>' + esc(e.username || '-') + '</td></tr>';
                     }).join('');
                 })
                 .catch(() => {});
