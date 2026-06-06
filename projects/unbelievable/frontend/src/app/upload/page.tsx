@@ -133,12 +133,41 @@ export default function UploadPage() {
 
   // Ref callback for webkitdirectory setup to avoid React TS type errors
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
   const setFolderRef = (el: HTMLInputElement | null) => {
     folderInputRef.current = el;
     if (el) {
       el.setAttribute("webkitdirectory", "");
       el.setAttribute("directory", "");
     }
+  };
+
+  const triggerFolderPicker = () => {
+    setErrorMsg(null);
+    folderInputRef.current?.click();
+  };
+
+  const triggerZipPicker = () => {
+    setErrorMsg(null);
+    zipInputRef.current?.click();
+  };
+
+  const handleConsentNext = () => {
+    if (!agreed) {
+      setErrorMsg("개인정보 안내 동의 체크 후 시청 기록 선택 단계로 넘어갈 수 있어요.");
+      return;
+    }
+    setErrorMsg(null);
+    setStep(2);
+  };
+
+  const handleReadyNext = () => {
+    if (!hasValidData) {
+      setErrorMsg("먼저 Takeout 폴더 또는 ZIP 파일을 선택해주세요. 큰 업로드 영역을 누르면 ZIP 파일을 고를 수 있어요.");
+      return;
+    }
+    setErrorMsg(null);
+    setStep(3);
   };
 
   const handleFolderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -376,7 +405,13 @@ export default function UploadPage() {
                 </span>
               </label>
 
-              <Button type="button" className="w-full" disabled={!agreed} icon={<ArrowRight size={18} />} onClick={() => setStep(2)}>
+              {errorMsg && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold leading-5 text-rose-700">
+                  {errorMsg}
+                </div>
+              )}
+
+              <Button type="button" className="w-full" icon={<ArrowRight size={18} />} onClick={handleConsentNext}>
                 시청 기록 선택하기
               </Button>
             </div>
@@ -391,12 +426,19 @@ export default function UploadPage() {
                 type="file"
                 multiple
                 onChange={handleFolderUpload}
+                onClick={(e) => {
+                  e.currentTarget.value = "";
+                }}
                 className="hidden"
               />
               <input
+                ref={zipInputRef}
                 type="file"
                 accept=".zip"
                 onChange={handleZipUpload}
+                onClick={(e) => {
+                  e.currentTarget.value = "";
+                }}
                 className="hidden"
                 id="zip-file-input"
               />
@@ -407,6 +449,15 @@ export default function UploadPage() {
                 onDragOver={handleDrag}
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
+                onClick={triggerZipPicker}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    triggerZipPicker();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className={`group relative flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-[2rem] border-2 border-dashed p-8 text-center transition ${
                   dragActive
                     ? "border-slate-950 bg-slate-100 scale-[1.01]"
@@ -427,14 +478,20 @@ export default function UploadPage() {
                 <div className="mt-5 flex flex-wrap gap-2.5 justify-center z-10">
                   <button
                     type="button"
-                    onClick={() => folderInputRef.current?.click()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      triggerFolderPicker();
+                    }}
                     className="inline-flex items-center gap-1.5 rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white hover:bg-slate-850 transition-colors shadow-sm"
                   >
                     <FolderUp size={14} /> Takeout 폴더 선택
                   </button>
                   <button
                     type="button"
-                    onClick={() => document.getElementById("zip-file-input")?.click()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      triggerZipPicker();
+                    }}
                     className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black text-slate-800 hover:bg-slate-50 transition-colors shadow-sm"
                   >
                     <Archive size={14} /> ZIP 파일 선택
@@ -519,9 +576,8 @@ export default function UploadPage() {
                 <Button
                   type="button"
                   className="sm:flex-1"
-                  disabled={!hasValidData}
                   icon={<ArrowRight size={18} />}
-                  onClick={() => setStep(3)}
+                  onClick={handleReadyNext}
                 >
                   분석 준비 화면으로
                 </Button>

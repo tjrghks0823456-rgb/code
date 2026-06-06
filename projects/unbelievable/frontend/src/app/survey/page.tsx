@@ -75,6 +75,7 @@ export default function SurveyPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<SelfSurveyResult | null>(null);
+  const [pageWarning, setPageWarning] = useState<string | null>(null);
 
   const pageQuestions = useMemo(
     () => QUESTIONS.slice(currentPage * 4, (currentPage + 1) * 4),
@@ -82,11 +83,36 @@ export default function SurveyPage() {
   );
   const answeredCount = Object.keys(answers).length;
   const progressPercent = result ? 100 : Math.round((answeredCount / QUESTIONS.length) * 100);
+  const currentPageAnsweredCount = pageQuestions.filter((q) => answers[q.id] !== undefined).length;
   const isPageComplete = pageQuestions.every((q) => answers[q.id] !== undefined);
   const allQuestionsAnswered = QUESTIONS.every((q) => answers[q.id] !== undefined);
 
   const handleAnswerSelect = (qId: string, score: number) => {
-    setAnswers((prev) => ({ ...prev, [qId]: score }));
+    setAnswers((prev) => {
+      const next = { ...prev, [qId]: score };
+      if (pageQuestions.every((q) => next[q.id] !== undefined)) {
+        setPageWarning(null);
+      }
+      return next;
+    });
+  };
+
+  const handleNextPage = () => {
+    if (!isPageComplete) {
+      setPageWarning(`이 단계의 문항 ${4 - currentPageAnsweredCount}개를 더 선택하면 다음으로 넘어갈 수 있어요.`);
+      return;
+    }
+    setPageWarning(null);
+    setCurrentPage((prev) => prev + 1);
+  };
+
+  const handleResultClick = () => {
+    if (!allQuestionsAnswered) {
+      setPageWarning("아직 답하지 않은 문항이 있어요. 현재 단계의 선택지를 모두 눌러주세요.");
+      return;
+    }
+    setPageWarning(null);
+    calculateResult();
   };
 
   const calculateResult = () => {
@@ -119,6 +145,7 @@ export default function SurveyPage() {
   const handleRetake = () => {
     setAnswers({});
     setResult(null);
+    setPageWarning(null);
     setCurrentPage(0);
   };
 
@@ -232,6 +259,22 @@ export default function SurveyPage() {
             ))}
           </div>
 
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-black text-slate-600">
+              <span>현재 단계 선택 완료</span>
+              <span>{currentPageAnsweredCount} / {pageQuestions.length}</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-slate-950 transition-all"
+                style={{ width: `${(currentPageAnsweredCount / pageQuestions.length) * 100}%` }}
+              />
+            </div>
+            {pageWarning && (
+              <p className="mt-2 text-xs font-bold leading-5 text-rose-700">{pageWarning}</p>
+            )}
+          </div>
+
           <div className="mt-7 flex flex-col justify-between gap-3 border-t border-slate-200 pt-5 sm:flex-row">
             <Button
               type="button"
@@ -246,8 +289,7 @@ export default function SurveyPage() {
               <Button
                 type="button"
                 icon={<ArrowRight size={18} />}
-                disabled={!isPageComplete}
-                onClick={() => setCurrentPage((prev) => prev + 1)}
+                onClick={handleNextPage}
               >
                 다음
               </Button>
@@ -255,8 +297,7 @@ export default function SurveyPage() {
               <Button
                 type="button"
                 icon={<Check size={18} />}
-                disabled={!allQuestionsAnswered}
-                onClick={calculateResult}
+                onClick={handleResultClick}
               >
                 결과 확인하기
               </Button>
