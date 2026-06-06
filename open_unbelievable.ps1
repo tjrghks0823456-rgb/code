@@ -16,6 +16,25 @@ function Write-Step($message) {
     Write-Host "==> $message" -ForegroundColor Cyan
 }
 
+function Wait-PortOpen($Port, $Name, $TimeoutSeconds = 120) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    while ((Get-Date) -lt $deadline) {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $client.Connect("127.0.0.1", $Port)
+            Write-Host "$Name is ready on http://127.0.0.1:$Port" -ForegroundColor Green
+            return $true
+        } catch {
+            Start-Sleep -Milliseconds 500
+        } finally {
+            $client.Dispose()
+        }
+    }
+
+    throw "$Name did not become ready on port $Port within $TimeoutSeconds seconds."
+}
+
 function Ensure-ProjectFiles {
     $backendMain = Join-Path $Backend "app\main.py"
     $frontendPackage = Join-Path $Frontend "package.json"
@@ -189,8 +208,11 @@ $nodeDir
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$backendScriptPath`"" -WindowStyle Normal
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$frontendScriptPath`"" -WindowStyle Normal
 
+    Write-Step "Waiting for local servers..."
+    Wait-PortOpen -Port 8000 -Name "Backend" -TimeoutSeconds 120 | Out-Null
+    Wait-PortOpen -Port 3000 -Name "Frontend" -TimeoutSeconds 120 | Out-Null
+
     Write-Step "Opening browser..."
-    Start-Sleep -Seconds 8
     Start-Process "http://127.0.0.1:3000"
 
     Write-Host ""
