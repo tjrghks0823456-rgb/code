@@ -1135,7 +1135,6 @@ function DashboardContent() {
           <RadarChart data={chartData} scoreWarnings={scoreWarnings} />
 
           <div className="space-y-4">
-            {renderInterestMindMap("검색어 관심사 맵", searchInterestMap, "검색어로 인정 가능한 데이터가 부족합니다.", "search")}
             <Card className="p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
