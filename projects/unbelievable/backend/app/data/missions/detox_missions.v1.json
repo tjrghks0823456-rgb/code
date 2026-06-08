@@ -1,0 +1,234 @@
+[
+  {
+    "mission_id": "tds_m1",
+    "title": "낯선 카테고리 하나 구경하기",
+    "description": "평소 전혀 보지 않던 '교양/다큐' 섹션 영상을 하나 클릭하고 무엇에 관한 것인지 확인해 보세요.",
+    "target_categories": [
+      "📈 경제/금융",
+      "💻 IT/테크",
+      "🎮 게임",
+      "🍿 엔터/예능",
+      "🏋️ 건강/운동",
+      "🛠️ 취미/일상",
+      "⚖️ 뉴스/정치/사회",
+      "🎤 연예/아이돌",
+      "🎵 음악",
+      "🍳 먹방/요리",
+      "💄 뷰티/패션",
+      "🚗 자동차",
+      "🏠 부동산",
+      "🎬 애니/웹툰",
+      "⚽ 스포츠",
+      "🛒 쇼핑/소비"
+    ],
+    "target_flags": [
+      "TDS_LOW"
+    ],
+    "target_dsao_types": [
+      "DWSF",
+      "DWSL",
+      "DWMF",
+      "DWML",
+      "DNSF",
+      "DNSL",
+      "DNMF",
+      "DNML",
+      "PWSF",
+      "PWSL",
+      "PWMF",
+      "PWML",
+      "PNSF",
+      "PNSL",
+      "PNMF",
+      "PNML"
+    ],
+    "difficulty": "low",
+    "estimated_minutes": 5,
+    "requires_proof": false,
+    "tone": "supportive",
+    "enabled": true,
+    "input_type": "choice",
+    "choices": [
+      "역사/문학",
+      "예술/디자인",
+      "우주/자연과학",
+      "경제/비즈니스"
+    ],
+    "target_issue": "관심사 편중 및 특정 주제 카테고리 과다 노출",
+    "expected_effect": "낯선 분야 시청을 통한 인지 균형감 회복",
+    "related_keywords": [
+      "다양성",
+      "카테고리",
+      "지식"
+    ]
+  },
+  {
+    "mission_id": "tds_m2",
+    "title": "관심 도서 가벼운 한 줄 메모",
+    "description": "오늘 온라인 서점에서 가장 관심이 생기는 도서 제목 하나를 복사하거나 메모해 보세요.",
+    "target_categories": [],
+    "target_flags": [
+      "TDS_LOW"
+    ],
+    "target_dsao_types": [],
+    "difficulty": "low",
+    "estimated_minutes": 3,
+    "requires_proof": false,
+    "tone": "supportive",
+    "enabled": true,
+    "input_type": "text",
+    "target_issue": "시청 화면 쏠림 및 텍스트 독해력 감소",
+    "expected_effect": "텍스트 탐색을 통한 차분한 사색 복구",
+    "related_keywords": [
+      "도서",
+      "독서",
+      "메모"
+    ]
+  },
+  {
+    "mission_id": "sbs_m1",
+    "title": "서로 다른 언론사 뉴스 헤드라인 체크",
+    "description": "두 개의 서로 다른 언론사의 동일 이슈 관련 뉴스를 읽어본 뒤, 더 객관적이라고 느껴지는 논조를 골라보세요.",
+    "target_categories": [
+      "⚖️ 뉴스/정치/사회"
+    ],
+    "target_flags": [
+      "SBS_LOW"
+    ],
+    "target_dsao_types": [],
+    "difficulty": "low",
+    "estimated_minutes": 10,
+    "requires_proof": false,
+    "tone": "analytical",
+    "enabled": true,
+    "input_type": "choice",
+    "choices": [
+      "언론사 A가 객관적",
+      "언론사 B가 객관적",
+      "두 관점이 균형 잡힘"
+    ],
+    "target_issue": "특정 채널 또는 출처 중심의 정보 편향",
+    "expected_effect": "비판적 사실 검토 및 균형 잡힌 언론 시각 확보",
+    "related_keywords": [
+      "뉴스",
+      "언론",
+      "팩트체크"
+    ]
+  },
+  {
+    "mission_id": "sbs_m2",
+    "title": "신뢰할 만한 대안 정보 채널 하나 추천받기",
+    "description": "평소 보던 채널 외에 유용하다고 생각되는 학술적 채널 이름 하나만 적어보세요.",
+    "target_categories": [],
+    "target_flags": [
+      "SBS_LOW"
+    ],
+    "target_dsao_types": [],
+    "difficulty": "low",
+    "estimated_minutes": 2,
+    "requires_proof": false,
+    "tone": "analytical",
+    "enabled": true,
+    "input_type": "text",
+    "target_issue": "정보 출처 다양성 둔화",
+    "expected_effect": "고품질 학술 정보 습득을 통한 신규 지식망 구성",
+    "related_keywords": [
+      "대안",
+      "학술",
+      "채널"
+    ]
+  },
+  {
+    "mission_id": "uas_m1",
+    "title": "영상 재생 전 '클릭 의도' 멈춤 및 선택",
+    "description": "영상을 클릭하여 시청하기 전, 내가 이 영상을 왜 누르는지 이유를 가볍게 골라보세요.",
+    "target_categories": [],
+    "target_flags": [
+      "UAS_LOW"
+    ],
+    "target_dsao_types": [
+      "PWSF",
+      "PWSL",
+      "PWMF",
+      "PWML",
+      "PNSF",
+      "PNSL",
+      "PNMF",
+      "PNML"
+    ],
+    "difficulty": "low",
+    "estimated_minutes": 1,
+    "requires_proof": false,
+    "tone": "reflective",
+    "enabled": true,
+    "input_type": "choice",
+    "choices": [
+      "정보 습득",
+      "오락 및 기분전환",
+      "무의식적 습관",
+      "심심함"
+    ],
+    "target_issue": "알고리즘 추천 피드 수동 시청 및 무의식적 스크롤",
+    "expected_effect": "시청 목적 인지를 통한 도파민 자극 완화",
+    "related_keywords": [
+      "의도",
+      "주도성",
+      "디지털웰빙"
+    ]
+  },
+  {
+    "mission_id": "uas_m2",
+    "title": "오늘 본 최선/최악의 제목 한 줄 남기기",
+    "description": "오늘 본 콘텐츠 중 가장 가치 있었던 영상 제목이나 가장 호기심만 유도했던 낚시성 제목 하나를 적어보세요.",
+    "target_categories": [],
+    "target_flags": [
+      "UAS_LOW"
+    ],
+    "target_dsao_types": [],
+    "difficulty": "low",
+    "estimated_minutes": 3,
+    "requires_proof": false,
+    "tone": "reflective",
+    "enabled": true,
+    "input_type": "text",
+    "target_issue": "자극적 낚시성 제목 노출 및 수동 수용",
+    "expected_effect": "미디어 리터러시 향상 및 주체적 필터링",
+    "related_keywords": [
+      "낚시성",
+      "비평",
+      "평가"
+    ]
+  },
+  {
+    "mission_id": "shorts_m1",
+    "title": "숏츠 5개 뒤 키워드 하나 적기",
+    "description": "다음 숏츠 묶음을 본 뒤 방금 반복된 단어를 하나만 적어보세요. 뇌의 필터를 작동시키는 연습입니다.",
+    "target_categories": [],
+    "target_flags": [
+      "SHORTS_HIGH"
+    ],
+    "target_dsao_types": [
+      "DWSF",
+      "DWMF",
+      "DNSF",
+      "DNMF",
+      "PWSF",
+      "PWMF",
+      "PNSF",
+      "PNMF"
+    ],
+    "difficulty": "low",
+    "estimated_minutes": 2,
+    "requires_proof": false,
+    "tone": "protective",
+    "enabled": true,
+    "input_type": "text",
+    "target_issue": "숏폼 반복 재생으로 인한 도파민 루프 및 자극 소비",
+    "expected_effect": "수동 루프 완화 및 능동 인지 복원",
+    "related_keywords": [
+      "숏츠",
+      "도파민",
+      "키워드"
+    ]
+  }
+]
