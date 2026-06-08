@@ -207,7 +207,9 @@ def calculate_scores_v2(
         if n_sources <= 1:
             sbs_score = 0.0
         else:
-            sbs_score = ((1.0 - hhi) / (1.0 - 1.0 / n_sources)) * 100.0
+            relative_balance = ((1.0 - hhi) / (1.0 - 1.0 / n_sources)) * 100.0
+            source_count_factor = 0.65 + 0.35 * (1.0 - math.exp(-n_sources / 3.0))
+            sbs_score = relative_balance * source_count_factor
         sbs_confidence = base_confidence * min(
             1.0,
             n_sources / MIN_DATA_REQUIREMENTS["channel_count"],
