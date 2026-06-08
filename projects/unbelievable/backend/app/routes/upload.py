@@ -233,9 +233,7 @@ def apply_youtube_duration_metadata(events: List[Dict[str, Any]], mock_estimatio
         video_ids.append(video_id)
 
     metadata_limit = DURATION_LIMITS["metadata_video_limit"]
-    metadata_by_id: Dict[str, Dict[str, Any]] = {}
-    for video_id in video_ids[:metadata_limit]:
-        metadata_by_id[video_id] = youtube_client.get_video_metadata(video_id)
+    metadata_by_id = youtube_client.get_videos_metadata_batch(video_ids[:metadata_limit])
 
     for event in events:
         event["mock_estimation_used"] = mock_estimation_enabled
