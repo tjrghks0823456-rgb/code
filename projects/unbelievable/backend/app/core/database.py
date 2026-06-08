@@ -94,16 +94,32 @@ class DatabaseClient:
     def __init__(self):
         self.supabase_url = settings.SUPABASE_URL
         self.supabase_key = settings.SUPABASE_KEY
-        self.is_mock = self.supabase_url == "https://your-supabase-url.supabase.co"
+        
+        url = self.supabase_url or ""
+        key = self.supabase_key or ""
+        
+        is_placeholder_url = (
+            not url or
+            "your-supabase-url" in url or
+            "your-project-ref" in url
+        )
+        is_placeholder_key = (
+            not key or
+            "your-supabase-anon-key" in key or
+            "your-supabase-secret-key" in key
+        )
+        
+        self.is_mock = is_placeholder_url or is_placeholder_key
         self.client = None
         
         if not self.is_mock:
             try:
                 from supabase import create_client
-                self.client = create_client(self.supabase_url, self.supabase_key)
+                self.client = create_client(url, key)
                 logger.info("Supabase client initialized successfully.")
             except Exception as e:
-                logger.error(f"Failed to connect to Supabase: {e}. Falling back to Mock DB.")
+                # Log without printing settings.SUPABASE_KEY or settings.SUPABASE_URL to prevent leaks
+                logger.error("Failed to connect to Supabase: connection error. Falling back to Mock DB.")
                 self.is_mock = True
 
     def save_data(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:

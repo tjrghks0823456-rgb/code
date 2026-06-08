@@ -24,6 +24,9 @@ INTEREST_RULES = [
     {"category": "스포츠", "subcategory": "축구", "keywords": ["이강인", "손흥민", "축구", "토트넘", "k리그", "premier league"], "entities": ["이강인", "손흥민"]},
     {"category": "스포츠", "subcategory": "농구", "keywords": ["농구", "nba"]},
     {"category": "스포츠", "subcategory": "배구", "keywords": ["배구", "v리그"]},
+    {"category": "스포츠", "subcategory": "골프", "keywords": ["골프", "golf", "스윙", "필드", "라운딩"]},
+    {"category": "스포츠", "subcategory": "테니스", "keywords": ["테니스", "tennis", "라켓", "백핸드"]},
+    {"category": "스포츠", "subcategory": "레저/낚시", "keywords": ["낚시", "fishing", "대어", "캠핑", "camping", "글램핑", "차박", "등산", "hiking", "클라이밍", "climbing"]},
     {"category": "스포츠", "subcategory": "e스포츠", "keywords": ["e스포츠", "esports", "lck", "롤드컵", "t1", "faker", "페이커", "젠지", "geng", "담원", "디플러스", "dk"], "entities": ["T1", "페이커"]},
     {"category": "게임", "subcategory": "롤", "keywords": ["리그오브레전드", "league of legends", "롤토체스", "롤체", "tft", "teamfighttactics", "전략적팀전투", "롤 ", "lol", "제라스", "사일러스", "바드", "룰루"]},
     {"category": "게임", "subcategory": "FPS", "keywords": ["콜오브듀티", "call of duty", "발로란트", "valorant", "오버워치", "overwatch", "fps", "배틀그라운드", "pubg"]},
@@ -36,9 +39,9 @@ INTEREST_RULES = [
     {"category": "정치/사회", "subcategory": "국회/정당/선거", "keywords": ["국회", "정당", "선거", "여론조사", "대통령", "서울시장", "시장 후보"]},
     {"category": "정치/사회", "subcategory": "사회이슈/사건", "keywords": ["사회", "시사", "사건", "논란", "법원", "검찰", "뉴스", "국토부", "국토부장관", "철근 누락", "부실시공"]},
     {"category": "정치/사회", "subcategory": "국제정치", "keywords": ["국제정치", "미국", "중국", "일본", "러시아", "전쟁"]},
-    {"category": "IT/테크", "subcategory": "AI", "keywords": ["ai", "gemini", "chatgpt", "openai", "llm", "머신러닝", "인공지능"]},
+    {"category": "IT/테크", "subcategory": "AI", "keywords": ["ai", "gemini", "chatgpt", "openai", "llm", "머신러닝", "인공지능", "딥러닝", "자연어", "nlp", "강화학습", "형태소", "언어 모델", "음성 인식", "컴퓨터 비전", "vision", "neural"]},
     {"category": "IT/테크", "subcategory": "클라우드", "keywords": ["google cloud", "gcp", "aws", "azure", "클라우드"]},
-    {"category": "IT/테크", "subcategory": "프로그래밍", "keywords": ["코딩", "프로그래밍", "개발자", "python", "javascript", "react", "next.js", "fastapi"]},
+    {"category": "IT/테크", "subcategory": "프로그래밍", "keywords": ["코딩", "프로그래밍", "개발자", "python", "javascript", "자바스크립트", "java", "자바", "react", "next.js", "fastapi", "django", "장고", "database", "데이터베이스", "db", "network", "네트워크", "운영체제", "os", "자료구조", "알고리즘", "algorithm", "컴파일러", "software", "소프트웨어", "git", "github", "서버", "system", "컴퓨터공학", "cs", "프로젝트 관리", "pm"]},
     {"category": "IT/테크", "subcategory": "노트북/PC", "keywords": ["노트북", "pc", "컴퓨터", "맥북", "그래픽카드", "그램", "lg전자", "core ultra", "ram", "ssd", "win11"]},
     {"category": "IT/테크", "subcategory": "모바일/기기", "keywords": ["갤럭시", "아이폰", "android", "스마트폰", "태블릿"]},
     {"category": "쇼핑/제품", "subcategory": "제품탐색", "keywords": ["추천", "리뷰", "제품", "가격", "비교", "언박싱"]},
@@ -55,7 +58,8 @@ INTEREST_RULES = [
     {"category": "학습/자격증", "subcategory": "대학과제", "keywords": ["대학과제", "과제", "레포트", "보고서"]},
     {"category": "학습/자격증", "subcategory": "자격증", "keywords": ["자격증", "컴활", "한국사"]},
     {"category": "학습/자격증", "subcategory": "영어/어학", "keywords": ["영어", "토익", "토플", "일본어", "중국어", "회화"]},
-    {"category": "엔터테인먼트", "subcategory": "음악/아이돌", "keywords": ["음악", "노래", "뮤직", "아이돌", "밴드", "힙합", "락힙합", "록", "rock", "ost", "딘딘", "리센느", "지누션", "여돌", "스텔라이브", "정국", "뉴진스", "아이브", "세븐틴", "my whole world", "사랑이라 했던 말", "smile boy", "스마일보이", "into your summer", "flying high with u", "bumpa", "pokerface", "goose senbi", "허키"]},
+    {"category": "학습/자격증", "subcategory": "교양/인문/과학", "keywords": ["다큐", "다큐멘터리", "역사", "우주", "과학", "인문학", "철학", "기원", "생명", "우주의"]},
+    {"category": "엔터테인먼트", "subcategory": "음악/아이돌", "keywords": ["음악", "노래", "뮤직", "아이돌", "밴드", "힙합", "락힙합", "록", "rock", "ost", "딘딘", "리센느", "지누션", "여돌", "스텔라이브", "정국", "뉴진스", "아이브", "세븐틴", "my whole world", "사랑이라 했던 말", "smile boy", "스마일보이", "into your summer", "flying high with u", "bumpa", "pokerface", "goose senbi", "허키", "asmr", "클래식", "힐링", "명상", "재즈", "pop", "classic", "발라드"]},
     {"category": "엔터테인먼트", "subcategory": "영화/드라마", "keywords": ["영화", "드라마", "예고편", "넷플릭스", "ott"]},
     {"category": "엔터테인먼트", "subcategory": "예능/인물", "keywords": ["예능", "인터뷰", "김호영", "박명수", "유재석", "유병재", "강동원", "정지훈", "이민우", "복냥즈", "차쥐뿔", "\ucc28\uc950\ubfcc", "고마워요 누나", "배우", "천만 배우", "수상소감", "웃긴", "침착맨", "라이브"]},
     {"category": "여행/맛집", "subcategory": "여행", "keywords": ["여행", "호텔", "항공", "숙소", "호캉스", "해외여행", "국내여행"]},
@@ -64,6 +68,7 @@ INTEREST_RULES = [
     {"category": "건강/운동", "subcategory": "건강관리", "keywords": ["건강", "다이어트", "영양제", "피부", "수면", "병원"]},
     {"category": "라이프스타일", "subcategory": "일상", "keywords": ["브이로그", "vlog", "일상", "루틴", "하루"]},
     {"category": "라이프스타일", "subcategory": "생활", "keywords": ["요리", "레시피", "인테리어", "청소", "살림", "육아", "이사", "해외이사", "주재원이사", "세차", "주방"]},
+    {"category": "라이프스타일", "subcategory": "반려동물", "keywords": ["강아지", "고양이", "반려동물", "반려견", "반려묘", "집사", "동물", "dog", "cat", "pet"]},
 ]
 
 RAW_CATEGORY_MAP = {
@@ -75,6 +80,20 @@ RAW_CATEGORY_MAP = {
     "games": ("게임", "기타 게임"),
     "travel": ("여행/맛집", "여행"),
     "health": ("건강/운동", "건강관리"),
+    "music": ("엔터테인먼트", "음악/아이돌"),
+    "gaming": ("게임", "기타 게임"),
+    "entertainment": ("엔터테인먼트", "기타 엔터테인먼트"),
+    "education": ("학습/자격증", "기타 학습"),
+    "news & politics": ("정치/사회", "방송뉴스"),
+    "science & technology": ("IT/테크", "기타 IT"),
+    "howto & style": ("라이프스타일", "생활"),
+    "people & blogs": ("라이프스타일", "일상"),
+    "film & animation": ("엔터테인먼트", "영화/드라마"),
+    "travel & events": ("여행/맛집", "여행"),
+    "pets & animals": ("라이프스타일", "생활"),
+    "comedy": ("엔터테인먼트", "예능/인물"),
+    "autos & vehicles": ("라이프스타일", "생활"),
+    "nonprofits & activism": ("정치/사회", "사회이슈/사건"),
 }
 
 
@@ -186,42 +205,96 @@ def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str
     raw = _text(text)
     raw_cat = _text(raw_category)
     channel = _text(channel_name)
-    evidence_text = " ".join(part for part in [raw, channel, raw_cat] if part).lower()
 
+    # 1. Pre-processing: Extract bracket contents
+    brackets_content = re.findall(r'\[([^\]]+)\]|\(([^)]+)\)', raw)
+    bracket_words = []
+    for b1, b2 in brackets_content:
+        b = b1 or b2
+        if b:
+            bracket_words.extend([w.strip().lower() for w in re.split(r'\s+', b) if w.strip()])
+
+    # Clean text (remove brackets and special characters)
+    clean_raw = re.sub(r'\[[^\]]+\]|\([^)]+\)', ' ', raw)
+    clean_raw = re.sub(r'[^\w\s]', ' ', clean_raw)
+    clean_raw = re.sub(r'\s+', ' ', clean_raw).strip().lower()
+
+    # 2. Style Filtering
+    STYLE_KEYWORDS = [
+        "official", "mv", "live", "lyrics", "가사", "직캠", "shorts", "highlight", 
+        "하이라이트", "리뷰", "playlist", "풀버전", "클립", "공식", "teaser", "티저", 
+        "캠", "fancam", "sub", "자막", "asmr", "힐링", "강의", "강좌", "레슨", 
+        "특강", "튜토리얼", "tutorial", "소개", "개론", "입문", "기초", "론"
+    ]
+    
+    # Check broad keywords before style filtering
+    BROAD_KEYWORDS = {"추천", "리뷰", "비교", "가격"}
+    original_evidence = " ".join(part for part in [clean_raw, channel.lower(), raw_cat.lower()] if part)
+    detected_broad = [kw for kw in BROAD_KEYWORDS if kw in original_evidence]
+
+    evidence_text = original_evidence
+    detected_styles = []
+    for style_kw in STYLE_KEYWORDS:
+        if style_kw in original_evidence:
+            detected_styles.append(style_kw)
+
+    # 3. Rule Matching
+    matched_rule = None
+    matched_kws = []
     for rule in INTEREST_RULES:
         keywords = rule.get("keywords", [])
         matched = [keyword for keyword in keywords if _keyword_matches(evidence_text, keyword)]
         if not matched:
             continue
 
+        # Enforce Broad Keywords Rule: broad keywords cannot decide primary category alone
+        matched_primary = [kw for kw in matched if kw not in BROAD_KEYWORDS]
+        if matched and not matched_primary:
+            continue
+
+        matched_rule = rule
+        matched_kws = matched
+        break
+
+    if matched_rule:
         entities = [
             entity
-            for entity in rule.get("entities", [])
+            for entity in matched_rule.get("entities", [])
             if _keyword_matches(evidence_text, entity)
         ]
-        matched_keywords = matched[:]
-        subcategory = rule["subcategory"]
+        matched_keywords = matched_kws[:]
+        subcategory = matched_rule["subcategory"]
         if entities and subcategory not in matched_keywords:
             matched_keywords.append(subcategory)
 
-        confidence = "high" if entities or len(matched) >= 2 else "medium"
+        confidence = "high" if entities or len(matched_kws) >= 2 else "medium"
+        
+        # Populate secondary tags with detected style/broad/bracket clues
+        secondary_tags = matched_rule.get("secondary_tags", [])[:]
+        secondary_tags.extend(detected_styles)
+        secondary_tags.extend(bracket_words)
+        secondary_tags.extend(detected_broad)
+        
         return _base_topic(
-            rule["category"],
+            matched_rule["category"],
             subcategory,
             confidence,
             raw,
             raw_cat,
             matched_keywords=matched_keywords[:6],
             entities=entities,
-            source_group=rule.get("source_group", ""),
-            secondary_tags=rule.get("secondary_tags", []),
+            source_group=matched_rule.get("source_group", ""),
+            secondary_tags=secondary_tags,
         )
 
+    # 4. YouTube Category Mapping Fallback
     raw_topic = _topic_from_raw_category(raw_cat, evidence_text, raw)
     if raw_topic:
+        # Also populate secondary tags for fallback topics
+        raw_topic["secondary_tags"] = _dedupe(raw_topic["secondary_tags"] + detected_styles + bracket_words + detected_broad)
         return raw_topic
 
-    return _base_topic("기타/미분류", "미분류", "low", raw, raw_cat)
+    return _base_topic("기타/미분류", "미분류", "low", raw, raw_cat, secondary_tags=detected_styles + bracket_words + detected_broad)
 
 
 def extract_search_query(event: Dict[str, Any], raw_text: str = "") -> Optional[str]:

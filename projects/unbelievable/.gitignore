@@ -34,8 +34,16 @@ htmlcov/
 # ===========================
 .env
 .env.*
+*.env
+*.env.*
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+frontend/.env.local
 !.env.local.example
-!backend/.env.txt
+!backend/.env.example
+!frontend/.env.local.example
 
 # ===========================
 # Database files
