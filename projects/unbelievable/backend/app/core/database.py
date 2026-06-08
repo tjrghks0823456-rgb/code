@@ -124,13 +124,33 @@ class DatabaseClient:
 
     def save_data(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Saves a row of data into Supabase (upsert) or falls back to local MockDB."""
+        # Auto-pruning extra keys not in database schema to prevent PostgREST columns-not-found errors
+        TABLE_COLUMNS = {
+            "profiles": ["id", "email", "nickname", "birth_year", "survey_scores", "survey_result", "raw_survey", "created_at"],
+            "raw_file": ["id", "user_id", "storage_path", "upload_status", "excluded_ad_count", "skipped_sources_with_reason", "ad_skip_summary", "data_coverage", "created_at"],
+            "norm_event": ["id", "file_id", "event_time", "time_delta_sec", "video_duration_sec", "text_base", "platform", "action_type", "source_surface", "source_type", "content_format", "intent_level", "raw_time", "video_id", "channel_name", "channel_url", "title_url", "source_confidence", "is_duration_estimated", "estimated_duration_sec", "raw_item"],
+            "session_text": ["id", "file_id", "aggregated_text", "token_count", "event_count", "start_time", "end_time"],
+            "nlp_result": ["id", "session_id", "categories_json", "sentiment_score", "sentiment_magnitude", "language_code", "nlp_provider", "local_category", "category_confidence", "category_candidates", "category_source", "keywords_json", "created_at"],
+            "score_run": ["run_id", "user_id", "file_id", "bias_risk_score", "weighted_health", "mbti_type", "exception_codes", "sampling_metadata", "data_quality_flags", "information_bias_risk", "shorts_stimulation_risk", "final_detox_risk", "shorts_analysis", "analyzed_at"],
+            "score_axis": ["axis_id", "run_id", "axis_code", "axis_value", "axis_grade", "created_at"],
+            "detox_plan": ["plan_id", "run_id", "user_id", "reverse_queries", "mission_json", "created_at"],
+            "mission_log": ["log_id", "plan_id", "mission_item_id", "completed_yn", "completed_at"],
+            "audit_log": ["id", "event_type", "target_id", "status_code", "latency_ms", "provider", "error_code", "created_at"],
+            "content_classification_feedback": ["id", "user_id", "event_id", "content_text", "predicted_category_l1", "predicted_category_l2", "corrected_category_l1", "corrected_category_l2", "confidence", "feedback_reason", "created_at"]
+        }
+        
+        pruned_data = data
+        if table in TABLE_COLUMNS:
+            valid_cols = set(TABLE_COLUMNS[table])
+            pruned_data = {k: v for k, v in data.items() if k in valid_cols}
+
         if self.is_mock or not self.client:
             logger.info(f"[Storage] Saved {table} to MockDB (In-memory).")
             result = mock_db.insert(table, data)
             result["__storage"] = "MockDB"
             return result
         try:
-            res = self.client.table(table).upsert(data).execute()
+            res = self.client.table(table).upsert(pruned_data).execute()
             if hasattr(res, "data") and res.data:
                 logger.info(f"[Storage] Successfully saved {table} to Supabase Cloud.")
                 result = res.data[0]
