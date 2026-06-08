@@ -90,6 +90,70 @@ class YouTubeClient:
             result = self._get_mock_video(video_id)
             result["fallback_used"] = True
             return result
+
+    def get_videos_metadata_batch(self, video_ids: list) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetches metadata for up to 50 video IDs in a single batch request to YouTube API.
+        Returns a dictionary mapping video_id to its metadata dictionary.
+        """
+        if not video_ids:
+            return {}
+            
+        # Limit to 50 video IDs (YouTube API limit per request)
+        ids_to_query = video_ids[:50]
+        
+        if self.is_mock:
+            return {vid: self._get_mock_video(vid) for vid in ids_to_query}
+            
+        try:
+            import httpx
+            url = "https://www.googleapis.com/youtube/v3/videos"
+            params = {
+                "part": "snippet,contentDetails,topicDetails",
+                "id": ",".join(ids_to_query),
+                "key": self.api_key
+            }
+            response = httpx.get(url, params=params, timeout=5.0)
+            result_map = {}
+            if response.status_code == 200:
+                data = response.json()
+                items = data.get("items", [])
+                logger.info(f"YouTube videos.list batch query returned {len(items)} items")
+                for item in items:
+                    vid = item.get("id")
+                    snippet = item.get("snippet", {})
+                    content_details = item.get("contentDetails", {})
+                    topic_details = item.get("topicDetails", {})
+                    duration_sec = parse_iso8601_duration(content_details.get("duration"))
+                    
+                    result_map[vid] = {
+                        "video_id": vid,
+                        "title": snippet.get("title", ""),
+                        "description": snippet.get("description", ""),
+                        "tags": snippet.get("tags", []),
+                        "categoryId": snippet.get("categoryId", ""),
+                        "channelId": snippet.get("channelId", ""),
+                        "topicDetails": topic_details.get("topicIds", []) + topic_details.get("relevantTopicIds", []),
+                        "duration_iso8601": content_details.get("duration", ""),
+                        "duration_sec": duration_sec,
+                        "api_success": True,
+                        "mock_used": False,
+                        "fallback_used": False
+                    }
+                
+                # For any requested video IDs that were not returned by the API (e.g. deleted or private)
+                for vid in ids_to_query:
+                    if vid not in result_map:
+                        mock_res = self._get_mock_video(vid)
+                        mock_res["fallback_used"] = True
+                        result_map[vid] = mock_res
+                return result_map
+                
+            logger.warning(f"YouTube videos.list batch query returned code {response.status_code}")
+            return {vid: {**self._get_mock_video(vid), "fallback_used": True} for vid in ids_to_query}
+        except Exception as e:
+            logger.error(f"Failed to fetch YouTube videos batch metadata: {e}")
+            return {vid: {**self._get_mock_video(vid), "fallback_used": True} for vid in ids_to_query}
             
     def get_channel_metadata(self, channel_id: str) -> Dict[str, Any]:
         """
