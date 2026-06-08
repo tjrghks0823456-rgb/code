@@ -303,7 +303,28 @@ async def get_dashboard_summary(
         # 3. Fetch user profile survey scores (for meta-gap calculation)
         profiles = db_client.fetch_data("profiles", {"id": user_id})
         profile = profiles[0] if profiles else {}
-        survey_scores = profile.get("survey_scores", {})
+        
+        raw_survey_data = None
+        survey_scores = {}
+        source = "none"
+        
+        if profile.get("raw_survey"):
+            raw_survey_data = profile.get("raw_survey")
+            survey_scores = raw_survey_data.get("survey_scores") or profile.get("survey_scores") or {}
+            source = "raw_survey"
+        elif profile.get("survey_result"):
+            raw_survey_data = profile.get("survey_result")
+            survey_scores = raw_survey_data.get("survey_scores") or profile.get("survey_scores") or {}
+            source = "survey_result"
+        elif profile.get("survey_scores"):
+            survey_scores = profile.get("survey_scores") or {}
+            source = "survey_scores"
+            
+        survey_fallback = {
+            "source": source,
+            "raw_survey": raw_survey_data,
+            "survey_scores": survey_scores
+        }
         
         # Determine if survey data is available (needs at least one valid axis score)
         valid_survey_axes = [k for k in ["TDS", "SBS", "EBS", "VOS", "SMS", "UAS"] if k in survey_scores]
@@ -688,9 +709,10 @@ async def get_dashboard_summary(
         return {
             "run_id": run_id,
             "user": {
-                "nickname": profile["nickname"],
-                "email": profile["email"]
+                "nickname": profile.get("nickname", "사용자"),
+                "email": profile.get("email", "user@example.com")
             },
+            "survey_fallback": survey_fallback,
             "bias_risk_score": run["bias_risk_score"],
             "information_bias_risk": run.get("information_bias_risk", risk_overall["information_bias_risk"]),
             "shorts_stimulation_risk": run.get("shorts_stimulation_risk", risk_overall["shorts_stimulation_risk"]),

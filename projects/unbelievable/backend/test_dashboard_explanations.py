@@ -91,7 +91,7 @@ def validate_scenario(name, history):
 
     # 1. Upload
     files = {"files": ("watch-history.json", json.dumps(history), "application/json")}
-    res = httpx.post(f"{BASE_URL}/upload/takeout", files=files, data={"mock_estimation": "false"})
+    res = httpx.post(f"{BASE_URL}/upload/takeout", files=files, data={"mock_estimation": "false"}, timeout=60.0)
     if res.status_code != 200:
         print(f"FAIL: Upload failed: {res.text}")
         sys.exit(1)

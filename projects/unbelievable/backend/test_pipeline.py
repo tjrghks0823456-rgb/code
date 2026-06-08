@@ -104,7 +104,7 @@ def run_tests():
     data = {"mock_estimation": "false"} # We test with mock_estimation = False
     
     print("\n[Step 1] Uploading Takeout history to /upload/takeout...")
-    res = httpx.post(f"{BASE_URL}/upload/takeout", files=files, data=data)
+    res = httpx.post(f"{BASE_URL}/upload/takeout", files=files, data=data, timeout=60.0)
     if res.status_code != 200:
         print(f"FAIL: Upload failed with status {res.status_code}: {res.text}")
         sys.exit(1)

@@ -321,6 +321,30 @@ function graphCenterLabel(label: string) {
 
 function buildInterestGraphData(label: string, map: any, tone: "search" | "video" | "shorts") {
   const distribution: InterestCategory[] = Array.isArray(map?.category_distribution) ? map.category_distribution : [];
+  
+  // Filter out "기타/미분류" (Unclassified) to avoid ratio distortion in the graph
+  const filteredDistribution = distribution.filter(
+    (c) => (c.category || c.name || "기타/미분류") !== "기타/미분류"
+  );
+  
+  // Recalculate ratios of remaining categories to sum to 100% of classified items
+  const totalClassifiedCount = filteredDistribution.reduce((acc, c) => acc + (c.count || 0), 0);
+  const totalOriginalRatio = filteredDistribution.reduce((acc, c) => acc + Number(c.ratio ?? c.value ?? 0), 0);
+  
+  const normalizedDistribution = filteredDistribution.map(category => {
+    let ratio = 0;
+    if (totalClassifiedCount > 0) {
+      ratio = ((category.count || 0) / totalClassifiedCount) * 100;
+    } else if (totalOriginalRatio > 0) {
+      ratio = (Number(category.ratio ?? category.value ?? 0) / totalOriginalRatio) * 100;
+    }
+    return {
+      ...category,
+      ratio,
+      value: ratio
+    };
+  });
+
   const nodes: InterestGraphNode[] = [];
   const edges: InterestGraphEdge[] = [];
   let nextId = 1;
@@ -334,7 +358,7 @@ function buildInterestGraphData(label: string, map: any, tone: "search" | "video
     meta: { kind: label, total: map?.total_search_count || map?.total_video_count || map?.total_shorts_count || 0 }
   });
 
-  distribution.slice(0, 7).forEach((category, index) => {
+  normalizedDistribution.slice(0, 7).forEach((category, index) => {
     const categoryName = category.category || category.name || "기타/미분류";
     const ratio = Number(category.ratio ?? category.value ?? 0);
     const categoryId = nextId++;
@@ -378,7 +402,7 @@ function buildInterestGraphData(label: string, map: any, tone: "search" | "video
     });
   });
 
-  return { nodes, edges, categoryCount: distribution.length, tone };
+  return { nodes, edges, categoryCount: normalizedDistribution.length, tone };
 }
 
 function InterestNetworkGraph({
@@ -569,21 +593,27 @@ function InterestNetworkGraph({
         </span>
       </div>
       {graphData.nodes.length > 1 && coverage.classified_ratio !== undefined && (
-        <div className="mb-3 rounded-2xl border border-slate-100 bg-[#fbfaf7] px-3 py-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-black text-slate-500">
-            <span>분류 커버리지 {classifiedRatio}%</span>
-            <span>미분류 {unclassifiedCount}건</span>
+        <div className="mb-3 rounded-2xl border border-slate-100 bg-[#fbfaf7] px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-black text-slate-700">
+            <span>전체 기준 분류 커버리지: {classifiedRatio}%</span>
+            <span>분류 보류 비율: {Math.max(0, 100 - classifiedRatio)}% ({unclassifiedCount}건)</span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
             <div className="h-full rounded-full bg-teal-500" style={{ width: `${Math.max(0, Math.min(100, classifiedRatio))}%` }} />
           </div>
+          <p className="mt-2 text-[11px] font-medium leading-4 text-slate-500">
+            💡 일부 영상 제목은 고유명사, 영어 제목, 곡명, 게임명 등으로 인해 현재 로컬 분류 사전에서 보류되었습니다. 이 데이터는 향후 사전 보강 및 피드백 학습에 활용할 수 있습니다.
+          </p>
           {unclassifiedSamples.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {unclassifiedSamples.slice(0, 5).map((sample: string) => (
-                <span key={sample} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-400">
-                  {shortLabel(sample, 14)}
-                </span>
-              ))}
+            <div className="mt-2.5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">대표 보류 샘플</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {unclassifiedSamples.slice(0, 5).map((sample: string) => (
+                  <span key={sample} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-500 border border-slate-200" title={sample}>
+                    {shortLabel(sample, 18)}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -678,7 +708,7 @@ function InterestNetworkGraph({
               {(selectedMeta.raw_items || []).slice(0, 3).map((item: string) => (
                 <span key={item} className="rounded-full bg-white px-2 py-1">{shortLabel(item, 18)}</span>
               ))}
-              {selectedMeta.confidence && <span className="rounded-full bg-white px-2 py-1">confidence: {selectedMeta.confidence}</span>}
+              {selectedMeta.confidence && <span className="rounded-full bg-white px-2 py-1">신뢰도: {formatConfidence(selectedMeta.confidence)}</span>}
             </div>
           </div>
         </>
@@ -745,7 +775,7 @@ function DashboardContent() {
     setGeneratingPlan(true);
     setDetoxError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/detox/generate?run_id=${runId}&user_id=${DEFAULT_USER_ID}`, {
+      const res = await fetch(apiUrl(`/api/v1/detox/generate?run_id=${runId}&user_id=${DEFAULT_USER_ID}`), {
         method: "POST"
       });
       if (res.ok) {
@@ -774,6 +804,42 @@ function DashboardContent() {
   const processedData = useMemo(() => {
     return data;
   }, [data]);
+
+  const selfSurveyData = useMemo(() => {
+    if (selfSurvey) return selfSurvey;
+
+    const fallback = processedData?.survey_fallback;
+    if (fallback && fallback.source !== "none") {
+      const raw = fallback.raw_survey || {};
+      const scores = fallback.survey_scores || raw.survey_scores || {};
+      
+      let resultCode = raw.result_code || raw.resultCode || "";
+      if (!resultCode && fallback.survey_scores) {
+        const uas = fallback.survey_scores.UAS ?? 50;
+        const tds = fallback.survey_scores.TDS ?? 50;
+        const sms = fallback.survey_scores.SMS ?? 50;
+        const d_p = uas >= 50 ? "D" : "P";
+        const w_n = tds >= 50 ? "W" : "N";
+        const m_s = sms >= 50 ? "M" : "S";
+        const l_f = processedData?.actual_dsao?.code?.[3] || "L";
+        resultCode = `${d_p}${w_n}${m_s}${l_f}`;
+      }
+      if (!resultCode) {
+        resultCode = processedData?.actual_dsao?.code || "PNML";
+      }
+      
+      const resultName = raw.result_name || raw.resultName || "자가진단 성향";
+
+      return {
+        resultCode,
+        resultName,
+        axisScores: scores,
+        source: fallback.source
+      };
+    }
+
+    return null;
+  }, [selfSurvey, processedData]);
 
   if (loading) {
     return (
@@ -813,8 +879,9 @@ function DashboardContent() {
   }));
 
   const actualCode = processedData.actual_dsao?.code?.toUpperCase() || "PNML";
+
   const actualCharacter = getDsaoCharacter(actualCode);
-  const selfCharacter = getDsaoCharacter(selfSurvey?.resultCode || actualCode);
+  const selfCharacter = getDsaoCharacter(selfSurveyData?.resultCode || actualCode);
   const riskScore = Number(processedData.bias_risk_score || 0);
   const userAgency = Math.round(Number(metaGap.UAS?.actual || 0));
   const insights = processedData.insights || {};
@@ -1402,17 +1469,17 @@ function DashboardContent() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-300">detox guide</p>
-                <h3 className="mt-2 text-xl font-black">오늘의 디톡스 가이드</h3>
+              <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-5 text-slate-900">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">detox guide</p>
+                <h3 className="mt-2 text-xl font-black text-slate-950">오늘의 디톡스 가이드</h3>
                 <div className="mt-5 space-y-3">
                   {detoxGuideItems.map((item) => (
-                    <div key={item.title} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                    <div key={item.title} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-black">{item.title}</p>
-                        <span className="rounded-full bg-teal-300/20 px-2.5 py-1 text-[10px] font-black text-teal-200">{item.tag}</span>
+                        <p className="text-sm font-black text-slate-950">{item.title}</p>
+                        <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-black text-teal-700 border border-teal-100">{item.tag}</span>
                       </div>
-                      <p className="mt-2 text-xs font-semibold leading-5 text-slate-300">{item.description}</p>
+                      <p className="mt-2 text-xs font-semibold leading-5 text-slate-650">{item.description}</p>
                     </div>
                   ))}
                 </div>
@@ -1474,7 +1541,7 @@ function DashboardContent() {
           </div>
         </div>
 
-        {selfSurvey && (
+        {selfSurveyData ? (
           <Card className="p-6 md:p-8">
             <div className="mb-6">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">core comparison</p>
@@ -1485,9 +1552,9 @@ function DashboardContent() {
               <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-5">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">자가진단</p>
                 <h3 className="mt-2 text-2xl font-black text-slate-950">{selfCharacter.characterName}</h3>
-                <p className="mt-1 text-sm font-bold text-slate-600">{selfSurvey.resultCode} · {selfCharacter.title}</p>
+                <p className="mt-1 text-sm font-bold text-slate-600">{selfSurveyData.resultCode} · {selfCharacter.title}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {axisSummary(selfSurvey.resultCode).map((item) => (
+                  {axisSummary(selfSurveyData.resultCode).map((item) => (
                     <span key={item} className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">{item}</span>
                   ))}
                 </div>
@@ -1558,6 +1625,15 @@ function DashboardContent() {
                 "6개 지표 전체를 기준으로 착각 지수를 계산했습니다."
               )}
             </div>
+          </Card>
+        ) : (
+          <Card className="p-6 md:p-8 text-center text-slate-500 bg-[#fbfaf7] border border-slate-200 rounded-3xl">
+            <AlertTriangle className="mx-auto text-amber-500 mb-2" size={32} />
+            <h3 className="text-lg font-bold text-slate-800 font-black">자가진단 데이터 없음</h3>
+            <p className="text-xs mt-2 text-slate-500 leading-relaxed font-semibold">
+              비교해볼 수 있는 자가진단 성향 데이터가 존재하지 않습니다.<br />
+              대시보드 상단이나 이전 화면에서 자가진단 설문을 먼저 진행해 보세요.
+            </p>
           </Card>
         )}
 
@@ -1719,18 +1795,18 @@ function DashboardContent() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 md:p-8 text-slate-100 shadow-2xl">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-purple-400">Data Reliability & Pipeline</p>
-          <h2 className="mt-2 text-2xl font-black text-white">분석 신뢰도 및 데이터 품질</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 text-slate-900 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-purple-700">Data Reliability & Pipeline</p>
+          <h2 className="mt-2 text-2xl font-black text-slate-950">분석 신뢰도 및 데이터 품질</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
             업로드된 YouTube Takeout 데이터의 분석 품질 상태와 표본 수집 정보입니다.
           </p>
 
           <div className="mt-6 grid gap-6 md:grid-cols-2">
             <div className="space-y-4">
               {/* Overall Confidence Card */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-                <h3 className="text-sm font-black text-white">종합 분석 신뢰도</h3>
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                <h3 className="text-sm font-black text-slate-950">종합 분석 신뢰도</h3>
                 <div className="mt-3 flex items-center gap-3">
                   <span className={[
                     "rounded-full px-3 py-1 text-xs font-black text-white",
@@ -1739,34 +1815,34 @@ function DashboardContent() {
                   ].join(" ")}>
                     {formatConfidence(processedData.overall_confidence)}
                   </span>
-                  <p className="text-xs font-semibold text-slate-300">
+                  <p className="text-xs font-semibold text-slate-600">
                     {CONFIDENCE_DESCS[processedData.overall_confidence || "medium"]}
                   </p>
                 </div>
               </div>
 
               {/* Sampling Information Card */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-                <h3 className="text-sm font-black text-white">세션 대표 샘플링 정보</h3>
-                <div className="mt-3 text-xs font-semibold text-slate-300">
-                  <p className="text-sm font-black text-purple-300 mb-3">
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                <h3 className="text-sm font-black text-slate-950">세션 대표 샘플링 정보</h3>
+                <div className="mt-3 text-xs font-semibold text-slate-600">
+                  <p className="text-sm font-black text-purple-700 mb-3">
                     전체 {processedData.sampling_metadata?.total_session_count || processedData.data_coverage?.total_session_count || 0}개 세션 중 대표 {processedData.sampling_metadata?.sampled_session_count || processedData.data_coverage?.sampled_session_count || 0}개 세션을 분석했습니다.
                   </p>
-                  <p className="text-slate-400 mb-4 leading-relaxed">
+                  <p className="text-slate-500 mb-4 leading-relaxed">
                     {processedData.sampling_metadata?.sampling_strategy === "all_sessions" 
                       ? "전체 세션을 기반으로 분석을 수행했습니다." 
                       : "최근/오래된/중간/긴 세션/검색 포함 세션을 혼합해 대표 샘플을 구성했습니다."}
                   </p>
                   <div className="space-y-2 text-[11px]">
-                    <div className="flex justify-between border-b border-slate-800 pb-2">
-                      <span className="text-slate-400">샘플링 추출 전략</span>
-                      <span className="font-bold text-white">
+                    <div className="flex justify-between border-b border-slate-200 pb-2">
+                      <span className="text-slate-500">샘플링 추출 전략</span>
+                      <span className="font-bold text-slate-950">
                         {processedData.sampling_metadata?.sampling_strategy === "all_sessions" ? "전체 분석 (All)" : "대표성 블렌딩 (Blended)"}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">NLP 입력 토큰량</span>
-                      <span className="font-bold text-white font-mono">
+                      <span className="text-slate-500">NLP 입력 토큰량</span>
+                      <span className="font-bold text-slate-950 font-mono">
                         {Number(processedData.sampling_metadata?.nlp_input_token_count || 0).toLocaleString()} 자
                       </span>
                     </div>
@@ -1777,29 +1853,29 @@ function DashboardContent() {
 
             <div className="space-y-4">
               {/* Excluded Axes Card */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-                <h3 className="text-sm font-black text-white">평가 제외 지표 (Excluded Axes)</h3>
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                <h3 className="text-sm font-black text-slate-950">평가 제외 지표 (Excluded Axes)</h3>
                 <div className="mt-3">
                   {processedData.excluded_axes && processedData.excluded_axes.length > 0 ? (
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2">
                         {processedData.excluded_axes.map((axis: string) => (
-                          <span key={axis} className="rounded-full bg-rose-500/10 border border-rose-500/30 px-2.5 py-1 text-xs font-black text-rose-400">
+                          <span key={axis} className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-700">
                             {AXIS_LABELS[axis] || axis}
                           </span>
                         ))}
                       </div>
-                      <div className="mt-2 space-y-1.5 text-xs text-slate-300">
+                      <div className="mt-2 space-y-1.5 text-xs text-slate-600">
                         {processedData.excluded_axes.map((axis: string) => (
                           <div key={axis} className="flex gap-2">
-                            <span className="text-rose-400 font-bold shrink-0">{AXIS_LABELS[axis] || axis}:</span>
-                            <span className="text-slate-400">{processedData.score_details?.[axis]?.reason || AXIS_UNAVAILABLE_REASON_LABELS[axis] || "데이터 부족으로 계산 제외"}</span>
+                            <span className="text-rose-750 font-bold shrink-0">{AXIS_LABELS[axis] || axis}:</span>
+                            <span className="text-slate-500">{processedData.score_details?.[axis]?.reason || AXIS_UNAVAILABLE_REASON_LABELS[axis] || "데이터 부족으로 계산 제외"}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : (
-                    <span className="text-xs font-bold text-slate-400">없음 (모든 지표 정상 분석 완료)</span>
+                    <span className="text-xs font-bold text-slate-500">없음 (모든 지표 정상 분석 완료)</span>
                   )}
                 </div>
                 <p className="mt-3 text-[11px] font-semibold leading-relaxed text-slate-500">
@@ -1808,8 +1884,8 @@ function DashboardContent() {
               </div>
 
               {/* Data Quality Flags Card */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-                <h3 className="text-sm font-black text-white">데이터 품질 플래그 (Flags)</h3>
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                <h3 className="text-sm font-black text-slate-950">데이터 품질 플래그 (Flags)</h3>
                 <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
                   {(() => {
                     const flags = [...(processedData.data_quality_flags || [])];
@@ -1824,14 +1900,14 @@ function DashboardContent() {
                       return flags.map((flag: string) => {
                         const label = QUALITY_FLAG_LABELS[flag] || { title: flag, desc: "데이터 전처리 과정에서 특이사항이 감지되었습니다." };
                         return (
-                          <div key={flag} className="rounded-xl bg-slate-900 p-3 border border-slate-800/60">
-                            <p className="text-xs font-black text-amber-400">⚠️ {label.title}</p>
-                            <p className="mt-1 text-[11px] font-semibold text-slate-400 leading-4">{label.desc}</p>
+                          <div key={flag} className="rounded-xl bg-white p-3 border border-slate-200/60">
+                            <p className="text-xs font-black text-amber-800">⚠️ {label.title}</p>
+                            <p className="mt-1 text-[11px] font-semibold text-slate-500 leading-4">{label.desc}</p>
                           </div>
                         );
                       });
                     }
-                    return <p className="text-xs font-semibold text-slate-400">데이터 수집상 특이사항이 없이 깨끗하게 파싱되었습니다.</p>;
+                    return <p className="text-xs font-semibold text-slate-500">데이터 수집상 특이사항이 없이 깨끗하게 파싱되었습니다.</p>;
                   })()}
                 </div>
               </div>
@@ -1839,26 +1915,26 @@ function DashboardContent() {
           </div>
 
           {/* Jury/Evaluator Tech Specs Explanation Panel */}
-          <div className="mt-8 border-t border-slate-800 pt-6">
-            <h3 className="text-sm font-black uppercase tracking-[0.16em] text-purple-400 mb-3">
+          <div className="mt-8 border-t border-slate-200 pt-6">
+            <h3 className="text-sm font-black uppercase tracking-[0.16em] text-purple-700 mb-3">
               [심사위원용] 백엔드 계산 엔진 및 분석 엄밀성 검증 (Technical Specifications)
             </h3>
-            <div className="grid gap-4 md:grid-cols-3 text-xs leading-relaxed text-slate-300">
-              <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800">
-                <p className="font-bold text-amber-400 mb-1.5">1. 데이터 결손 보정 (Data Deficiency Policy)</p>
-                <p className="text-slate-400 font-medium">
-                  데이터가 극단적으로 부족하거나(예: 채널명 없음, 검색 기록 부재) 분석 신뢰 수준이 기준값 미만인 경우, 무리하게 추정 점수를 부여하여 분석 결과를 왜곡하지 않습니다. 해당 축은 <span className="text-slate-200">available=false</span> 처리되며, 평균 점수 및 메타인지 격차(Gap) 최종 계산식에서 원천 제외됩니다. (UI상에는 50.0 중립값으로 시각적 밸런스만 유지)
+            <div className="grid gap-4 md:grid-cols-3 text-xs leading-relaxed text-slate-700">
+              <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
+                <p className="font-bold text-amber-800 mb-1.5">1. 데이터 결손 보정 (Data Deficiency Policy)</p>
+                <p className="text-slate-600 font-medium">
+                  데이터가 극단적으로 부족하거나(예: 채널명 없음, 검색 기록 부재) 분석 신뢰 수준이 기준값 미만인 경우, 무리하게 추정 점수를 부여하여 분석 결과를 왜곡하지 않습니다. 해당 축은 <span className="text-slate-800">available=false</span> 처리되며, 평균 점수 및 메타인지 격차(Gap) 최종 계산식에서 원천 제외됩니다. (UI상에는 50.0 중립값으로 시각적 밸런스만 유지)
                 </p>
               </div>
-              <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800">
-                <p className="font-bold text-amber-400 mb-1.5">2. 시청 시간 한계 대응 (Duration Limits)</p>
-                <p className="text-slate-400 font-medium">
+              <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
+                <p className="font-bold text-amber-800 mb-1.5">2. 시청 시간 한계 대응 (Duration Limits)</p>
+                <p className="text-slate-600 font-medium">
                   Google Takeout YouTube 원본 데이터에는 각 영상의 실제 시청 지속 시간이 포함되어 있지 않습니다. 따라서 본 엔진은 재생 횟수 및 시청 간격(순차 재생 타임스탬프)에 의존하는 한계를 명시하고, “추정 시청 시간”과 같은 임의 추정을 배제하여 계산 정합성을 유지합니다.
                 </p>
               </div>
-              <div className="rounded-2xl bg-slate-950 p-4 border border-slate-800">
-                <p className="font-bold text-amber-400 mb-1.5">3. 하위 컴포넌트 결합식 (Component Composition)</p>
-                <p className="text-slate-400 font-medium">
+              <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
+                <p className="font-bold text-amber-800 mb-1.5">3. 하위 컴포넌트 결합식 (Component Composition)</p>
+                <p className="text-slate-600 font-medium">
                   각 6축 평가는 단일 수식이 아닌 검색 비율, 직접 선택 경로, 구독/보관함 비율, 참여도 등 여러 세부 수치의 동적 조합으로 결정됩니다. 데이터가 부족한 컴포넌트는 가중치 재계산에서 자동 제외됩니다. &ldquo;계산 근거 보기&rdquo; 토글을 통해 백엔드가 반환한 세부 원본 수치와 기여도 및 보정 페널티 세부 요소를 가감 없이 투명하게 제공합니다.
                 </p>
               </div>
