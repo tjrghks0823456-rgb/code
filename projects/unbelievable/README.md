@@ -27,16 +27,16 @@
 
 ## 🔌 프론트엔드 - 백엔드 API 연결 구조 (API Architecture)
 
-FastAPI 백엔드는 `/api/v1` prefix 라우터 환경에서 동작하며, 프론트엔드는 다음 백엔드 API 세트와 유기적으로 통신합니다.
+FastAPI 백엔드는 `/api/v1` prefix 라우터 환경에서 동작하며, 프론트엔드는 다음 백엔드 API 세트와 유기적으로 통신합니다. (프론트엔드에서는 공통 API 설정 `apiUrl()`을 적용해 통신합니다.)
 
 * **업로드 및 분석 흐름**:
-  1. `POST http://localhost:8000/api/v1/upload` : 시청 기록 파일 업로드 ➡️ `file_id` 획득
-  2. `POST http://localhost:8000/api/v1/analysis/run?file_id={file_id}` : 정량 채점 파이프라인 가동 ➡️ `run_id` 획득
-  3. `GET http://localhost:8000/api/v1/dashboard/summary?run_id={run_id}` : 6축 데이터, 메타인지 격차 및 실제 DSAO 유형 획득 ➡️ 대시보드 시각화
+  1. `POST /api/v1/upload/takeout` : 시청 기록 파일 업로드 및 세션 그룹화 ➡️ `file_id` 획득
+  2. `POST /api/v1/analysis/run?file_id={file_id}` : Blended Sampling 및 정량 채점 파이프라인 가동 ➡️ `run_id` 획득
+  3. `GET /api/v1/dashboard/summary?run_id={run_id}` : 6축 데이터, 메타인지 격차 및 실제 DSAO 유형 획득 ➡️ 대시보드 시각화
 * **디톡스 및 미션 흐름**:
-  1. `POST http://localhost:8000/api/v1/detox/generate?run_id={run_id}` : 대시보드 진입 버튼 클릭 시 Gemini 또는 Mock 플랜 설계 ➡️ `plan_id` 획득
-  2. `GET http://localhost:8000/api/v1/detox/plan?plan_id={plan_id}` : 특정 plan_id의 대체 키워드 및 미션 목록 조회 (plan_id 생략 시 최신 플랜 반환)
-  3. `PATCH http://localhost:8000/api/v1/detox/mission/{log_id}` : 미션 자율 수행 상태 업데이트
+  1. `POST /api/v1/detox/generate?run_id={run_id}` : 대시보드 진입 버튼 클릭 시 Gemini 또는 Mock 플랜 설계 ➡️ `plan_id` 획득
+  2. `GET /api/v1/detox/plan?plan_id={plan_id}` : 특정 plan_id의 대체 키워드 및 미션 목록 조회 (plan_id 생략 시 최신 플랜 반환)
+  3. `PATCH /api/v1/detox/mission/{log_id}` : 미션 자율 수행 상태 업데이트
 
 ---
 
@@ -70,9 +70,17 @@ FastAPI 백엔드는 `/api/v1` prefix 라우터 환경에서 동작하며, 프�
 
 ### ✅ 실제 구현된 것 (Live Implementation)
 * **프론트-백 실제 데이터 연동**: 업로드 버튼 비활성화, 실시간 업로드 ➡️ 분석 실행 ➡️ 분석 완료 ID 수신 후 대시보드 리다이렉트 흐름이 실서버 요청 및 JSON 응답으로 구현되어 있습니다.
-* **Google Takeout JSON 파싱**: 업로드된 파일이 JSON 포맷일 경우, 실제 구글 테이크아웃 YouTube `watch-history.json` 배열을 직접 파싱하여 비디오 제목(Watched 제거), 검색어(Searched for 제거), 타임스탬프를 읽어와 DB 세션에 적재합니다. (CSV/TXT의 경우 줄 단위 읽기 자동 대응)
+* **Google Takeout JSON/HTML 다중 파싱**: 업로드된 파일이 JSON 포맷일 경우 watch-history.json을 파싱하며, HTML 형식의 경우 `BeautifulSoup4` 라이브러리를 lazy import하여 어그로 및 숏츠 URL(/shorts/) 등을 정밀 파싱하고 데이터베이스에 적재합니다.
+* **시청 지속 시간 추정 및 경고 전파**: Google Takeout의 태생적 한계(실제 시청 지속 시간이 누락됨)를 극복하기 위해 연속 시청 간의 시간 간격을 분석하여 체류 시간을 시뮬레이션(`duration_source="simulated"`, `is_duration_estimated=true`)합니다. 이에 따라 API 응답에 `P10_DURATION_ESTIMATED` 및 `P10_DURATION_MISSING` 등의 품질 경고 코드(warning_codes)를 부여하고 UI 최상단에 정보 안내 배너를 출력합니다.
+* **로컬 형태소 분석 fallback 및 세종이 사전 탑재**: KoNLPy/Okt 라이브러리 및 GCP Language API가 설치/인증되어 있지 않더라도, `category_dictionary.py`에 세종이 코드의 `CATEGORY_DICT`, `STOP_WORDS`, `UNSTABLE_WORDS`, `STIMULUS_WORDS` 사전 전문을 rule-based 엔진의 핵심 fallback 사전으로 직접 포함하여 무설치 환경에서도 한국어 카테고리/자극성 단어 감지 분류가 가능합니다.
 * **결정적 6축 계산 엔진**: Shannon Entropy와 HHI 공식을 활용하여 실제 데이터셋에 비례하는 `TDS`, `SBS`, `SMS` 지표를 수학적으로 산출합니다.
-* **DSAO 유형 도감 및 캐릭터 카드**: `actual_dsao` 판정 결과에 매핑되는 학술적 성향 도감 및 실시간 대조 카드 렌더링이 구현되어 있습니다.
+* **데이터 부족 상황 점수 보정 (Data Deficiency Calibration)**:
+  - 데이터가 극단적으로 결손된 축(예: 채널명이 전부 Unknown인 경우 SBS, 검색 이력이 없는 경우 UAS 등)은 억지로 추정 점수를 매겨 성향 평균을 떨어뜨리지 않고 `available: false` 처리 및 `50.0` 중립값 호환 표기를 적용합니다.
+  - 가중 건강 점수 및 위험도 계산, 메타인지 격차 계산 시 해당 축을 제외 처리하여 수치 왜곡을 원천 방지합니다.
+* **대시보드 설명력 강화 및 기술 검증 패널 (Jury Panel)**:
+  - 프론트엔드 대시보드 지표 카드에 `계산 근거 보기` 토글을 배치하여 백엔드의 `score_components` 원본 수치를 직관적으로 표기합니다.
+  - 대시보드 하단에 종합 분석 신뢰도(`overall_confidence`), 샘플링 전략, 품질 플래그, 제외된 지표를 투명하게 공개하며 심사자를 위한 기술 엄밀성 검증 패널(Technical Specifications)을 내장하고 있습니다.
+* **DSAO 유형 도감 및 캐릭터 카드**: `actual_dsao` 판정 결과에 매핑되는 학술적 성향 도감 및 실시간 대조 카드 렌더링이 구현되어 있습니다. 기존 MBTI형 `balance_type`은 deprecated 처리되어 하위 호환성을 유지한 채 내부 매핑 참조용으로 함께 표기됩니다.
 * **자율형 미션 컴포넌트**: 완료 확인을 위해 미션 페이지 내부에서 객관식 문항(Choice)을 즉각 선택하거나 한 줄 소감(Text)을 기록하면 PATCH 요청이 전송되는 행동 유도가 동작합니다.
 * **MockDB 로컬 지속성**: 로컬 MockDB의 검색 매핑 처리 및 upsert 구현을 통해 Supabase 연결 유무와 상관없이 로컬 인메모리에서 세션 조회가 가능합니다.
 
@@ -80,8 +88,7 @@ FastAPI 백엔드는 `/api/v1` prefix 라우터 환경에서 동작하며, 프�
 * **Gemini & NL API 키 Fallback**: 환경변수 설정 파일(`app/core/config.py`)에 구글 인증 API 키가 바인딩되지 않은 경우, 서버가 중단되는 대신 채점 지표와 최저점 카테고리를 계산하여 Gemini 및 NL 분석 응답 형식에 준하는 Mock 지침서와 미션 데이터셋을 실시간 생성하여 반환합니다.
 * **시청 지속 시간 추정 (중요 한계)**:
   - Google Takeout 원천 파일에는 개별 영상의 실제 시청 지속 시간(실측 초 단위)이 포함되어 있지 않습니다.
-  - YouTube Data API(`contentDetails`)를 통해 영상의 **총 재생 길이(duration)**는 보완 가능하지만, 사용자가 **실제로 몇 초 동안 시청했는지**는 YouTube 공식 API에서 제공하지 않습니다. 이 데이터는 브라우저 확장 프로그램이나 YouTube 내장 플레이어와의 연동 없이는 수집할 수 없습니다.
-  - 따라서 현재 MVP에서는 롱폼(L)/숏폼(F) 분류를 위해 인덱스 분산 비율에 따른 **모의 지속 시간**을 가변 적재합니다. 이 값은 실제 시청 행동을 정확히 반영하지 않으며, 데이터 분석 경향성 파악을 위한 근사치입니다.
+  - 재생 횟수 및 시청 간격(순차 재생 타임스탬프)에 의존하는 한계를 명시하고, “추정 시청 시간”과 같은 임의 추정을 배제하여 계산 정합성을 유지합니다.
 * **6축 점수 해석 제한**:
   - Google Takeout 파일에 검색 기록이 포함되지 않으면 사용자 주도성(UAS)은 제한적으로 해석됩니다.
   - 영상 제목이나 검색어가 충분하지 않으면 주제 다양성(TDS), 감정 균형(EBS), 관점 개방성(VOS)은 중립값으로 표시될 수 있습니다.
@@ -97,3 +104,4 @@ FastAPI 백엔드는 `/api/v1` prefix 라우터 환경에서 동작하며, 프�
 * **Supabase 실데이터 저장소 이전**: 로컬 `localStorage`에 스텁으로 저장 중인 자가진단 정보를 Supabase `profiles.survey_scores` 컬럼 테이블에 원격 Insert/Fetch하는 API 연결
 * **YouTube Data API 보완적 활용**: YouTube Data API로 영상의 총 재생 길이(duration)를 수집하여 숏폼/롱폼 분류 기준을 실제 영상 길이 기반으로 개선. 단, 실제 시청 초 단위는 API로 제공되지 않으므로 별도 측정 수단 없이는 정확한 시청 지속 시간 분석에 한계가 있음
 * **사용자 세션 관리**: 테스트 UUID 고정 구조에서 Supabase Auth 회원가입 및 로그인을 통한 개인별 영구 대시보드 이력 모니터링 활성화
+

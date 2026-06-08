@@ -8,7 +8,7 @@ import Card from "../../components/Card";
 import MissionCard from "../../components/MissionCard";
 import PageShell from "../../components/PageShell";
 import SectionTitle from "../../components/SectionTitle";
-import { API_BASE_URL, DEFAULT_USER_ID } from "../../utils/apiConfig";
+import { DEFAULT_USER_ID, apiUrl } from "../../utils/apiConfig";
 
 const DEMO_PLAN = {
   active: true,
@@ -76,8 +76,8 @@ function MissionContent() {
     const fetchPlan = async () => {
       try {
         const url = planId
-          ? `${API_BASE_URL}/api/v1/detox/plan?plan_id=${planId}&user_id=${DEFAULT_USER_ID}`
-          : `${API_BASE_URL}/api/v1/detox/plan?user_id=${DEFAULT_USER_ID}`;
+          ? apiUrl(`/api/v1/detox/plan?plan_id=${planId}&user_id=${DEFAULT_USER_ID}`)
+          : apiUrl(`/api/v1/detox/plan?user_id=${DEFAULT_USER_ID}`);
 
         const res = await fetch(url);
         if (!res.ok) {
@@ -97,7 +97,7 @@ function MissionContent() {
         }
       } catch (err: any) {
         console.error("Mission plan fetch failed:", err);
-        setFetchError(err.message?.includes("fetch") ? "FastAPI 서버에 연결할 수 없습니다." : `플랜 조회 실패: ${err.message}`);
+        setFetchError(err.message?.includes("fetch") ? `API 서버(${apiUrl("/")})에 연결할 수 없습니다.` : `플랜 조회 실패: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -117,7 +117,7 @@ function MissionContent() {
 
     if (!isDemo) {
       try {
-        await fetch(`${API_BASE_URL}/api/v1/detox/mission/${targetMission.log_id}`, {
+        await fetch(apiUrl(`/api/v1/detox/mission/${targetMission.log_id}`), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ completed: newStatus })

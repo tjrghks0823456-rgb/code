@@ -1,0 +1,82 @@
+# ===========================
+# Python / Backend
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+backend/venv/
+venv/
+.venv/
+env/
+ENV/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+# ===========================
+# Environment / Secrets
+# ===========================
+.env
+.env.*
+!.env.local.example
+!backend/.env.txt
+
+# ===========================
+# Database files
+# ===========================
+*.db
+*.sqlite
+*.sqlite3
+
+# ===========================
+# Frontend / Node
+# ===========================
+frontend/node_modules/
+node_modules/
+
+frontend/.next/
+.next/
+
+frontend/dev-3003.log
+frontend/*.log
+*.log
+
+frontend/tsconfig.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ===========================
+# OS / Editor
+# ===========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===========================
+# Misc
+# ===========================
+*.bak
+*.tmp
+_git_init.bat
+_git_push.bat

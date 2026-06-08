@@ -1,0 +1,74 @@
+{
+  "QUALITY_FLAG_LABELS": {
+    "duration_unknown": {
+      "title": "체류 시간 정보 부재",
+      "desc": "Google Takeout 원본에는 실제 시청 지속 시간이 포함되지 않아 체류 시간 기반 지표는 제한적으로 해석됩니다. 해당 항목은 분석 신뢰도에 반영됩니다. (확인 불가)"
+    },
+    "timestamp_fallback_used": {
+      "title": "타임스탬프 오류 자동 보정",
+      "desc": "일부 기록의 시간이 불완전하여 순차 보정 시간이 사용되었습니다."
+    },
+    "source_missing": {
+      "title": "출처 정보 부족",
+      "desc": "일부 기록에서 채널 또는 출처 정보가 부족합니다."
+    },
+    "no_search_history": {
+      "title": "검색 기록 부족",
+      "desc": "검색 기록이 포함되지 않아 사용자 주도성 판단이 제한됩니다."
+    },
+    "channel_missing": {
+      "title": "채널 정보 부족",
+      "desc": "채널 정보가 부족하여 출처 균형 판단이 제한됩니다."
+    },
+    "nlp_api_all_failed": {
+      "title": "NLP 분석 전체 실패",
+      "desc": "NLP API 호출에 실패하여 언어 분석 데이터 신뢰도가 낮습니다."
+    },
+    "nlp_api_partial_failure": {
+      "title": "NLP 분석 부분 실패",
+      "desc": "일부 세션의 텍스트 분석에 특이사항이 감지되었습니다."
+    },
+    "duration_estimated": {
+      "title": "추정 체류 시간 사용 (Takeout 한계)",
+      "desc": "Google Takeout 시청 기록에는 실제 시청 지속 시간이 누락되어 있어, 인접 이벤트 간 시간 간격 분석을 기반으로 'simulated' 시청 시간을 추정하여 사용했습니다. (기록 기반 추정값)"
+    },
+    "nlp_fallback_used": {
+      "title": "Rule-based 로컬 형태소 분석 fallback 사용",
+      "desc": "Google Cloud Language API 인증 또는 한도 오류가 발생하여, 세종이 한글 형태소 분석 사전 및 로컬 규칙 엔진 기반으로 대체 분석을 수행했습니다."
+    }
+  },
+  "AXIS_AVAILABLE_DESCS": {
+    "TDS": "시청 기록에 등장하는 대주제 카테고리가 고르게 분포되어 있어 폭넓은 관심사를 가지고 있습니다.",
+    "SBS": "특정 채널에 과도하게 치우치지 않고 여러 미디어 출처를 비교적 고르게 소비하고 있습니다.",
+    "EBS": "시청 콘텐츠의 감정 자극도가 낮고 유해하거나 어그로성 키워드가 적어 정서적으로 안정되어 있습니다.",
+    "VOS": "다양한 도메인과 지식 분야의 영상을 탐색하고 생산적인 몰입(교육 등)을 보여줍니다.",
+    "SMS": "유해성 노출이나 도파민 자극이 강한 연속 숏츠 소비 비율이 안정 범위 내에 조절되고 있습니다.",
+    "UAS": "알고리즘 추천 피드에만 의존하지 않고, 직접 검색이나 구독 리스트를 통한 주도적 탐색 비율이 양호합니다."
+  },
+  "CONFIDENCE_DESCS": {
+    "high": "분석에 필요한 주요 데이터가 충분히 확보되었습니다.",
+    "medium": "일부 지표는 데이터 부족으로 참고용 처리되었습니다.",
+    "low": "여러 지표가 데이터 부족으로 제외되어 결과 해석에 주의가 필요합니다."
+  },
+  "COMPONENT_LABELS": {
+    "search_ratio": "검색 비중",
+    "direct_selection_ratio": "직접 선택 경로 비중",
+    "curation_ratio": "구독/보관함 탐색 비율",
+    "participation_ratio": "댓글/채팅 참여 비율",
+    "legacy_hhi_inverse_score": "기존 출처 다양성",
+    "relative_hhi_balance_score": "상대적 출처 균형도",
+    "unique_source_count_adjustment": "출처 수 보정치",
+    "nlp_category_entropy": "NLP 카테고리 엔트로피",
+    "local_keyword_category_entropy": "로컬 키워드 카테고리 다양성",
+    "legacy_sentiment_entropy_score": "기존 감정 엔트로피",
+    "negative_sentiment_penalty": "부정 감정 노출 페널티",
+    "stimulus_keyword_penalty": "자극적 키워드 노출 페널티",
+    "neutral_info_calm_stability_signal_ratio": "안정적/정보 카운트 가산 비율",
+    "toxic_ratio_penalty": "유해성 노출 페널티",
+    "harmful_keyword_penalty": "우려성 키워드 페널티",
+    "shorts_ratio_penalty": "숏츠 시청 비율 페널티",
+    "repeated_shorts_penalty": "연속 숏츠 노출 페널티",
+    "raw_concentration_score": "가공 전 정보 개방도",
+    "adjusted_concentration_score": "교육성 보정 정보 개방도"
+  }
+}

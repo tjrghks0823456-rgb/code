@@ -25,5 +25,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# MVP local test default user ID
+DEFAULT_MVP_USER_ID: str = "00000000-0000-0000-0000-000000000001"
+
 # Ensure storage directory exists
 os.makedirs(settings.STORAGE_DIR, exist_ok=True)

@@ -12,3 +12,7 @@ python-multipart>=0.0.9
 jinja2>=3.1.3
 pydantic-settings>=2.2.0
 beautifulsoup4>=4.12.3
+# Optional analysis enhancements (Lazy loaded fallbacks)
+youtube-transcript-api>=0.6.2
+konlpy>=0.6.0
+# google-cloud-language is listed above, included for advanced NLP analysis

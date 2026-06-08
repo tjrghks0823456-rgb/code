@@ -7,7 +7,7 @@ import PageShell from "../../components/PageShell";
 import { Button } from "../../components/Button";
 import Card from "../../components/Card";
 import SectionTitle from "../../components/SectionTitle";
-import { API_BASE_URL, DEFAULT_USER_ID } from "../../utils/apiConfig";
+import { DEFAULT_USER_ID, apiUrl } from "../../utils/apiConfig";
 import { loadSelfSurveyResult } from "../../utils/surveyStorage";
 
 type YoutubeFileKind = "watch" | "search" | "subscription" | "playlist" | "comment" | "liveChat" | "channel" | "music" | "unknown";
@@ -294,7 +294,7 @@ export default function UploadPage() {
         formData.append("survey_scores", JSON.stringify(surveyResult));
       }
 
-      const uploadRes = await fetch(`${API_BASE_URL}/api/v1/upload/takeout?user_id=${DEFAULT_USER_ID}`, {
+      const uploadRes = await fetch(apiUrl(`/api/v1/upload/takeout?user_id=${DEFAULT_USER_ID}`), {
         method: "POST",
         body: formData,
       });
@@ -326,7 +326,7 @@ export default function UploadPage() {
 
     try {
       // 2. Trigger Analysis Calculation
-      const analysisRes = await fetch(`${API_BASE_URL}/api/v1/analysis/run?file_id=${uploadSummary.file_id}&user_id=${DEFAULT_USER_ID}`, {
+      const analysisRes = await fetch(apiUrl(`/api/v1/analysis/run?file_id=${uploadSummary.file_id}&user_id=${DEFAULT_USER_ID}`), {
         method: "POST",
       });
 
@@ -611,7 +611,7 @@ export default function UploadPage() {
 
                   {errorMsg && (
                     <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold leading-6 text-rose-700">
-                      분석 중 오류가 발생했습니다. FastAPI 서버가 실행 중인지 확인해주세요.
+                      분석 중 오류가 발생했습니다. API 서버({apiUrl("/")}) 연결 상태를 확인해주세요.
                       <br />
                       <span className="text-xs">{errorMsg}</span>
                     </div>
@@ -781,7 +781,7 @@ export default function UploadPage() {
 
                   {errorMsg && (
                     <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold leading-6 text-rose-700 animate-shake">
-                      분석 중 오류가 발생했습니다. FastAPI 서버가 실행 중인지 확인해주세요.
+                      분석 중 오류가 발생했습니다. API 서버({apiUrl("/")}) 연결 상태를 확인해주세요.
                       <br />
                       <span className="text-xs font-mono">{errorMsg}</span>
                     </div>

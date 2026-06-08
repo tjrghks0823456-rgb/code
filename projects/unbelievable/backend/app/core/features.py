@@ -11,6 +11,7 @@ from app.core.score_config import (
     TOXIC_CATEGORY_KEYWORDS,
 )
 from app.core.shorts_analysis import build_shorts_analysis
+from app.core.local_category_screening import estimate_local_category
 
 
 UNKNOWN_VALUES = {"", "unknown", "none", "null", "n/a"}
@@ -133,10 +134,9 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         warnings.append("text_base missing")
 
     channel_key = _clean_text(
-        event.get("channel_url")
-        or event.get("channel_name")
+        event.get("channel_name")
+        or event.get("channel_url")
         or event.get("author_id")
-        or event.get("source_surface")
     )
     if not _is_known(channel_key):
         channel_key = ""
@@ -144,6 +144,9 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     actual_duration = _as_float(event.get("time_delta_sec"))
     estimated_duration = _as_float(event.get("estimated_duration_sec"))
     duration_sec = actual_duration if actual_duration is not None else estimated_duration
+
+    if action_type == "view" and duration_sec is None:
+        warnings.append("duration_unknown")
 
     duration_label = event.get("duration_confidence")
     if actual_duration is not None and not duration_label:
@@ -198,6 +201,7 @@ def extract_features(
     source_type_counts: Dict[str, int] = {}
     channel_distribution: Dict[str, int] = {}
     search_keyword_distribution: Dict[str, int] = {}
+    local_category_distribution: Dict[str, int] = {}
     durations: List[float] = []
     duration_confidences: List[float] = []
     harmful_keyword_hits = 0
@@ -251,6 +255,13 @@ def extract_features(
         text_lower = _lower(event.get("text_base"))
         if any(keyword in text_lower for keyword in HARMFUL_KEYWORDS):
             harmful_keyword_hits += 1
+
+        # Local category screening
+        if is_watch or is_search:
+            txt = event.get("text_base", "")
+            if txt:
+                cat = estimate_local_category(txt)
+                local_category_distribution[cat] = local_category_distribution.get(cat, 0) + 1
 
     topic_distribution: Dict[str, int] = {}
     sentiment_distribution = {"positive": 0, "neutral": 0, "negative": 0}
@@ -308,7 +319,7 @@ def extract_features(
     if fallback_used:
         warnings.append("fallback data used")
     if estimated_duration_count > 0:
-        warnings.append("some watch durations are estimated")
+        warnings.append("some dwell times are estimated")
     if excluded_ad_count > 0:
         warnings.append("ad events excluded from scoring")
 
@@ -323,7 +334,17 @@ def extract_features(
         for kind in ["comment", "live_chat"]
     )
 
-    search_ratio = search_count / max(watch_count + search_count, 1)
+    search_ratio = search_count / max(watch_count + search_count, 1) if search_count > 0 else None
+    
+    has_known_surfaces = any(event.get("source_surface") not in UNKNOWN_VALUES for event in normalized_events)
+    if has_known_surfaces:
+        direct_selection_count = sum(
+            1 for event in normalized_events
+            if event["action_type"] == "view" and event.get("source_surface") not in UNKNOWN_VALUES
+        )
+        direct_selection_ratio = direct_selection_count / max(watch_count, 1)
+    else:
+        direct_selection_ratio = None
     curation_ratio = min(1.0, curation_count / total_actions)
     participation_ratio = min(1.0, participation_count / total_actions)
     shorts_ratio = shorts_count / max(watch_count, 1)
@@ -386,7 +407,7 @@ def extract_features(
         "nlp_count": nlp_count,
         "sentiment_distribution": sentiment_distribution,
         "search_ratio": search_ratio,
-        "direct_selection_ratio": None,
+        "direct_selection_ratio": direct_selection_ratio,
         "curation_ratio": curation_ratio,
         "participation_ratio": participation_ratio,
         "shorts_ratio": shorts_ratio,
@@ -395,4 +416,5 @@ def extract_features(
         "repeated_short_exposure_ratio": repeated_short_exposure_ratio,
         "estimated_duration_count": estimated_duration_count,
         "excluded_ad_count": excluded_ad_count,
+        "local_category_distribution": local_category_distribution,
     }

@@ -10,6 +10,7 @@ import ResultCard from "../../components/ResultCard";
 import SectionTitle from "../../components/SectionTitle";
 import { getDsaoCharacter } from "../../data/dsaoCharacters";
 import { saveSelfSurveyResult, SelfSurveyResult } from "../../utils/surveyStorage";
+import { DEFAULT_USER_ID, apiUrl } from "../../utils/apiConfig";
 
 interface Question {
   id: string;
@@ -115,7 +116,7 @@ export default function SurveyPage() {
     calculateResult();
   };
 
-  const calculateResult = () => {
+  const calculateResult = async () => {
     const D = (answers.q1 || 3) + (answers.q3 || 3);
     const P = (answers.q2 || 3) + (answers.q4 || 3);
     const W = (answers.q5 || 3) + (answers.q7 || 3);
@@ -138,6 +139,28 @@ export default function SurveyPage() {
     };
 
     saveSelfSurveyResult(surveyResult);
+    
+    try {
+      const response = await fetch(apiUrl("/api/v1/survey/save"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: DEFAULT_USER_ID,
+          survey_scores: { D, P, W, N, S, M, F, L },
+          result_code: resultCode,
+          result_name: character.title,
+          schema_version: "1.0.0",
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (err) {
+      console.warn("Failed to sync survey to backend. Saved locally instead.", err);
+    }
+
     setResult(surveyResult);
     setCurrentPage(4);
   };

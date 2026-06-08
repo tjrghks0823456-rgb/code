@@ -31,19 +31,35 @@ CREATE TABLE IF NOT EXISTS public.norm_event (
     file_id UUID NOT NULL REFERENCES public.raw_file(id) ON DELETE CASCADE,
     event_time TIMESTAMP NOT NULL,
     time_delta_sec INTEGER, -- 시청 시간 분석용 체류시간 (초 단위)
+    video_duration_sec INTEGER, -- 영상 총 길이 (초 단위)
     text_base TEXT NOT NULL, -- 제목 또는 검색어 등
     platform VARCHAR(50) DEFAULT 'youtube',
     action_type VARCHAR(20) DEFAULT 'view', -- view, search
     source_surface VARCHAR(50) DEFAULT 'unknown', -- unknown unless the source surface is explicitly known
     source_type VARCHAR(50), -- watch_history, search_history, subscription, playlist, comment, live_chat, channel
     content_format VARCHAR(30) DEFAULT 'unknown', -- shorts, standard_video, live, unknown
-    intent_level VARCHAR(30) DEFAULT 'unknown' -- active_search, unknown
+    intent_level VARCHAR(30) DEFAULT 'unknown', -- active_search, unknown
+    raw_time VARCHAR(255), -- 원본 시간 문자열
+    video_id VARCHAR(50), -- YouTube Video ID
+    channel_name VARCHAR(255), -- 채널명
+    channel_url VARCHAR(500), -- 채널 URL
+    title_url VARCHAR(500), -- 비디오 URL
+    source_confidence VARCHAR(50) DEFAULT 'unknown', -- surface 판정 신뢰도
+    raw_item JSONB DEFAULT '{}'::jsonb -- 원본 아이템 저장
 );
 
 ALTER TABLE public.norm_event
     ADD COLUMN IF NOT EXISTS source_type VARCHAR(50),
     ADD COLUMN IF NOT EXISTS content_format VARCHAR(30) DEFAULT 'unknown',
-    ADD COLUMN IF NOT EXISTS intent_level VARCHAR(30) DEFAULT 'unknown';
+    ADD COLUMN IF NOT EXISTS intent_level VARCHAR(30) DEFAULT 'unknown',
+    ADD COLUMN IF NOT EXISTS video_duration_sec INTEGER,
+    ADD COLUMN IF NOT EXISTS raw_time VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS video_id VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS channel_name VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS channel_url VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS title_url VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS source_confidence VARCHAR(50) DEFAULT 'unknown',
+    ADD COLUMN IF NOT EXISTS raw_item JSONB DEFAULT '{}'::jsonb;
 
 ALTER TABLE public.norm_event
     ALTER COLUMN source_surface SET DEFAULT 'unknown';
@@ -54,9 +70,13 @@ CREATE TABLE IF NOT EXISTS public.session_text (
     file_id UUID REFERENCES public.raw_file(id) ON DELETE CASCADE,
     aggregated_text TEXT NOT NULL,
     token_count INTEGER NOT NULL,
+    event_count INTEGER DEFAULT 0, -- 세션 내 이벤트 개수
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NOT NULL
 );
+
+ALTER TABLE public.session_text
+    ADD COLUMN IF NOT EXISTS event_count INTEGER DEFAULT 0;
 
 -- 5. Cloud NL API 정량 분석 결과 테이블 (역정규화 JSONB 적재)
 CREATE TABLE IF NOT EXISTS public.nlp_result (
@@ -78,6 +98,8 @@ CREATE TABLE IF NOT EXISTS public.score_run (
     weighted_health FLOAT NOT NULL, -- 6축 가중합 종합 건강 점수 (0 ~ 100)
     mbti_type VARCHAR(10) NOT NULL, -- 16가지 미디어 소비 성향 유형 (예: INTP)
     exception_codes VARCHAR(40)[] DEFAULT '{}', -- P01, P04, P05 등 예외코드 리스트
+    sampling_metadata JSONB DEFAULT '{}'::jsonb, -- 세션 샘플링 메타데이터
+    data_quality_flags VARCHAR(100)[] DEFAULT '{}', -- 데이터 품질 플래그
     analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -89,7 +111,9 @@ ALTER TABLE public.score_run
     ADD COLUMN IF NOT EXISTS information_bias_risk FLOAT,
     ADD COLUMN IF NOT EXISTS shorts_stimulation_risk FLOAT,
     ADD COLUMN IF NOT EXISTS final_detox_risk FLOAT,
-    ADD COLUMN IF NOT EXISTS shorts_analysis JSONB DEFAULT '{}'::jsonb;
+    ADD COLUMN IF NOT EXISTS shorts_analysis JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS sampling_metadata JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS data_quality_flags VARCHAR(100)[] DEFAULT '{}';
 
 -- 7. 6축 세부 점수 테이블
 CREATE TABLE IF NOT EXISTS public.score_axis (

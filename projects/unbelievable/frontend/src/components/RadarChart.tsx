@@ -17,6 +17,7 @@ interface RadarDataPoint {
   subject: string;
   자가진단_결과: number; // Survey score
   실제_분석값: number;  // Actual score
+  available?: boolean;
 }
 
 interface ScoreWarning {
@@ -43,21 +44,32 @@ export default function RadarChart({ data, scoreWarnings = [] }: RadarChartProps
     if (!active || !payload?.length) return null;
 
     const point = payload[0]?.payload as RadarDataPoint | undefined;
+    const isAvailable = point?.available !== false;
     const warning = point?.axisCode ? warningByAxis[point.axisCode] : undefined;
     const title = label || point?.subject;
 
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-xl">
-        <div className="font-bold text-slate-950">{title}</div>
-        {payload.map((entry: any) => (
-          <div key={entry.dataKey} className="mt-1 flex items-center justify-between gap-4 text-slate-600">
-            <span>{entry.name}</span>
-            <span className="font-bold" style={{ color: entry.color }}>
-              {Number(entry.value).toFixed(1)}점
-            </span>
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-xl text-left">
+        <div className="font-bold text-slate-950 mb-1.5">{title}</div>
+        {payload.map((entry: any) => {
+          const valueText = isAvailable 
+            ? `${Number(entry.value).toFixed(1)}점` 
+            : "비교 불가 (데이터 부족)";
+          return (
+            <div key={entry.dataKey} className="mt-1 flex items-center justify-between gap-4 text-slate-600 font-semibold">
+              <span>{entry.name}</span>
+              <span className="font-bold" style={{ color: entry.color }}>
+                {valueText}
+              </span>
+            </div>
+          );
+        })}
+        {!isAvailable && (
+          <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700">
+            데이터 누락으로 공식 점수 계산 제외
           </div>
-        ))}
-        {warning && (
+        )}
+        {isAvailable && warning && (
           <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
             해석 제한: 참고용 지표
           </div>
