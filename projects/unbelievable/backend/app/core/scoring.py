@@ -11,28 +11,14 @@ from app.core.score_config import (
     SMS_WEIGHTS,
     UAS_WEIGHTS,
     VOS_WEIGHTS,
+    MAX_TOPIC_CATEGORIES,
+    EDUCATIONAL_CATEGORIES,
+    CONCENTRATION_BETA,
 )
 
 
-# 16-type personality mapping kept for the existing dashboard/API contract.
-PERSONALITY_MAP = {
-    ("H", "H", "H", "H"): ("진정한 탐험가", ["#호기심", "#도전", "#학습"]),
-    ("H", "H", "H", "L"): ("자기주도적 탐구자", ["#탐구", "#목표", "#확장"]),
-    ("H", "H", "L", "H"): ("지적 모험가", ["#신선함", "#공부", "#흥미"]),
-    ("H", "H", "L", "L"): ("에너지 넘치는 사색가", ["#창의", "#이슈", "#소통"]),
-    ("H", "L", "H", "H"): ("조화로운 관점 설계자", ["#공감", "#독해력", "#다양성"]),
-    ("H", "L", "H", "L"): ("주도적 감성 관찰자", ["#감성분석", "#내면성찰", "#표현"]),
-    ("H", "L", "L", "H"): ("친화적 소통가", ["#키워드", "#친화력", "#소통"]),
-    ("H", "L", "L", "L"): ("감성 아웃사이더", ["#아웃라이어", "#독특함", "#예술"]),
-    ("L", "H", "H", "H"): ("효율적 정보 관리자", ["#효율성", "#전문성", "#집중"]),
-    ("L", "H", "H", "L"): ("주도적 분석 매니아", ["#데이터", "#실용적", "#심층분석"]),
-    ("L", "H", "L", "H"): ("소통 지향 마니아", ["#트렌드", "#민감", "#교류"]),
-    ("L", "H", "L", "L"): ("감성적 정보 몰입러", ["#몰입형", "#감수성", "#애청자"]),
-    ("L", "L", "H", "H"): ("추천 흐름 점검형", ["#반복패턴", "#균형회복", "#자기조절"]),
-    ("L", "L", "H", "L"): ("흥미 반응형", ["#자극", "#쇼츠", "#재미"]),
-    ("L", "L", "L", "H"): ("수동적 수용자", ["#알고리즘", "#흘러가는대로", "#피동"]),
-    ("L", "L", "L", "L"): ("조용한 휴식형", ["#차분함", "#휴식", "#균형회복"]),
-}
+from app.core.persona_loader import persona_loader
+PERSONALITY_MAP = persona_loader.legacy_mbti_map
 
 
 def calculate_shannon_entropy(probabilities: List[float]) -> float:
@@ -58,17 +44,24 @@ def clamp_score(value: float) -> float:
 
 def _detail(
     score: Optional[float],
-    confidence: float,
+    confidence: Any,
     reason: str,
     warnings: Optional[List[str]] = None,
+    available: bool = True,
 ) -> Dict[str, Any]:
     numeric_score = NEUTRAL_COMPAT_SCORE if score is None else score
+    if isinstance(confidence, str):
+        conf_val = confidence
+    else:
+        conf_val = round(max(0.0, min(1.0, float(confidence))), 3)
     return {
         "score": round(clamp_score(numeric_score), 1),
-        "confidence": round(max(0.0, min(1.0, confidence)), 3),
+        "confidence": conf_val,
         "reason": reason,
         "warnings": sorted(set(warnings or [])),
+        "available": available,
     }
+
 
 
 def _weighted_ratio_score(
@@ -138,67 +131,202 @@ def calculate_scores_v2(
     common_warnings = list(features.get("data_quality_warnings", []))
     details: Dict[str, Dict[str, Any]] = {}
 
+    has_estimated_duration = any(e.get("is_duration_estimated") for e in events)
+    has_duration = any(e.get("time_delta_sec") is not None or e.get("estimated_duration_sec") is not None for e in events if e.get("action_type") == "view")
+
+    # Determine status of duration-related metrics
+    duration_status = "used"
+    if not has_duration:
+        duration_status = "missing"
+    elif has_estimated_duration:
+        duration_status = "estimated"
+
+    # 1. UAS (User Agency Score)
+    search_ratio = features.get("search_ratio")
+    direct_selection_ratio = features.get("direct_selection_ratio")
+    
     uas_metrics = {
-        "search_ratio": features.get("search_ratio"),
-        "direct_selection_ratio": features.get("direct_selection_ratio"),
+        "search_ratio": search_ratio,
+        "direct_selection_ratio": direct_selection_ratio,
         "curation_ratio": features.get("curation_ratio"),
         "participation_ratio": features.get("participation_ratio"),
     }
-    uas_score, uas_coverage, uas_missing = _weighted_ratio_score(uas_metrics, UAS_WEIGHTS)
+    
     uas_warnings = []
-    if features.get("search_count", 0) == 0:
-        uas_warnings.append("search events missing")
-    if "direct_selection_ratio" in uas_missing:
-        uas_warnings.append("direct selection ratio unavailable in current norm_event schema")
+    uas_available = True
+    if search_ratio is None and direct_selection_ratio is None:
+        uas_available = False
+        uas_score = None
+        uas_confidence = "low"
+        uas_warnings.append("검색 기록 또는 직접 선택 경로 데이터가 부족하여 사용자 주도성 지표는 참고용으로만 표시됩니다.")
+    else:
+        uas_score, uas_coverage, uas_missing = _weighted_ratio_score(uas_metrics, UAS_WEIGHTS)
+        uas_confidence = base_confidence * uas_coverage
+        if search_ratio is None:
+            uas_warnings.append("search events missing")
+        if direct_selection_ratio is None:
+            uas_warnings.append("direct selection ratio unavailable in current norm_event schema")
+            
+    uas_status = {
+        "search_ratio": "used" if search_ratio is not None else "missing",
+        "direct_selection_ratio": "missing",
+        "curation_ratio": "used" if features.get("curation_ratio") is not None else "missing",
+        "participation_ratio": "used" if features.get("participation_ratio") is not None else "missing"
+    }
+    uas_components = {
+        "search_ratio": round(features.get("search_ratio", 0.0) * 100, 1) if search_ratio is not None else None,
+        "direct_selection_ratio": round(features.get("direct_selection_ratio", 0.0) * 100, 1) if direct_selection_ratio is not None else None,
+        "curation_ratio": round(features.get("curation_ratio", 0.0) * 100, 1) if features.get("curation_ratio") is not None else 0.0,
+        "participation_ratio": round(features.get("participation_ratio", 0.0) * 100, 1) if features.get("participation_ratio") is not None else 0.0,
+        "status": uas_status
+    }
     details["UAS"] = _detail(
         uas_score,
-        base_confidence * uas_coverage,
+        uas_confidence,
         "weighted agency ratio from search, curation, and participation signals",
         uas_warnings,
+        available=uas_available
     )
+    details["UAS"]["score_components"] = uas_components
 
+    # 2. SBS (Source Balance Score)
     channel_distribution = features.get("channel_distribution", {})
-    sbs_score = _hhi_balance_score(channel_distribution)
-    sbs_confidence = base_confidence * min(
-        1.0,
-        len(channel_distribution) / MIN_DATA_REQUIREMENTS["channel_count"],
-    )
+    ratios = _distribution_ratios(channel_distribution)
+    n_sources = len(ratios)
+    hhi = sum(ratio ** 2 for ratio in ratios) if ratios else 1.0
+    legacy_hhi_inverse = (1.0 - hhi) * 100.0
+    
     sbs_warnings = []
-    if not channel_distribution:
-        sbs_warnings.append("channel distribution missing")
-    elif len(channel_distribution) < 2:
-        sbs_warnings.append("channel sample limited")
+    sbs_available = True
+    if n_sources == 0:
+        sbs_available = False
+        sbs_score = None
+        sbs_confidence = "low"
+        sbs_warnings.append("채널 정보가 부족하여 출처 균형은 참고용으로만 표시됩니다.")
+    else:
+        if n_sources <= 1:
+            sbs_score = 0.0
+        else:
+            sbs_score = ((1.0 - hhi) / (1.0 - 1.0 / n_sources)) * 100.0
+        sbs_confidence = base_confidence * min(
+            1.0,
+            n_sources / MIN_DATA_REQUIREMENTS["channel_count"],
+        )
+        if n_sources < 2:
+            sbs_warnings.append("channel sample limited")
+            
+    sbs_status = {
+        "channel_distribution": "used" if n_sources > 0 else "missing",
+        "relative_hhi": "used" if n_sources > 1 else "limited"
+    }
+    sbs_components = {
+        "legacy_hhi_inverse_score": round(legacy_hhi_inverse, 1) if n_sources > 0 else None,
+        "relative_hhi_balance_score": round(sbs_score, 1) if sbs_score is not None else None,
+        "unique_source_count_adjustment": round(sbs_score - legacy_hhi_inverse, 1) if (sbs_score is not None and n_sources > 1) else 0.0,
+        "source_confidence": sbs_confidence if isinstance(sbs_confidence, str) else round(sbs_confidence, 3),
+        "is_actual_channel_based": bool(n_sources > 0),
+        "status": sbs_status
+    }
     details["SBS"] = _detail(
         sbs_score,
         sbs_confidence,
         "HHI balance score from channel/source distribution",
         sbs_warnings,
+        available=sbs_available
     )
+    details["SBS"]["score_components"] = sbs_components
 
+    # 3. TDS (Topic Diversity Score)
     topic_distribution = features.get("topic_distribution", {})
-    tds_score = _entropy_score(topic_distribution)
-    topic_total = sum(topic_distribution.values())
-    tds_confidence = base_confidence * min(
-        1.0,
-        topic_total / MIN_DATA_REQUIREMENTS["topic_count"],
-    )
+    local_category_distribution = features.get("local_category_distribution", {})
+    
+    nlp_ratios = _distribution_ratios(topic_distribution)
+    nlp_entropy = calculate_shannon_entropy(nlp_ratios)
+    nlp_score = (nlp_entropy / math.log2(MAX_TOPIC_CATEGORIES)) * 100.0 if nlp_ratios else 0.0
+    
+    local_ratios = _distribution_ratios(local_category_distribution)
+    local_entropy = calculate_shannon_entropy(local_ratios)
+    local_score = (local_entropy / math.log2(MAX_TOPIC_CATEGORIES)) * 100.0 if local_ratios else 0.0
+    
+    nlp_count = features.get("nlp_count", 0)
+    use_local_fallback = nlp_count < 2 or sum(topic_distribution.values()) < 3
+    
+    tds_score = local_score if use_local_fallback else nlp_score
+    
+    if use_local_fallback:
+        tds_confidence = base_confidence * 0.5
+    else:
+        tds_confidence = base_confidence * min(
+            1.0,
+            sum(topic_distribution.values()) / MIN_DATA_REQUIREMENTS["topic_count"],
+        )
+        
     tds_warnings = []
-    if len(topic_distribution) <= 1:
+    if use_local_fallback:
+        tds_warnings.append("NLP sample limited; using local keyword topic diversity fallback")
+    elif len(topic_distribution) <= 1:
         tds_warnings.append("topic sample limited")
+        
+    tds_status = {
+        "nlp_category_entropy": "limited" if use_local_fallback else "used",
+        "local_keyword_category_entropy": "used"
+    }
+    tds_components = {
+        "nlp_category_entropy": round(nlp_score, 1),
+        "local_keyword_category_entropy": round(local_score, 1),
+        "max_topic_categories_applied": True,
+        "nlp_sample_insufficient_confidence_reduced": bool(use_local_fallback),
+        "status": tds_status
+    }
     details["TDS"] = _detail(
         tds_score,
         tds_confidence,
-        "Shannon entropy normalized by active topic count",
+        "Shannon entropy normalized by K=15 possible topic categories",
         tds_warnings,
     )
+    details["TDS"]["score_components"] = tds_components
 
+    # 4. EBS (Emotion Balance Score)
     sentiment_distribution = features.get("sentiment_distribution", {})
     sentiment_total = sum(sentiment_distribution.values())
-    ebs_score = (
-        _entropy_score(sentiment_distribution)
-        if sentiment_total >= MIN_DATA_REQUIREMENTS["sentiment_count"]
-        else None
-    )
+    
+    neg_ratio = sentiment_distribution.get("negative", 0) / max(1, sentiment_total)
+    neg_penalty = neg_ratio * 40.0 if sentiment_total > 0 else 0.0
+    
+    # Stimulus Keyword Penalty
+    stimulus_keywords = ["충격", "폭로", "분노", "속보", "논란", "레전드", "경악", "극혐", "shocking", "expose", "scandal"]
+    calm_keywords = ["asmr", "명상", "힐링", "차분", "calm", "수면", "relax", "healing", "peaceful", "classic", "클래식"]
+    
+    stimulus_event_count = 0
+    calm_event_count = 0
+    for e in events:
+        txt = (e.get("text_base") or "").lower()
+        has_calm = any(ck in txt for ck in calm_keywords)
+        if has_calm:
+            calm_event_count += 1
+            continue
+        
+        has_stimulus = any(sk in txt for sk in stimulus_keywords)
+        if has_stimulus:
+            stimulus_event_count += 1
+            
+    stim_ratio = stimulus_event_count / max(1, len(events))
+    stim_penalty = stim_ratio * 30.0
+    
+    # Neutral / Info / Calm Stability signals
+    stable_count = sentiment_distribution.get("neutral", 0)
+    stable_local_count = sum(local_category_distribution.get(cat, 0) for cat in ["코딩/기술", "금융/투자", "교육/강의", "건강/운동"])
+    stability_ratio = (stable_count + stable_local_count + calm_event_count) / max(1, len(events) + nlp_count)
+    stability_boost = stability_ratio * 20.0
+    
+    ebs_score = 100.0 - neg_penalty - stim_penalty + stability_boost
+    
+    # Blend with Sejong's stability_factor if available
+    stability_factors = [r.get("stability_factor") for r in nlp_results if r.get("stability_factor") is not None]
+    if stability_factors:
+        avg_stability = sum(stability_factors) / len(stability_factors)
+        ebs_score = (ebs_score * 0.7) + (avg_stability * 100.0 * 0.3)
+
     ebs_confidence = base_confidence * min(
         1.0,
         sentiment_total / MIN_DATA_REQUIREMENTS["sentiment_count"],
@@ -206,40 +334,124 @@ def calculate_scores_v2(
     ebs_warnings = []
     if sentiment_total < MIN_DATA_REQUIREMENTS["sentiment_count"]:
         ebs_warnings.append("sentiment sample limited")
+        
+    legacy_ebs = _entropy_score(sentiment_distribution)
+    ebs_status = {
+        "sentiment_entropy": "used" if sentiment_total > 0 else "missing",
+        "stability_factors": "used" if stability_factors else "missing"
+    }
+    ebs_components = {
+        "legacy_sentiment_entropy_score": round(legacy_ebs, 1) if legacy_ebs is not None else 50.0,
+        "negative_sentiment_penalty": round(neg_penalty, 1),
+        "stimulus_keyword_penalty": round(stim_penalty, 1),
+        "neutral_info_calm_stability_signal_ratio": round(stability_ratio, 3),
+        "calm_keyword_protection_applied": True,
+        "status": ebs_status
+    }
     details["EBS"] = _detail(
         ebs_score,
         ebs_confidence,
-        "emotion distribution entropy across positive, neutral, and negative buckets",
+        "stability-based emotion index tracking negative penalties and neutral/calm boosters",
         ebs_warnings,
     )
+    details["EBS"]["score_components"] = ebs_components
 
+    # 5. SMS (Safety and Stimulus Score)
+    toxic_ratio = features.get("toxic_ratio")
+    if nlp_count < 2:
+        toxic_ratio = None
+        
+    has_actual_duration = any(e.get("time_delta_sec") is not None for e in events if e.get("action_type") == "view")
+    repeated_short_exposure_ratio = features.get("repeated_short_exposure_ratio", 0.0)
+    adjusted_repeated_short_ratio = repeated_short_exposure_ratio * (1.0 if has_actual_duration else 0.2)
+    
     sms_metrics = {
-        "toxic_ratio": features.get("toxic_ratio"),
+        "toxic_ratio": toxic_ratio,
         "harmful_keyword_ratio": features.get("harmful_keyword_ratio"),
         "shorts_ratio": features.get("shorts_ratio"),
-        "repeated_short_exposure_ratio": features.get("repeated_short_exposure_ratio"),
+        "repeated_short_exposure_ratio": adjusted_repeated_short_ratio,
     }
     sms_penalty, sms_coverage, sms_missing = _weighted_ratio_score(sms_metrics, SMS_WEIGHTS)
     sms_score = None if sms_penalty is None else 100.0 - sms_penalty
+    
+    # Apply Sejong's safety_factor if available
+    safety_factors = [r.get("safety_factor") for r in nlp_results if r.get("safety_factor") is not None]
+    if safety_factors and sms_score is not None:
+        avg_safety = sum(safety_factors) / len(safety_factors)
+        sms_score = (sms_score * 0.8) + (avg_safety * 100.0 * 0.2)
+
     sms_warnings = []
-    if features.get("nlp_count", 0) < MIN_DATA_REQUIREMENTS["safety_count"]:
-        sms_warnings.append("safety NLP sample limited")
+    if nlp_count < MIN_DATA_REQUIREMENTS["safety_count"]:
+        sms_warnings.append("safety NLP sample limited; toxic category ratio excluded from safety score")
     if sms_missing:
         sms_warnings.append("some safety penalty terms unavailable")
+        
+    sms_status = {
+        "toxic_ratio": "used" if toxic_ratio is not None else "missing",
+        "harmful_keyword_ratio": "used",
+        "shorts_ratio": "used",
+        "repeated_short_exposure_ratio": duration_status,
+        "safety_factors": "used" if safety_factors else "missing"
+    }
+    sms_components = {
+        "toxic_ratio_penalty": round(toxic_ratio * SMS_WEIGHTS["toxic_ratio"] * 100, 1) if toxic_ratio is not None else 0.0,
+        "harmful_keyword_penalty": round(features.get("harmful_keyword_ratio", 0.0) * SMS_WEIGHTS["harmful_keyword_ratio"] * 100, 1),
+        "shorts_ratio_penalty": round(features.get("shorts_ratio", 0.0) * SMS_WEIGHTS["shorts_ratio"] * 100, 1),
+        "repeated_shorts_penalty": round(adjusted_repeated_short_ratio * SMS_WEIGHTS["repeated_short_exposure_ratio"] * 100, 1),
+        "is_repeated_shorts_calibrated_by_duration": not has_actual_duration,
+        "status": sms_status
+    }
     details["SMS"] = _detail(
         sms_score,
         base_confidence * sms_coverage,
         "100 minus weighted safety/stimulus penalty ratios",
         sms_warnings,
     )
+    details["SMS"]["score_components"] = sms_components
 
-    vos_metrics = {
-        "topic_concentration": _max_ratio(topic_distribution),
-        "channel_concentration": _max_ratio(channel_distribution),
-        "search_repetition": _max_ratio(features.get("search_keyword_distribution", {})),
+    # 6. VOS (Viewpoint Openness Score)
+    top_topic = None
+    if topic_distribution:
+        top_topic = max(topic_distribution, key=topic_distribution.get)
+        
+    top_local = None
+    if local_category_distribution:
+        top_local = max(local_category_distribution, key=local_category_distribution.get)
+        
+    raw_topic_concentration = _max_ratio(topic_distribution)
+    raw_channel_concentration = _max_ratio(channel_distribution)
+    raw_search_repetition = _max_ratio(features.get("search_keyword_distribution", {}))
+    
+    adjusted_items = []
+    
+    # Topic relaxation
+    adjusted_topic_concentration = raw_topic_concentration
+    if raw_topic_concentration is not None and top_topic in EDUCATIONAL_CATEGORIES:
+        adjusted_topic_concentration = raw_topic_concentration * CONCENTRATION_BETA
+        adjusted_items.append("topic_concentration")
+        
+    # Channel relaxation
+    adjusted_channel_concentration = raw_channel_concentration
+    if raw_channel_concentration is not None and top_local in EDUCATIONAL_CATEGORIES:
+        adjusted_channel_concentration = raw_channel_concentration * CONCENTRATION_BETA
+        adjusted_items.append("channel_concentration")
+        
+    adjusted_vos_metrics = {
+        "topic_concentration": adjusted_topic_concentration,
+        "channel_concentration": adjusted_channel_concentration,
+        "search_repetition": raw_search_repetition,
     }
-    concentration, vos_coverage, vos_missing = _weighted_ratio_score(vos_metrics, VOS_WEIGHTS)
+    concentration, vos_coverage, vos_missing = _weighted_ratio_score(adjusted_vos_metrics, VOS_WEIGHTS)
     vos_score = None if concentration is None else 100.0 - concentration
+    
+    raw_vos_metrics = {
+        "topic_concentration": raw_topic_concentration,
+        "channel_concentration": raw_channel_concentration,
+        "search_repetition": raw_search_repetition,
+    }
+    raw_concentration, _, _ = _weighted_ratio_score(raw_vos_metrics, VOS_WEIGHTS)
+    raw_vos_score = None if raw_concentration is None else 100.0 - raw_concentration
+    
     vos_warnings = []
     if "topic_concentration" in vos_missing:
         vos_warnings.append("topic concentration unavailable")
@@ -247,14 +459,29 @@ def calculate_scores_v2(
         vos_warnings.append("channel concentration unavailable")
     if "search_repetition" in vos_missing:
         vos_warnings.append("search repetition unavailable")
-    # TODO: Add explicit opposing-viewpoint query detection in the next scoring phase.
+        
+    vos_status = {
+        "topic_concentration": "used" if raw_topic_concentration is not None else "missing",
+        "channel_concentration": "used" if raw_channel_concentration is not None else "missing",
+        "search_repetition": "used" if raw_search_repetition is not None else "missing"
+    }
+    vos_components = {
+        "raw_concentration_score": round(raw_vos_score, 1) if raw_vos_score is not None else 50.0,
+        "adjusted_concentration_score": round(vos_score, 1) if vos_score is not None else 50.0,
+        "beta_applied": len(adjusted_items) > 0,
+        "beta_value": CONCENTRATION_BETA,
+        "productive_immersion_adjusted_fields": adjusted_items,
+        "status": vos_status
+    }
     details["VOS"] = _detail(
         vos_score,
         base_confidence * vos_coverage,
-        "openness estimated from topic, channel, and search-keyword concentration",
+        "openness estimated from topic, channel, and search-keyword concentration with educational beta adjustment",
         vos_warnings,
     )
+    details["VOS"]["score_components"] = vos_components
 
+    # Post processing for mock/fallback labels
     mock_sensitive_axes = {"TDS", "EBS", "SMS", "VOS"}
     for axis in AXIS_CODES:
         axis_warnings = details[axis]["warnings"] + common_warnings
@@ -272,6 +499,8 @@ def calculate_scores_v2(
 def _exception_codes_from_details(
     features: Dict[str, Any],
     details: Dict[str, Dict[str, Any]],
+    events: List[Dict[str, Any]],
+    nlp_results: List[Dict[str, Any]]
 ) -> List[str]:
     codes: List[str] = []
 
@@ -306,6 +535,27 @@ def _exception_codes_from_details(
     if any("direct selection" in warning for warning in details["UAS"].get("warnings", [])):
         add("P10_DIRECT_SELECTION_UNAVAILABLE")
 
+    # Duration Checks
+    has_estimated_duration = any(e.get("is_duration_estimated") for e in events)
+    has_duration = any(e.get("time_delta_sec") is not None or e.get("estimated_duration_sec") is not None for e in events if e.get("action_type") == "view")
+    
+    if has_estimated_duration:
+        add("P10_DURATION_ESTIMATED")
+    elif not has_duration:
+        add("P10_DURATION_MISSING")
+
+    # NLP Fallback Checks
+    nlp_providers = [r.get("nlp_provider") for r in nlp_results if r.get("nlp_provider") is not None]
+    if "rule_based_fallback" in nlp_providers:
+        add("P15_NLP_FALLBACK_USED")
+
+    # Category Confidence checks
+    confidences = [r.get("category_confidence") for r in nlp_results if r.get("category_confidence") is not None]
+    if confidences:
+        avg_confidence = sum(confidences) / len(confidences)
+        if avg_confidence < 0.5:
+            add("P16_CATEGORY_CONFIDENCE_LOW")
+
     return codes
 
 
@@ -315,7 +565,7 @@ def compute_6axis_score_details(
 ) -> Tuple[Dict[str, Dict[str, Any]], List[str], Dict[str, Any]]:
     features = extract_features(events, nlp_results)
     details = calculate_scores_v2(events, nlp_results)
-    exception_codes = _exception_codes_from_details(features, details)
+    exception_codes = _exception_codes_from_details(features, details, events, nlp_results)
     return details, exception_codes, features
 
 

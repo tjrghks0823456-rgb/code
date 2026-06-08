@@ -22,6 +22,46 @@ from app.core.database import db_client
 from app.core.shorts_analysis import build_shorts_analysis
 from app.core.upload_config import DURATION_LIMITS, PARSER_LIMITS, ZIP_LIMITS
 from app.core.youtube import parse_iso8601_duration, youtube_client
+from app.core.config import settings, DEFAULT_MVP_USER_ID
+from app.core.takeout_parser import parse_single_item
+
+def build_sessions_from_events(events: List[Dict[str, Any]], gap_minutes: int = 30) -> List[List[Dict[str, Any]]]:
+    relevant_events = [
+        e for e in events
+        if e.get("action_type") in ["search", "view"]
+    ]
+    try:
+        relevant_events_sorted = sorted(relevant_events, key=lambda x: x.get("event_time") or "")
+    except Exception:
+        relevant_events_sorted = relevant_events
+
+    sessions = []
+    current_session = []
+
+    for e in relevant_events_sorted:
+        if not e.get("event_time"):
+            continue
+        if not current_session:
+            current_session.append(e)
+            continue
+
+        try:
+            t1 = datetime.strptime(current_session[-1]["event_time"], "%Y-%m-%d %H:%M:%S")
+            t2 = datetime.strptime(e["event_time"], "%Y-%m-%d %H:%M:%S")
+            gap_sec = abs((t2 - t1).total_seconds())
+        except Exception:
+            gap_sec = 0.0
+
+        if gap_sec > gap_minutes * 60:
+            sessions.append(current_session)
+            current_session = [e]
+        else:
+            current_session.append(e)
+
+    if current_session:
+        sessions.append(current_session)
+
+    return sessions
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,18 +110,36 @@ def extract_video_id(url: str) -> Optional[str]:
         return None
     try:
         parsed = urllib.parse.urlparse(url)
-        if "youtube.com" in parsed.netloc:
+        # Shorts format: /shorts/VIDEO_ID
+        if "/shorts/" in parsed.path:
+            parts = [p for p in parsed.path.split("/") if p]
+            if "shorts" in parts:
+                idx = parts.index("shorts")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+                    
+        # Standard or music format: youtube.com/watch?v=... or music.youtube.com/watch?v=...
+        if "youtube.com" in parsed.netloc or "music.youtube" in parsed.netloc:
             query = urllib.parse.parse_qs(parsed.query)
             v = query.get("v")
             if v:
                 return v[0]
+            # fallback path parts watch/VIDEO_ID
+            parts = [p for p in parsed.path.split("/") if p]
+            if "watch" in parts:
+                idx = parts.index("watch")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+                    
+        # Short URL format: youtu.be/VIDEO_ID
         elif "youtu.be" in parsed.netloc:
-            parts = parsed.path.strip("/").split("/")
+            parts = [p for p in parsed.path.split("/") if p]
             if parts:
                 return parts[0]
     except Exception:
         pass
     return None
+
 
 def classify_content_format(item: Dict[str, Any]) -> str:
     url = (
@@ -162,7 +220,7 @@ def count_content_formats(events: List[Dict[str, Any]]) -> Dict[str, int]:
         counts[content_format] = counts.get(content_format, 0) + 1
     return counts
 
-def apply_youtube_duration_metadata(events: List[Dict[str, Any]]) -> Dict[str, int]:
+def apply_youtube_duration_metadata(events: List[Dict[str, Any]], mock_estimation_enabled: bool = False) -> Dict[str, int]:
     seen = set()
     video_ids = []
     for event in events:
@@ -180,6 +238,7 @@ def apply_youtube_duration_metadata(events: List[Dict[str, Any]]) -> Dict[str, i
         metadata_by_id[video_id] = youtube_client.get_video_metadata(video_id)
 
     for event in events:
+        event["mock_estimation_used"] = mock_estimation_enabled
         video_id = event.get("video_id")
         metadata = metadata_by_id.get(video_id)
         if not metadata:
@@ -194,15 +253,30 @@ def apply_youtube_duration_metadata(events: List[Dict[str, Any]]) -> Dict[str, i
         duration_sec = metadata.get("duration_sec")
         if metadata.get("api_success") and duration_sec:
             event["metadata_duration_sec"] = duration_sec
-            event["estimated_duration_sec"] = duration_sec
-            event["duration_confidence"] = "api"
-            event["duration_source"] = "youtube_api"
+            event["video_duration_sec"] = duration_sec
+            if mock_estimation_enabled:
+                event["estimated_duration_sec"] = duration_sec
+                event["duration_confidence"] = "api"
+                event["duration_source"] = "youtube_api"
+            else:
+                event["estimated_duration_sec"] = None
+                event["duration_confidence"] = "unknown"
+                event["duration_source"] = "none"
         elif duration_sec:
+            event["video_duration_sec"] = duration_sec
             event["mock_metadata_duration_sec"] = duration_sec
 
     return count_duration_sources(events)
 
-def apply_timeline_duration_estimates(timed_events: List[tuple]) -> None:
+def apply_timeline_duration_estimates(timed_events: List[tuple], mock_estimation_enabled: bool = False) -> None:
+    if not mock_estimation_enabled:
+        for _, event in timed_events:
+            event["timeline_gap_sec"] = None
+            event["estimated_duration_sec"] = None
+            event["duration_confidence"] = "unknown"
+            event["duration_source"] = "none"
+        return
+
     max_gap_sec = DURATION_LIMITS["max_timeline_gap_sec"]
     default_sec = DURATION_LIMITS["standard_default_sec"]
 
@@ -232,7 +306,6 @@ def apply_timeline_duration_estimates(timed_events: List[tuple]) -> None:
             continue
 
         bounded_duration = max(1, min(gap_sec, current_estimate))
-        # MVP fallback: timeline gaps are estimates, not confirmed watch time.
         event["estimated_duration_sec"] = bounded_duration
         event["duration_confidence"] = "estimated"
         event["duration_source"] = "timeline_gap"
@@ -495,6 +568,7 @@ def parse_youtube_search_html(html_content: str) -> List[dict]:
             "content_format": "unknown",
             "intent_level": "active_search",
             "search_query": search_query,
+            "time": extract_timestamp_from_html_fragment(fragment)
         }
         is_ad, ad_reason = is_google_ad_event(parsed_item, raw_text=fragment)
         if ad_reason:
@@ -598,7 +672,8 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
             "video_id": video_id,
             "title_url": None if action_type == "search" else (a_tags[0].get("href", "") if len(a_tags) >= 1 else None),
             "channel_name": channel_name,
-            "channel_url": channel_url
+            "channel_url": channel_url,
+            "time": timestamp_str
         }
         parsed_item["content_format"] = classify_content_format(parsed_item)
         parsed_item["intent_level"] = infer_intent_level(parsed_item)
@@ -678,7 +753,8 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
             "video_id": video_id,
             "title_url": title_url,
             "channel_name": channel_name,
-            "channel_url": channel_url
+            "channel_url": channel_url,
+            "time": item_time
         }
         parsed_item["content_format"] = classify_content_format(parsed_item)
         parsed_item["intent_level"] = infer_intent_level(parsed_item)
@@ -902,10 +978,11 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
 
 @router.post("/upload")
 async def upload_file(
-    user_id: str = "00000000-0000-0000-0000-000000000001",
+    user_id: str = DEFAULT_MVP_USER_ID,
     platform: str = "youtube",
     action_type: str = "view",
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    mock_estimation: bool = False
 ):
     try:
         content = await file.read()
@@ -934,151 +1011,86 @@ async def upload_file(
                 logger.warning(f"Failed to parse JSON file {file.filename}: {e}. Falling back to line-by-line.")
                 is_json = False
 
+        items = []
         if is_json and isinstance(raw_items, list):
-            for i, item in enumerate(raw_items[:PARSER_LIMITS["legacy_upload_json_items"]]):
-                if not isinstance(item, dict):
-                    continue
-
-                raw_title = item.get("title", "")
-                if not raw_title:
-                    continue
-
-                title_text = raw_title
-                current_action_type = action_type
-                if raw_title.startswith("Watched "):
-                    title_text = raw_title[len("Watched "):]
-                    current_action_type = "view"
-                elif raw_title.startswith("Searched for "):
-                    title_text = raw_title[len("Searched for "):]
-                    current_action_type = "search"
-
-                title_url = item.get("titleUrl", "")
-                video_id = extract_video_id(title_url)
-                subtitles = item.get("subtitles", [])
-                channel_name = None
-                channel_url = None
-                if subtitles and isinstance(subtitles, list):
-                    channel_name = subtitles[0].get("name", "")
-                    channel_url = subtitles[0].get("url", "")
-
-                current_source_type = infer_source_type({"action_type": current_action_type})
-                duration_item = {
-                    "title_text": title_text,
-                    "title_url": title_url,
-                    "action_type": current_action_type,
-                    "source_type": current_source_type,
-                    "channel_name": channel_name,
-                    "channel_url": channel_url,
-                }
-                estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
-                is_ad, ad_reason = is_google_ad_event({**item, **duration_item})
-                search_query = extract_search_query({**item, **duration_item}) if current_action_type == "search" else None
-                if current_action_type == "search" and search_query:
-                    title_text = search_query
-                    video_id = None
-                    duration_item["title_text"] = search_query
-                elif current_action_type == "search" and not is_ad:
-                    continue
-
-                item_time = item.get("time", "")
-                parsed_time_str = None
-                if item_time:
-                    try:
-                        clean_time = item_time.replace("Z", "")
-                        if "." in clean_time:
-                            clean_time = clean_time.split(".")[0]
-                        parsed_time = datetime.fromisoformat(clean_time)
-                        parsed_time_str = parsed_time.strftime("%Y-%m-%d %H:%M:%S")
-                    except Exception as time_err:
-                        logger.warning(f"Could not parse timestamp {item_time}: {time_err}")
-
-                if not parsed_time_str:
-                    parsed_time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-
-                parsed_events.append({
-                    "id": str(uuid.uuid4()),
-                    "file_id": file_id,
-                    "event_time": parsed_time_str,
-                    "time_delta_sec": None,
-                    "text_base": title_text,
-                    "platform": platform,
-                    "action_type": current_action_type,
-                    "source_type": current_source_type,
-                    "source_surface": "unknown",
-                    "title_url": title_url,
-                    "channel_name": channel_name,
-                    "channel_url": channel_url,
-                    "video_id": video_id,
-                    "content_format": classify_content_format(duration_item),
-                    "intent_level": infer_intent_level(duration_item),
-                    "search_query": search_query,
-                    "estimated_duration_sec": estimated_duration_sec,
-                    "duration_confidence": duration_confidence,
-                    "duration_source": duration_source,
-                    "is_ad_event": bool(ad_reason),
-                    "ad_filter_reason": ad_reason
-                })
+            items = raw_items
         else:
             lines = text_content.split("\n")
-            base_time = datetime.utcnow()
-            for i, line in enumerate(lines[:PARSER_LIMITS["legacy_upload_text_lines"]]):
+            for line in lines:
                 cleaned_line = line.strip()
                 if not cleaned_line:
                     continue
-
-                title_text = cleaned_line
-                if "," in cleaned_line:
-                    parts = cleaned_line.split(",")
-                    if len(parts) > 1:
-                        title_text = parts[0].strip("\" ")
-
-                current_source_type = infer_source_type({"action_type": action_type})
-                duration_item = {
-                    "title_text": title_text,
-                    "action_type": action_type,
-                    "source_type": current_source_type,
-                }
-                estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(duration_item)
-                is_ad, ad_reason = is_google_ad_event({**duration_item, "raw_line": cleaned_line})
-                search_query = extract_search_query(duration_item, raw_text=cleaned_line) if action_type == "search" else None
-                if action_type == "search" and search_query:
-                    title_text = search_query
-                    duration_item["title_text"] = search_query
-                elif action_type == "search" and not is_ad:
-                    continue
-
-                parsed_events.append({
-                    "id": str(uuid.uuid4()),
-                    "file_id": file_id,
-                    "event_time": datetime.fromtimestamp(base_time.timestamp() - (i * 600)).strftime("%Y-%m-%d %H:%M:%S"),
-                    "time_delta_sec": None,
-                    "text_base": title_text,
-                    "platform": platform,
-                    "action_type": action_type,
-                    "source_type": current_source_type,
-                    "source_surface": "unknown",
-                    "content_format": classify_content_format(duration_item),
-                    "intent_level": infer_intent_level(duration_item),
-                    "search_query": search_query,
-                    "estimated_duration_sec": estimated_duration_sec,
-                    "duration_confidence": duration_confidence,
-                    "duration_source": duration_source,
-                    "is_ad_event": bool(ad_reason),
-                    "ad_filter_reason": ad_reason
+                # Create a raw item dictionary representing the line
+                items.append({
+                    "title": cleaned_line,
+                    "time": None
                 })
+
+        base_time = datetime.utcnow()
+        limit_count = PARSER_LIMITS["legacy_upload_json_items"] if is_json else PARSER_LIMITS["legacy_upload_text_lines"]
+        fallback_used = False
+        
+        for i, item in enumerate(items[:limit_count]):
+            parsed_res, parser_warnings = parse_single_item(item, file_kind=action_type, mock_estimation_enabled=mock_estimation)
+            ad_reason = detect_ad_event_reason(parsed_res)
+            
+            event_time = parsed_res["event_time"]
+            if not event_time:
+                fallback_used = True
+                from datetime import timedelta
+                fallback_dt = base_time - timedelta(seconds=i * 10)
+                event_time = fallback_dt.strftime("%Y-%m-%d %H:%M:%S")
+                parser_warnings.append("timestamp_estimation_fallback")
+                
+            is_view = parsed_res["action_type"] == "view"
+            
+            parsed_events.append({
+                "id": str(uuid.uuid4()),
+                "file_id": file_id,
+                "event_time": event_time,
+                "time_delta_sec": parsed_res["time_delta_sec"],
+                "video_duration_sec": parsed_res.get("video_duration_sec"),
+                "text_base": parsed_res["text_base"] or "알 수 없는 비디오",
+                "platform": platform,
+                "action_type": parsed_res["action_type"],
+                "source_surface": parsed_res["source_surface"],
+                "source_confidence": parsed_res["source_confidence"],
+                "source_type": infer_source_type({"action_type": parsed_res["action_type"]}),
+                "channel_name": parsed_res["channel_name"],
+                "channel_url": parsed_res.get("channel_url") or item.get("channel_url"),
+                "title_url": parsed_res["title_url"],
+                "video_id": parsed_res["video_id"],
+                "content_format": parsed_res.get("content_format") or classify_content_format(parsed_res),
+                "intent_level": parsed_res.get("intent_level") or infer_intent_level(parsed_res),
+                "search_query": parsed_res.get("search_query") or item.get("search_query"),
+                "estimated_duration_sec": parsed_res["estimated_duration_sec"],
+                "duration_confidence": parsed_res["duration_confidence"],
+                "duration_source": "simulated" if is_view else parsed_res["duration_source"],
+                "is_duration_estimated": True if is_view else False,
+                "video_url": parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl"),
+                "tags": item.get("tags") or [],
+                "topicCategories": item.get("topicCategories") or [],
+                "categoryId": item.get("categoryId") or "",
+                "is_ad_event": bool(ad_reason),
+                "ad_filter_reason": ad_reason,
+                "raw_time": parsed_res.get("raw_time") or item.get("time") or "",
+                "raw_item": item
+            })
 
         analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
         ad_skip_summary = build_ad_skip_summary(excluded_ad_events)
         content_format_counts = count_content_formats(analysis_events)
         shorts_analysis = build_shorts_analysis(analysis_events)
-        apply_youtube_duration_metadata(analysis_events)
+        
+        apply_youtube_duration_metadata(analysis_events, mock_estimation_enabled=mock_estimation)
+        
         timed_events = []
         for event in analysis_events:
             try:
                 timed_events.append((datetime.strptime(event["event_time"], "%Y-%m-%d %H:%M:%S"), event))
             except Exception:
                 continue
-        apply_timeline_duration_estimates(timed_events)
+        apply_timeline_duration_estimates(timed_events, mock_estimation_enabled=mock_estimation)
         duration_source_counts = count_duration_sources(analysis_events)
 
         filtered_events = []
@@ -1086,47 +1098,75 @@ async def upload_file(
 
         for event in analysis_events:
             duration_for_filter = event.get("time_delta_sec")
-            if duration_for_filter is None:
+            if duration_for_filter is None and mock_estimation:
                 duration_for_filter = event.get("estimated_duration_sec")
 
-            if event["action_type"] == "view" and duration_for_filter is not None and duration_for_filter < DURATION_LIMITS["min_watch_sec"]:
-                skipped_count += 1
-                continue
+            if event["action_type"] == "view" and duration_for_filter is not None:
+                if duration_for_filter < DURATION_LIMITS["min_watch_sec"]:
+                    skipped_count += 1
+                    continue
             filtered_events.append(event)
 
         for event in filtered_events:
             db_client.save_data("norm_event", event)
+
+        duration_unknown_used = any(e.get("time_delta_sec") is None and e.get("action_type") == "view" for e in filtered_events)
+        data_quality_flags = []
+        if fallback_used:
+            data_quality_flags.append("timestamp_fallback_used")
+        if duration_unknown_used:
+            data_quality_flags.append("duration_unknown")
 
         raw_file_entry["upload_status"] = "SUCCESS"
         raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
         raw_file_entry["ad_skip_summary"] = ad_skip_summary
         raw_file_entry["content_format_counts"] = content_format_counts
         raw_file_entry["duration_source_counts"] = duration_source_counts
+        raw_file_entry["data_quality_flags"] = data_quality_flags
         raw_file_entry["data_coverage"] = {
             "excluded_ad_count": len(excluded_ad_events),
             "ad_skip_summary": ad_skip_summary,
             "content_format_counts": content_format_counts,
             "duration_source_counts": duration_source_counts,
+            "data_quality_flags": data_quality_flags,
         }
         db_client.save_data("raw_file", raw_file_entry)
 
-        session_id = str(uuid.uuid4())
-        standard_text_events = [
-            event for event in filtered_events
-            if event.get("action_type") == "search"
-            or (event.get("action_type") == "view" and event.get("content_format") == "standard_video")
-        ]
-        aggregated_titles = " | ".join([e["text_base"] for e in standard_text_events[:15]])
-        session_text_entry = {
-            "id": session_id,
-            "file_id": file_id,
-            "aggregated_text": aggregated_titles,
-            "token_count": len(aggregated_titles.split()),
-            "start_time": standard_text_events[-1]["event_time"] if standard_text_events else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-            "end_time": standard_text_events[0]["event_time"] if standard_text_events else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        if aggregated_titles:
+        # Multi-session generation with 30-minute threshold
+        sessions_list = build_sessions_from_events(filtered_events, gap_minutes=30)
+        
+        for idx, sess in enumerate(sessions_list[:100]):
+            session_id = str(uuid.uuid4())
+            aggregated_titles = " | ".join([e["text_base"] for e in sess if e.get("text_base")])
+            session_text_entry = {
+                "id": session_id,
+                "file_id": file_id,
+                "aggregated_text": aggregated_titles,
+                "token_count": len(aggregated_titles.split()),
+                "event_count": len(sess),
+                "start_time": sess[0]["event_time"],
+                "end_time": sess[-1]["event_time"]
+            }
             db_client.save_data("session_text", session_text_entry)
+
+        return {
+            "success": True,
+            "file_id": file_id,
+            "session_count": len(sessions_list),
+            "total_parsed": len(parsed_events),
+            "total_saved": len(filtered_events),
+            "skipped_fake_dopamine": skipped_count,
+            "excluded_ad_count": len(excluded_ad_events),
+            "ad_skip_summary": ad_skip_summary,
+            "content_format_counts": content_format_counts,
+            "shorts_analysis": shorts_analysis,
+            "duration_source_counts": duration_source_counts,
+            "data_quality": {
+                "duration": "estimated"
+            },
+            "warning_codes": ["P10_DURATION_ESTIMATED"],
+            "message": f"Successfully parsed {len(parsed_events)} events. 시청 지속 시간은 Google Takeout 한계로 인해 MVP용 추정값입니다."
+        }
 
         return {
             "success": True,
@@ -1148,11 +1188,12 @@ async def upload_file(
 
 @router.post("/upload/takeout")
 async def upload_takeout(
-    user_id: str = "00000000-0000-0000-0000-000000000001",
+    user_id: str = DEFAULT_MVP_USER_ID,
     files: List[UploadFile] = File(default=None),
     paths: List[str] = Form(default=None),
     zip_file: UploadFile = File(default=None),
-    survey_scores: Optional[str] = Form(default=None)
+    survey_scores: Optional[str] = Form(default=None),
+    mock_estimation: bool = Form(default=False)
 ):
     """
     Handles refined multi-file folder and ZIP Google Takeout uploads.
@@ -1249,6 +1290,7 @@ async def upload_takeout(
             "live_chat": 0,
             "channel": 0
         }
+        fallback_used = False
 
         for file_info in files_to_parse:
             name = file_info["name"]
@@ -1273,32 +1315,52 @@ async def upload_takeout(
 
             parsed_source_counts[kind] = parsed_source_counts.get(kind, 0) + len(items)
 
+            base_time = datetime.utcnow()
             for idx, item in enumerate(items):
-                estimated_duration_sec, duration_confidence, duration_source = estimate_default_duration(item)
-                ad_reason = detect_ad_event_reason(item)
+                parsed_res, parser_warnings = parse_single_item(item, file_kind="search" if kind == "search_history" else "watch", mock_estimation_enabled=mock_estimation)
+                ad_reason = detect_ad_event_reason(parsed_res)
+
+                event_time = parsed_res["event_time"]
+                if not event_time:
+                    fallback_used = True
+                    from datetime import timedelta
+                    fallback_dt = base_time - timedelta(seconds=idx * 10)
+                    event_time = fallback_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    parser_warnings.append("timestamp_estimation_fallback")
+
+                is_view = parsed_res["action_type"] == "view"
 
                 parsed_events.append({
                     "id": str(uuid.uuid4()),
                     "file_id": file_id,
-                    "event_time": item["event_time"],
-                    "time_delta_sec": None, # Removed simulated mock values
-                    "text_base": item["title_text"],
+                    "event_time": event_time,
+                    "time_delta_sec": parsed_res["time_delta_sec"],
+                    "video_duration_sec": parsed_res.get("video_duration_sec"),
+                    "text_base": parsed_res["text_base"] or "알 수 없는 비디오",
                     "platform": "youtube",
-                    "action_type": item["action_type"],
-                    "source_surface": "unknown",
+                    "action_type": parsed_res["action_type"],
+                    "source_surface": parsed_res["source_surface"],
+                    "source_confidence": parsed_res["source_confidence"],
                     "source_type": kind,
-                    "channel_name": item.get("channel_name"),
-                    "channel_url": item.get("channel_url"),
-                    "title_url": item.get("title_url"),
-                    "video_id": item.get("video_id"),
-                    "content_format": item.get("content_format") or classify_content_format(item),
-                    "intent_level": item.get("intent_level") or infer_intent_level({**item, "source_type": kind}),
-                    "search_query": item.get("search_query"),
-                    "estimated_duration_sec": estimated_duration_sec,
-                    "duration_confidence": duration_confidence,
-                    "duration_source": duration_source,
+                    "channel_name": parsed_res["channel_name"],
+                    "channel_url": parsed_res.get("channel_url") or item.get("channel_url"),
+                    "title_url": parsed_res["title_url"],
+                    "video_id": parsed_res["video_id"],
+                    "content_format": parsed_res.get("content_format") or classify_content_format(parsed_res),
+                    "intent_level": item.get("intent_level") or infer_intent_level({**parsed_res, "source_type": kind}),
+                    "search_query": parsed_res.get("search_query") or item.get("search_query"),
+                    "estimated_duration_sec": parsed_res["estimated_duration_sec"],
+                    "duration_confidence": parsed_res["duration_confidence"],
+                    "duration_source": "simulated" if is_view else parsed_res["duration_source"],
+                    "is_duration_estimated": True if is_view else False,
+                    "video_url": parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl"),
+                    "tags": item.get("tags") or [],
+                    "topicCategories": item.get("topicCategories") or [],
+                    "categoryId": item.get("categoryId") or "",
                     "is_ad_event": bool(ad_reason),
-                    "ad_filter_reason": ad_reason
+                    "ad_filter_reason": ad_reason,
+                    "raw_time": parsed_res.get("raw_time") or item.get("time") or "",
+                    "raw_item": item
                 })
 
         analysis_events, excluded_ad_events = split_analysis_events(parsed_events)
@@ -1309,7 +1371,7 @@ async def upload_takeout(
         analysis_source_counts = count_source_types(analysis_events)
         content_format_counts = count_content_formats(analysis_events)
         shorts_analysis = build_shorts_analysis(analysis_events)
-        duration_source_counts = apply_youtube_duration_metadata(analysis_events)
+        duration_source_counts = apply_youtube_duration_metadata(analysis_events, mock_estimation_enabled=mock_estimation)
 
         # 4. Filter watch history views for dopamine filter & sessions
         # (Exclude playlist/subscription from standard watch filters)
@@ -1322,21 +1384,21 @@ async def upload_takeout(
             except Exception:
                 continue
 
-        apply_timeline_duration_estimates(timed_events)
+        apply_timeline_duration_estimates(timed_events, mock_estimation_enabled=mock_estimation)
         duration_source_counts = count_duration_sources(analysis_events)
 
         filtered_events = []
         skipped_count = 0
 
         for event in watch_search_events:
-            # Fake dopamine filter only checks watch/view events
             duration_for_filter = event.get("time_delta_sec")
-            if duration_for_filter is None:
+            if duration_for_filter is None and mock_estimation:
                 duration_for_filter = event.get("estimated_duration_sec")
 
-            if event["action_type"] == "view" and duration_for_filter is not None and duration_for_filter < DURATION_LIMITS["min_watch_sec"]:
-                skipped_count += 1
-                continue
+            if event["action_type"] == "view" and duration_for_filter is not None:
+                if duration_for_filter < DURATION_LIMITS["min_watch_sec"]:
+                    skipped_count += 1
+                    continue
             filtered_events.append(event)
 
         # Add playlist/subscription events to final events directly (Auxiliary features)
@@ -1353,6 +1415,13 @@ async def upload_takeout(
         for event in final_events:
             db_client.save_data("norm_event", event)
 
+        duration_unknown_used = any(e.get("time_delta_sec") is None and e.get("action_type") == "view" for e in final_events)
+        data_quality_flags = []
+        if fallback_used:
+            data_quality_flags.append("timestamp_fallback_used")
+        if duration_unknown_used:
+            data_quality_flags.append("duration_unknown")
+
         # 6. Update raw file status to SUCCESS
         raw_file_entry["upload_status"] = "SUCCESS"
         raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
@@ -1362,6 +1431,7 @@ async def upload_takeout(
         raw_file_entry["analysis_source_counts"] = analysis_source_counts
         raw_file_entry["content_format_counts"] = content_format_counts
         raw_file_entry["duration_source_counts"] = duration_source_counts
+        raw_file_entry["data_quality_flags"] = data_quality_flags
         raw_file_entry["data_coverage"] = {
             "parsed_source_counts": parsed_source_counts,
             "analysis_source_counts": analysis_source_counts,
@@ -1370,50 +1440,24 @@ async def upload_takeout(
             "ad_skip_summary": ad_skip_summary,
             "content_format_counts": content_format_counts,
             "duration_source_counts": duration_source_counts,
+            "data_quality_flags": data_quality_flags,
         }
         db_client.save_data("raw_file", raw_file_entry)
 
         # 7. Chronological Time-based and Count-based Multi-session Generator
-        session_events = [
-            e for e in filtered_events
-            if e["action_type"] == "search"
-            or (e["action_type"] == "view" and e.get("content_format") == "standard_video")
-        ]
-        session_events_sorted = sorted(session_events, key=lambda x: x["event_time"])
+        # Group using the 30-minute threshold
+        sessions_list = build_sessions_from_events(filtered_events, gap_minutes=30)
 
-        sessions_list = []
-        current_session = []
-
-        for e in session_events_sorted:
-            if not current_session:
-                current_session.append(e)
-                continue
-
-            try:
-                t1 = datetime.strptime(current_session[-1]["event_time"], "%Y-%m-%d %H:%M:%S")
-                t2 = datetime.strptime(e["event_time"], "%Y-%m-%d %H:%M:%S")
-                gap_hours = abs((t2 - t1).total_seconds()) / 3600.0
-            except Exception:
-                gap_hours = 0.0
-
-            if gap_hours > 6.0 or len(current_session) >= 100:
-                sessions_list.append(current_session)
-                current_session = [e]
-            else:
-                current_session.append(e)
-
-        if current_session:
-            sessions_list.append(current_session)
-
-        # Limit the number of generated session entries to 10 for prototype performance
-        for idx, sess in enumerate(sessions_list[:10]):
+        # Save all generated sessions (or up to 100 to be safe)
+        for idx, sess in enumerate(sessions_list[:100]):
             session_id = str(uuid.uuid4())
-            aggregated_titles = " | ".join([e["text_base"] for e in sess[:15]])
+            aggregated_titles = " | ".join([e["text_base"] for e in sess if e.get("text_base")])
             session_text_entry = {
                 "id": session_id,
                 "file_id": file_id,
                 "aggregated_text": aggregated_titles,
                 "token_count": len(aggregated_titles.split()),
+                "event_count": len(sess),
                 "start_time": sess[0]["event_time"],
                 "end_time": sess[-1]["event_time"]
             }
@@ -1429,6 +1473,7 @@ async def upload_takeout(
                 "file_id": file_id,
                 "aggregated_text": aux_titles,
                 "token_count": len(aux_titles.split()),
+                "event_count": len(aux_text_events),
                 "start_time": aux_text_events[0]["event_time"],
                 "end_time": aux_text_events[-1]["event_time"]
             }
@@ -1451,7 +1496,12 @@ async def upload_takeout(
             "excluded_ad_count": len(excluded_ad_events),
             "content_format_counts": content_format_counts,
             "shorts_analysis": shorts_analysis,
-            "duration_source_counts": duration_source_counts
+            "duration_source_counts": duration_source_counts,
+            "data_quality": {
+                "duration": "estimated"
+            },
+            "warning_codes": ["P10_DURATION_ESTIMATED"],
+            "message": "Successfully parsed Takeout events. 시청 지속 시간은 Google Takeout 한계로 인해 MVP용 추정값입니다."
         }
 
     except HTTPException as he:
@@ -1462,13 +1512,15 @@ async def upload_takeout(
 
 @router.post("/upload/youtube-takeout")
 async def upload_youtube_takeout(
-    user_id: str = "00000000-0000-0000-0000-000000000001",
+    user_id: str = DEFAULT_MVP_USER_ID,
     files: List[UploadFile] = File(default=None),
     paths: List[str] = Form(default=None),
-    zip_file: UploadFile = File(default=None)
+    zip_file: UploadFile = File(default=None),
+    survey_scores: Optional[str] = Form(default=None),
+    mock_estimation: bool = Form(default=False)
 ):
     # Forward deprecated endpoint to new /upload/takeout for backward compatibility
-    res = await upload_takeout(user_id=user_id, files=files, paths=paths, zip_file=zip_file)
+    res = await upload_takeout(user_id=user_id, files=files, paths=paths, zip_file=zip_file, survey_scores=survey_scores, mock_estimation=mock_estimation)
     return res
 
 @router.get("/youtube-test")
