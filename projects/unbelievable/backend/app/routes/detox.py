@@ -8,6 +8,7 @@ from app.core.content_filters import split_analysis_events
 from app.core.database import db_client
 from app.core.gemini import gemini_client
 from app.core.shorts_analysis import build_shorts_analysis
+from app.core.config import DEFAULT_MVP_USER_ID
 
 
 router = APIRouter()
@@ -16,7 +17,7 @@ router = APIRouter()
 @router.post("/detox/generate")
 async def generate_detox_plan(
     run_id: str,
-    user_id: str = "00000000-0000-0000-0000-000000000001",
+    user_id: str = DEFAULT_MVP_USER_ID,
 ):
     """Generate reverse queries and missions for the completed score run."""
     try:
@@ -32,13 +33,112 @@ async def generate_detox_plan(
         analysis_events, _excluded_ad_events = split_analysis_events(events)
         shorts_analysis = build_shorts_analysis(analysis_events)
 
+        # Get actual dominant topics from nlp results and events
+        file_id = run.get("file_id")
+        sessions_list = db_client.fetch_data("session_text", {"file_id": file_id})
+        session_ids = [s["id"] for s in sessions_list]
+        
+        local_categories = []
+        keywords_list = []
+        confidences = []
+        for sid in session_ids:
+            results = db_client.fetch_data("nlp_result", {"session_id": sid})
+            for r in results:
+                if r.get("local_category"):
+                    local_categories.append(r["local_category"])
+                if r.get("category_confidence") is not None:
+                    confidences.append(r["category_confidence"])
+                kws_json = r.get("keywords_json")
+                if kws_json:
+                    try:
+                        import json
+                        kws = json.loads(kws_json)
+                        for item in kws:
+                            if isinstance(item, list) or isinstance(item, tuple):
+                                keywords_list.append(item[0])
+                            else:
+                                keywords_list.append(str(item))
+                    except Exception:
+                        pass
+        
+        from collections import Counter
+        cat_counts = Counter(local_categories)
+        kw_counts = Counter(keywords_list)
+        
+        dominant_topics = []
+        for cat, _ in cat_counts.most_common(2):
+            if cat not in ["❓ 기타/미분류"]:
+                dominant_topics.append(cat)
+        for kw, _ in kw_counts.most_common(3):
+            dominant_topics.append(kw)
+            
+        if not dominant_topics:
+            from app.core.scoring_rule_loader import scoring_rule_loader
+            dominant_topics = scoring_rule_loader.get("default_dominant_topics", ["관심사 다양화", "추천 피드 점검"])
+
+        # Determine actual DSAO code
+        view_events = [
+            e for e in analysis_events
+            if e.get("action_type") == "view" and e.get("content_format") == "standard_video"
+        ]
+        long_views = [e for e in view_events if e.get("time_delta_sec") is not None and e.get("time_delta_sec") >= 180]
+        long_ratio = (len(long_views) / len(view_events)) * 100.0 if view_events else 100.0
+        
+        uas_score = axis_scores.get("UAS", 50.0)
+        tds_score = axis_scores.get("TDS", 50.0)
+        sms_score = axis_scores.get("SMS", 50.0)
+        
+        actual_d_p = "D" if uas_score >= 50.0 else "P"
+        actual_w_n = "W" if tds_score >= 50.0 else "N"
+        actual_s_m = "M" if sms_score >= 50.0 else "S"
+        actual_f_l = "L" if long_ratio >= 50.0 else "F"
+        
+        actual_dsao_code = f"{actual_d_p}{actual_w_n}{actual_s_m}{actual_f_l}"
+
+        # Get warning codes & data quality flags
+        from app.routes.dashboard import normalize_exception_codes
+        exception_codes = normalize_exception_codes(run.get("exception_codes", []))
+        data_quality_flags = run.get("data_quality_flags") or []
+
+        # Get top local category & candidates
+        top_local_cat = "❓ 기타/미분류"
+        if cat_counts:
+            top_local_cat = cat_counts.most_common(1)[0][0]
+        category_candidates = [cat for cat, _ in cat_counts.most_common(4)]
+        top_kws = [kw for kw, _ in kw_counts.most_common(6)]
+        
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+        # Run dynamic recommender
+        from app.core.mission_loader import mission_loader
+        matched_recs = mission_loader.recommend_missions(
+            keywords=top_kws,
+            local_category=top_local_cat,
+            category_candidates=category_candidates,
+            category_confidence=avg_confidence,
+            actual_dsao=actual_dsao_code,
+            data_quality_flags=data_quality_flags,
+            warning_codes=exception_codes,
+            axis_scores=axis_scores,
+            bias_risk_score=run["bias_risk_score"],
+            shorts_count=shorts_analysis.get("shorts_count", 0),
+            shorts_stimulation_risk=shorts_analysis.get("shorts_stimulation_risk", 0)
+        )
+
         plan_response = gemini_client.generate_detox_plan(
             risk_score=run["bias_risk_score"],
             axis_scores=axis_scores,
             mbti_type=run["mbti_type"],
-            dominant_topics=["IT/Tech", "Shorts"],
+            dominant_topics=dominant_topics,
             shorts_analysis=shorts_analysis,
         )
+
+        # Override missions with our dynamically matched, scored, and localized missions
+        formatted_missions = []
+        for idx, rec in enumerate(matched_recs, 1):
+            rec["id"] = f"m{idx}"
+            formatted_missions.append(rec)
+        plan_response["missions"] = formatted_missions
 
         plan_id = str(uuid.uuid4())
         plan_entry = {
@@ -77,7 +177,7 @@ async def generate_detox_plan(
 @router.get("/detox/plan")
 async def get_active_plan(
     plan_id: Optional[str] = None,
-    user_id: str = "00000000-0000-0000-0000-000000000001",
+    user_id: str = DEFAULT_MVP_USER_ID,
 ):
     """Fetch a detox plan and merge each mission's completion log."""
     try:

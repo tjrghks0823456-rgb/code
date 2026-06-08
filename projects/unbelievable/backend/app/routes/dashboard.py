@@ -19,9 +19,13 @@ from app.core.interest_maps import (
 from app.core.gemini import gemini_client
 from app.core.scoring import PERSONALITY_MAP
 from app.core.shorts_analysis import build_overall_risk, build_shorts_analysis
+from app.core.config import DEFAULT_MVP_USER_ID
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+from app.core.message_loader import message_loader
+from app.core.persona_loader import persona_loader
 
 AXIS_NAMES = {
     "TDS": "주제 다양성",
@@ -33,59 +37,8 @@ AXIS_NAMES = {
     "ALL": "전체 지표"
 }
 
-SCORE_WARNING_MAP: Dict[str, Dict[str, str]] = {
-    "P01_DATA_SHORT": {
-        "axis": "ALL",
-        "message": "분석 가능한 시청 이벤트가 부족하여 전체 지표는 참고용으로 표시됩니다."
-    },
-    "P02_TOPIC_SAMPLE_LIMITED": {
-        "axis": "TDS",
-        "message": "주제 카테고리 샘플이 부족하여 주제 다양성 지표는 참고용으로 표시됩니다."
-    },
-    "P02_SHORT_TEXT": {
-        "axis": "TDS",
-        "message": "분석 가능한 텍스트가 부족하여 주제 다양성 지표는 참고용으로 표시됩니다."
-    },
-    "P03_SENTIMENT_SAMPLE_LIMITED": {
-        "axis": "EBS",
-        "message": "감정 분석 샘플이 부족하여 감정 균형 지표는 참고용으로 표시됩니다."
-    },
-    "P04_NO_SEARCH": {
-        "axis": "UAS",
-        "message": "검색 기록 데이터가 포함되지 않았거나 검색 이벤트가 감지되지 않아 사용자 주도성 지표는 참고용으로 표시됩니다."
-    },
-    "P05_SOURCE_MISSING": {
-        "axis": "SBS",
-        "message": "채널 또는 출처 정보가 확인되지 않아 출처 균형 지표는 참고용으로 표시됩니다."
-    },
-    "P05_SOURCE_SAMPLE_LIMITED": {
-        "axis": "SBS",
-        "message": "유효한 채널 또는 출처 종류가 부족하여 출처 균형 지표는 참고용으로 표시됩니다."
-    },
-    "P06_VIEWPOINT_SAMPLE_LIMITED": {
-        "axis": "VOS",
-        "message": "분석 가능한 주제 샘플이 부족하여 관점 개방성 지표는 참고용으로 표시됩니다."
-    },
-    "P07_SAFETY_SAMPLE_LIMITED": {
-        "axis": "SMS",
-        "message": "유해/자극 안전성을 판단할 NLP 샘플이 부족하여 해당 지표는 참고용으로 표시됩니다."
-    }
-}
-
-SCORE_WARNING_MAP.update({
-    "P08_MOCK_DATA_USED": {
-        "axis": "ALL",
-        "message": "Mock analysis data was detected, so related scores should be read as low-confidence references."
-    },
-    "P09_FALLBACK_DATA_USED": {
-        "axis": "ALL",
-        "message": "Fallback analysis data was detected, so related scores should be read as low-confidence references."
-    },
-    "P10_DIRECT_SELECTION_UNAVAILABLE": {
-        "axis": "UAS",
-        "message": "Direct selection ratio is not available in the current normalized event schema."
-    }
-})
+# Dynamically loaded warnings mapping from message_loader config asset
+SCORE_WARNING_MAP = message_loader.get_all_warnings()
 
 def normalize_exception_codes(raw_codes: Any) -> List[str]:
     if not raw_codes:
@@ -321,7 +274,7 @@ def build_dashboard_insights(
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
     run_id: str,
-    user_id: str = "00000000-0000-0000-0000-000000000001"
+    user_id: str = DEFAULT_MVP_USER_ID
 ):
     """
     Returns dashboard overview details:
@@ -337,19 +290,25 @@ async def get_dashboard_summary(
             raise HTTPException(status_code=404, detail="Analysis result not found.")
         run = runs[0]
         
+        sampling_metadata = run.get("sampling_metadata") or {}
+        excluded_axes = sampling_metadata.get("excluded_axes") or []
+        overall_confidence = sampling_metadata.get("overall_confidence") or "medium"
+        score_details = sampling_metadata.get("score_details") or {}
+        data_quality_flags = run.get("data_quality_flags") or []
+        
         # 2. Fetch axes scores
         axes = db_client.fetch_data("score_axis", {"run_id": run_id})
         axis_scores = {a["axis_code"]: a["axis_value"] for a in axes}
         
         # 3. Fetch user profile survey scores (for meta-gap calculation)
         profiles = db_client.fetch_data("profiles", {"id": user_id})
-        if not profiles:
-            raise HTTPException(status_code=404, detail="User profile not found.")
-        profile = profiles[0]
+        profile = profiles[0] if profiles else {}
         survey_scores = profile.get("survey_scores", {})
         
-        # 4. Calculate Meta-gap (FEAT_16)
-        # Gap = Survey Score (subjective) - Actual Score (objective)
+        # Determine if survey data is available (needs at least one valid axis score)
+        valid_survey_axes = [k for k in ["TDS", "SBS", "EBS", "VOS", "SMS", "UAS"] if k in survey_scores]
+        meta_gap_available = len(valid_survey_axes) > 0
+        
         meta_gap = {}
         max_gap_axis = "TDS"
         max_gap_value = -1.0
@@ -361,24 +320,73 @@ async def get_dashboard_summary(
             if code == "ALL":
                 continue
 
-            s_val = float(survey_scores.get(code, 50.0))
-            a_val = float(axis_scores.get(code, 50.0))
-            gap = abs(s_val - a_val)
-            meta_gap[code] = {
-                "name": name,
-                "survey": s_val,
-                "actual": a_val,
-                "gap": round(s_val - a_val, 1) # Positive means overestimated, Negative means underestimated
-            }
-            if gap > max_gap_value:
-                max_gap_value = gap
-                max_gap_axis = code
+            is_available = code not in excluded_axes
+            
+            if is_available:
+                a_val = float(axis_scores.get(code, 50.0))
+                if meta_gap_available and code in survey_scores:
+                    s_val = float(survey_scores[code])
+                    gap = s_val - a_val
+                    meta_gap[code] = {
+                        "name": name,
+                        "survey": s_val,
+                        "actual": a_val,
+                        "gap": round(gap, 1),
+                        "available": True
+                    }
+                    abs_gap = abs(gap)
+                    if abs_gap > max_gap_value:
+                        max_gap_value = abs_gap
+                        max_gap_axis = code
+                else:
+                    meta_gap[code] = {
+                        "name": name,
+                        "survey": None,
+                        "actual": a_val,
+                        "gap": None,
+                        "available": True
+                    }
+            else:
+                if code == "SBS":
+                    reason = "채널 정보 없음"
+                elif code == "UAS":
+                    reason = "검색 기록 또는 직접 선택 경로 부족"
+                else:
+                    reason = "데이터 부족"
+                meta_gap[code] = {
+                    "name": name,
+                    "survey": None,
+                    "actual": None,
+                    "gap": None,
+                    "available": False,
+                    "reason": reason
+                }
                 
-        # Calculate overall "Misconception Index" (착각 지수)
-        # Average of absolute gaps across all 6 axes
-        avg_gap = sum(abs(item["gap"]) for item in meta_gap.values()) / len(meta_gap)
-        misconception_index = round(avg_gap * 1.5, 1) # scale slightly for visual impact
-        misconception_index = min(100.0, misconception_index)
+        if meta_gap_available:
+            valid_gaps = [
+                abs(item["gap"]) for item in meta_gap.values()
+                if item["gap"] is not None and item.get("available", True) is not False
+            ]
+            if valid_gaps:
+                avg_gap = sum(valid_gaps) / len(valid_gaps)
+                misconception_index = round(avg_gap * 1.5, 1)
+                misconception_index = min(100.0, misconception_index)
+            else:
+                misconception_index = None
+            
+            worst_gap_code = max_gap_axis
+            worst_gap_name = AXIS_NAMES[max_gap_axis]
+            worst_gap_val = round(meta_gap[max_gap_axis]["gap"], 1) if meta_gap[max_gap_axis]["gap"] is not None else None
+            if worst_gap_val is not None:
+                misconception_message = f"스스로 사전 인지했던 점수 대비 실제 YouTube 소비 데이터상으로 '{worst_gap_name}' 영역의 차이가 가장 크게 집계되었습니다. 가벼운 일상 추천 루틴 수정을 통해 성향의 균형을 복원하시는 것을 추천합니다."
+            else:
+                misconception_message = "자가진단 데이터와 비교 가능한 실제 분석 지표 격차가 모두 확보되지 않았습니다."
+        else:
+            misconception_index = None
+            worst_gap_code = None
+            worst_gap_name = None
+            worst_gap_val = None
+            misconception_message = "자가진단 데이터가 없어 메타인지 격차 분석은 참고용으로 비활성화되었습니다."
         
         # Find MBTI descriptions
         # MBTI type code is stored as 4 characters, e.g., "HHHH"
@@ -412,25 +420,7 @@ async def get_dashboard_summary(
         
         actual_dsao_code = f"{actual_d_p}{actual_w_n}{actual_s_m}{actual_f_l}"
         
-        DSAO_NAMES = {
-            "DWSF": "다채로운 숏폼 탐색형",
-            "DWSL": "다채로운 롱폼 탐색형",
-            "DWMF": "지식 스낵 탐색형",
-            "DWML": "깊이 있는 지식 항해형",
-            "DNSF": "특정 관심 숏폼 집중형",
-            "DNSL": "특정 주제 장기 몰입형",
-            "DNMF": "전문 정보 압축형",
-            "DNML": "한우물 연구형",
-            "PWSF": "추천 피드 유람형",
-            "PWSL": "자동재생 감상형",
-            "PWMF": "편안한 정보 스낵형",
-            "PWML": "편안한 롱폼 흐름형",
-            "PNSF": "추천 피드 반복형",
-            "PNSL": "추천 주제 정주행형",
-            "PNMF": "조용한 추천 루틴형",
-            "PNML": "자동재생 한우물형"
-        }
-        actual_dsao_name = DSAO_NAMES.get(actual_dsao_code, "미지의 미디어 탐험가")
+        actual_dsao_name = persona_loader.get_dsao_name(actual_dsao_code)
         insights = build_dashboard_insights(events, nlp_results, axis_scores, score_warnings)
         upload_excluded_ad_count = int(raw_file.get("excluded_ad_count") or 0)
         total_excluded_ad_count = upload_excluded_ad_count + len(excluded_ad_events)
@@ -473,7 +463,228 @@ async def get_dashboard_summary(
         data_coverage.setdefault("ad_skip_summary", [])
         data_coverage.setdefault("warnings", [])
         risk_overall = build_overall_risk(run["bias_risk_score"], insights.get("shorts_analysis", {}))
+
+        # --- Sejong & Data Quality Enhancements ---
+        has_estimated_duration = any(e.get("is_duration_estimated") for e in events)
+        has_duration = any(e.get("time_delta_sec") is not None or e.get("estimated_duration_sec") is not None for e in events if e.get("action_type") == "view")
         
+        # Determine nlp_provider
+        nlp_providers = [r.get("nlp_provider") for r in nlp_results if r.get("nlp_provider") is not None]
+        nlp_provider = "gcp" if "gcp" in nlp_providers else "rule_based_fallback"
+        
+        avg_category_confidence = 0.0
+        category_confidences = [r.get("category_confidence") for r in nlp_results if r.get("category_confidence") is not None]
+        if category_confidences:
+            avg_category_confidence = sum(category_confidences) / len(category_confidences)
+
+        # Dynamic main category and candidates
+        main_category = "❓ 기타/미분류"
+        category_source = "fallback_failed"
+        category_candidates = []
+        if nlp_results:
+            cat_counter = Counter([r.get("local_category") for r in nlp_results if r.get("local_category")])
+            if cat_counter:
+                main_category = cat_counter.most_common(1)[0][0]
+            cand_scores = {}
+            for r in nlp_results:
+                cands = r.get("category_candidates") or []
+                for c in cands:
+                    c_name = c.get("name")
+                    c_score = c.get("score")
+                    if c_name and c_score:
+                        cand_scores[c_name] = cand_scores.get(c_name, 0.0) + c_score
+            if cand_scores:
+                sorted_cands = sorted(cand_scores.items(), key=lambda x: x[1], reverse=True)
+                category_candidates = [{"name": name, "score": round(score, 2)} for name, score in sorted_cands[:3]]
+                category_source = nlp_results[0].get("category_source", "rule_based_metadata")
+
+        top_keywords = []
+        for r in nlp_results:
+            kw_json = r.get("keywords_json")
+            if kw_json:
+                try:
+                    import json
+                    kws = json.loads(kw_json)
+                    for item in kws:
+                        if isinstance(item, list) or isinstance(item, tuple):
+                            top_keywords.append(item[0])
+                        else:
+                            top_keywords.append(str(item))
+                except Exception:
+                    pass
+        top_keywords = [kw for kw, _ in Counter(top_keywords).most_common(5)]
+
+        duration_q = "actual"
+        if not has_duration:
+            duration_q = "missing"
+        elif has_estimated_duration:
+            duration_q = "estimated"
+            
+        search_count = sum(1 for e in events if e.get("action_type") == "search")
+        search_q = "present" if search_count > 0 else "missing_or_limited"
+        
+        data_quality = {
+            "duration": duration_q,
+            "source": "full" if len(events) >= 10 else "partial",
+            "search_history": search_q,
+            "nlp_provider": nlp_provider,
+            "category_confidence": round(avg_category_confidence, 2)
+        }
+
+        estimated_fields = []
+        if has_estimated_duration:
+            estimated_fields.append("time_delta_sec")
+            estimated_fields.append("shorts_analysis.dopamine_loop_score")
+
+        score_basis = {
+            "duration_source": "simulated_takeout_intervals" if has_estimated_duration else "youtube_api_metadata",
+            "nlp_source": "google_cloud_nlp_v2" if nlp_provider == "gcp" else "local_keyword_fallback_v2"
+        }
+
+        nlp_summary = {
+            "main_category": main_category,
+            "category_source": category_source,
+            "category_confidence": round(avg_category_confidence, 2),
+            "top_keywords": top_keywords,
+            "category_candidates": category_candidates
+        }
+
+        # Inject legacy mapping warning if balance_type is different from dsao_type code
+        if mbti_code != actual_dsao_code:
+            if "P14_DSAO_LEGACY_MAPPING" not in exception_codes:
+                exception_codes.append("P14_DSAO_LEGACY_MAPPING")
+                score_warnings = build_score_warnings(exception_codes)
+
+        # DSAO confidence runtime assessment
+        dsao_confidence_val = "높음"
+        if len(events) < 15:
+            dsao_confidence_val = "낮음 (분석 대상 기록 수량 부족)"
+        elif has_estimated_duration or nlp_provider == "rule_based_fallback" or avg_category_confidence < 0.5:
+            dsao_confidence_val = "보통 (추정 체류 시간 및 로컬 형태소 엔진 기반)"
+
+        # Construct dynamic based_on patterns explaining the typing
+        behavioral_patterns = []
+        behavioral_patterns.append(f"주도성 지표(UAS) {round(uas_score, 1)}%로 {'스스로 직접 검색하고 클릭하는 D(주도) 성향이' if uas_score >= 50.0 else '알고리즘 추천 피드를 수용하는 P(추천) 성향이'} 강함")
+        behavioral_patterns.append(f"주제 다양성 지표(TDS) {round(tds_score, 1)}%로 {'다양한 분야를 고르게 넘나드는 W(넓은 관심) 성향' if tds_score >= 50.0 else '특정 카테고리에 집중하는 N(집중 관심) 성향'} 매칭")
+        behavioral_patterns.append(f"안전성 지표(SMS) {round(100.0 - sms_score, 1)}% 자극성 비중으로 {'안정적이고 학습적인 소비를 보여주는 M(안정) 성향' if sms_score >= 50.0 else '자극적이거나 숏폼 중심의 S(자극) 성향'} 매칭")
+        behavioral_patterns.append(f"시청 롱폼(180초 이상) 비중 {round(long_ratio, 1)}%로 {'호흡이 긴 롱폼에 몰입하는 L(롱폼) 성향' if long_ratio >= 50.0 else '빠른 템포의 숏폼에 최적화된 F(숏폼) 성향'} 매칭")
+        
+        matched_kws_str = ", ".join(top_keywords[:3]) if top_keywords else "감지된 주요 키워드 부족"
+        dsao_based_on = (
+            f"유형 결정 요소: {', '.join(behavioral_patterns)}. "
+            f"근거 키워드: [{matched_kws_str}]. "
+            f"주요 관심 분야: '{main_category}'"
+        )
+
+        actual_dsao_details = persona_loader.get_dsao_detail(actual_dsao_code)
+        
+        actual_dsao_response = {
+            "code": actual_dsao_code,
+            "name": actual_dsao_name,
+            "short_summary": actual_dsao_details.get("short_summary", "호기심 스낵 러너"),
+            "detailed_description": actual_dsao_details.get("detailed_description", actual_dsao_details.get("description", "")),
+            "strengths": actual_dsao_details.get("strengths", []),
+            "risks": actual_dsao_details.get("risks", []),
+            "recommended_detox_direction": actual_dsao_details.get("recommended_detox_direction", ""),
+            "similar_types": actual_dsao_details.get("similar_types", []),
+            "opposite_type": actual_dsao_details.get("opposite_type", ""),
+            "confidence": dsao_confidence_val,
+            "based_on": dsao_based_on,
+            "scores": {
+                "D": round(uas_score, 1),
+                "P": round(100.0 - uas_score, 1),
+                "W": round(tds_score, 1),
+                "N": round(100.0 - tds_score, 1),
+                "S": round(100.0 - sms_score, 1),
+                "M": round(sms_score, 1),
+                "F": round(100.0 - long_ratio, 1),
+                "L": round(long_ratio, 1)
+            }
+        }
+
+        # --- [NEW] Calculate Explanations for key scores ---
+        health_confidence_desc = "낮은 신뢰도" if overall_confidence == "low" else ("보통 신뢰도" if overall_confidence == "medium" else "높은 신뢰도")
+        health_caution = "시청 기록에 시청 지속 시간 정보가 없으므로 기록 간 간격 및 비디오 길이를 바탕으로 '추정 체류 시간'을 시뮬레이션하여 계산했습니다. 일부 장기 방치 세션 등 현실 왜곡 가능성이 존재합니다. (기록 기반 추정값)" if has_estimated_duration else "사용자 YouTube Takeout 파일에 기록된 데이터 범위 내에서 계산된 지표입니다."
+        
+        health_explanation = {
+            "label": "종합 미디어 건강 점수",
+            "value": f"{round(run['weighted_health'], 1)}점",
+            "reason": f"6개 핵심 미디어 소비 지표의 가중 평균값으로, 전반적인 미디어 소비의 건강함을 나타냅니다. 현재 {health_confidence_desc} 상태입니다.",
+            "evidence": f"사용자 주도성({round(uas_score, 1)}점), 주제 다양성({round(tds_score, 1)}점), 자극성 안전({round(sms_score, 1)}점) 등 6대 축 점수 조합",
+            "caution": health_caution,
+            "improvement_hint": "가장 점수가 낮은 영역의 미션(예: 직접 검색어 지정하기, 낯선 카테고리 클릭 등)을 실행하여 전반적인 밸런스를 높이세요."
+        }
+
+        if misconception_index is not None:
+            misconception_val = f"{misconception_index}점"
+            misconception_reason = f"자가진단 설문에서 본인이 응답한 수치와 실제 YouTube 시청 데이터에서 추출된 수치 간의 평균 격차율입니다. {worst_gap_name} 영역에서 가장 큰 불일치가 관찰되었습니다."
+            misconception_evidence = f"가장 불일치가 큰 지표: {worst_gap_name} (격차 {worst_gap_val}점)"
+            misconception_hint = f"자가진단 시점의 기억과 실제 시청 패턴이 다르므로, 특히 {worst_gap_name} 영역에 대해 의도적인 디지털 디독스 가이드를 실행해 보는 것을 추천합니다."
+        else:
+            misconception_val = "확인 불가"
+            misconception_reason = "사전 자가진단 프로필 설문 응답 결과가 없어 메타인지 격차 점수가 활성화되지 않았습니다."
+            misconception_evidence = "자가진단 데이터 부재"
+            misconception_hint = "프로필 설문을 진행하시면 자가 인식 점수와 실제 시청 통계의 격차를 실시간으로 분석해 드립니다."
+
+        misconception_explanation = {
+            "label": "메타인지 착각 지수",
+            "value": misconception_val,
+            "reason": misconception_reason,
+            "evidence": misconception_evidence,
+            "caution": "본 자가인식 격차는 사용자의 주관적 설문 응답과 구글 테이크아웃 데이터에만 의존하며, 데이터 규모가 작을 경우 분석 신뢰도가 낮아질 수 있습니다.",
+            "improvement_hint": misconception_hint
+        }
+
+        dsao_explanation = {
+            "label": "실제 시청 기반 미디어 유형 (Actual DSAO)",
+            "value": f"{actual_dsao_code} ({actual_dsao_name})",
+            "reason": f"사용자의 행동 패턴(주도성, 다양성, 안전성, 시청 길이)을 조합하여 분류한 최종 미디어 성향 유형입니다. (4-letter type code representing 16 possible types)",
+            "evidence": dsao_based_on,
+            "caution": "시청 기록에 체류 시간 정보가 확인 불가하여 인접 이벤트 간 간격을 바탕으로 '추정 체류 시간'을 적용하였으므로 롱폼/숏폼 구분은 참고용으로 신뢰성이 제한될 수 있습니다. (기록 기반 추정값)",
+            "improvement_hint": f"현재 '{actual_dsao_name}' 성향의 단점을 보완하기 위해 '{actual_dsao_details.get('recommended_detox_direction', '디톡스 가이드 참고')}'을 실천해 보세요."
+        }
+
+        category_shares = insights.get("category_shares", [])
+        shorts_count_val = insights.get("shorts_analysis", {}).get("shorts_count", 0)
+        shorts_risk_val = risk_overall.get("shorts_stimulation_risk", 0)
+
+        bias_explanation = {
+            "label": "관심사 편중도",
+            "value": f"{round(run['bias_risk_score'], 1)}점",
+            "reason": "특정 주제 카테고리에 편향되거나 특정 정보원의 영상에 반복적으로 지나치게 과다 노출되는 정도를 의미합니다.",
+            "evidence": f"최상위 카테고리 '{main_category}' 비중 {category_shares[0]['value'] if category_shares else 0}% 점유 및 주요 검색 키워드 반복량",
+            "caution": "Google Takeout 파일 내 정보 부족 시 로컬 규칙 및 형태소 분석 기반으로 계산되므로 카테고리 세분성에 한계가 발생할 수 있습니다. (낮은 신뢰도)",
+            "improvement_hint": "반대 관심사의 공영 방송 뉴스를 시청하거나, 검색창에 평소 치지 않던 주제어를 직접 쳐서 인지 균형을 도모하세요."
+        }
+
+        ebs_score = axis_scores.get("EBS", 50.0)
+        stim_explanation = {
+            "label": "자극성 및 불안정성 관련 지표",
+            "value": f"자극 위험 {shorts_risk_val}점 · 정서 안정 {round(ebs_score, 1)}점",
+            "reason": "시청 텍스트의 부정적/자극적 톤앤매너 노출 빈도와 숏츠 반복 소비 패턴으로 인한 도파민 루프 위험도를 종합한 지표입니다.",
+            "evidence": f"숏츠 감지 개수 {shorts_count_val}개 및 연속 숏츠 루프 점수, 타이틀 내 자극성/불안정 키워드 출현 비중",
+            "caution": "Google Takeout 원본에는 실제 시청 지속 시간 정보가 확인 불가하여 1초만 시청하고 끈 영상도 연속 시청한 것으로 과잉 추정될 수 있습니다. (기록 기반 추정값)",
+            "improvement_hint": "숏츠 연속 재생을 끊어내기 위해 유튜브 자동재생 옵션을 끄고, ASMR이나 자연 다큐멘터리 같은 잔잔한 교양 콘텐츠 비율을 늘려보세요."
+        }
+
+        dq_explanation = {
+            "label": "데이터 품질 분석",
+            "value": f"체류시간: {data_quality.get('duration', 'unknown')} · NLP: {data_quality.get('nlp_provider', 'unknown')}",
+            "reason": "분석에 사용된 원본 Takeout 파일의 데이터 정합성과 사용된 분석 엔진(GCP/로컬 세종)을 평가한 신뢰성 지표입니다.",
+            "evidence": f"체류시간 추정 여부({data_quality.get('duration')}), 언어 분석 수준({data_quality.get('nlp_provider')}), 평균 카테고리 신뢰도({data_quality.get('category_confidence')})",
+            "caution": "구글 테이크아웃에서 시청 지속 시간이 확인 불가한 원천적 제약으로 인해, 체류 시간 데이터는 모두 기록 기반 추정값(estimated)으로 처리됩니다.",
+            "improvement_hint": "품질 수준을 높여 더 정확히 진단하기 위해 향후 브라우저 확장 프로그램 기반의 실제 시청/정지 시간 수집 모델을 적용할 예정입니다."
+        }
+
+        explanations = {
+            "weighted_health_score": health_explanation,
+            "cognitive_misconception_index": misconception_explanation,
+            "dsao_actual_type": dsao_explanation,
+            "bias_risk_score": bias_explanation,
+            "shorts_stimulation_risk": stim_explanation,
+            "data_quality_flags": dq_explanation
+        }
+
         return {
             "run_id": run_id,
             "user": {
@@ -486,14 +697,23 @@ async def get_dashboard_summary(
             "final_detox_risk": run.get("final_detox_risk", risk_overall["final_detox_risk"]),
             "shorts_weight": risk_overall["shorts_weight"],
             "weighted_health": run["weighted_health"],
+            "internal_balance_type": mbti_code,
+            "legacy_type": mbti_code,
+            "balance_type": {
+                "code": mbti_code,
+                "name": mbti_details[0],
+                "tags": mbti_details[1]
+            },
             "mbti": {
                 "code": mbti_code,
                 "name": mbti_details[0],
                 "tags": mbti_details[1]
             },
-            "actual_dsao": {
+            "dsao_type": {
                 "code": actual_dsao_code,
                 "name": actual_dsao_name,
+                "description": "4-letter type code representing 16 possible types",
+                "is_duration_estimated": has_estimated_duration,
                 "scores": {
                     "D": round(uas_score, 1),
                     "P": round(100.0 - uas_score, 1),
@@ -505,18 +725,31 @@ async def get_dashboard_summary(
                     "L": round(long_ratio, 1)
                 }
             },
+            "actual_dsao": actual_dsao_response,
+            "explanations": explanations,
             "exception_codes": exception_codes,
             "score_warnings": score_warnings,
             "data_coverage": data_coverage,
             "insights": insights,
+            "meta_gap_available": meta_gap_available,
             "meta_gap": meta_gap,
             "misconception": {
                 "index": misconception_index,
-                "worst_axis_code": max_gap_axis,
-                "worst_axis_name": AXIS_NAMES[max_gap_axis],
-                "worst_gap_value": round(meta_gap[max_gap_axis]["gap"], 1),
-                "message": f"스스로 사전 인지했던 점수 대비 실제 YouTube 소비 데이터상으로 '{AXIS_NAMES[max_gap_axis]}' 영역의 차이가 가장 크게 집계되었습니다. 가벼운 일상 추천 루틴 수정을 통해 성향의 균형을 복원하시는 것을 추천합니다."
-            }
+                "worst_axis_code": worst_gap_code,
+                "worst_axis_name": worst_gap_name,
+                "worst_gap_value": worst_gap_val,
+                "message": misconception_message
+            },
+            "excluded_axes": excluded_axes,
+            "overall_confidence": overall_confidence,
+            "sampling_metadata": sampling_metadata,
+            "score_details": score_details,
+            "data_quality_flags": data_quality_flags,
+            "data_quality": data_quality,
+            "warnings": score_warnings,
+            "score_basis": score_basis,
+            "estimated_fields": estimated_fields,
+            "nlp_summary": nlp_summary
         }
     except HTTPException:
         raise
