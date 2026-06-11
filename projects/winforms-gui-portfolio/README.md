@@ -1,20 +1,25 @@
-# WinForms GUI Portfolio
+# winforms-gui-practice
 
-C# Windows Forms의 기본 UI 구성과 이벤트 처리 방식을 연습하기 위해 만든 미니 앱 모음입니다.
+> C# · WinForms 기초 UI 구성과 이벤트 처리 학습 실습 모음
 
-`MainForm`이 런처 역할을 하며, 버튼을 눌러 텍스트 입력, 로그인, 숫자 맞추기, 계산기, Todo List 화면을 각각 실행할 수 있습니다. 하나의 큰 업무 시스템이라기보다 WinForms에서 자주 쓰는 폼, 버튼, 텍스트박스, 리스트, 다이얼로그, 파일 입출력을 작게 나누어 실습한 포트폴리오 프로젝트입니다.
+## 1. 실습 목적
 
-## Screens
+C# Windows Forms에서 자주 쓰는 화면 구성, 이벤트 처리, 파일 입출력 패턴을 직접 만들어보며 익히기 위한 실습 모음입니다.
 
-| Screen | Description |
-| --- | --- |
-| `MainForm` | 4개의 예제 화면을 여는 런처 화면 |
+실제 업무용 시스템이 아니라 WinForms 기초를 연습하기 위한 목적으로 만들었습니다.
+
+## 2. 실습 내용
+
+`MainForm`이 런처 역할을 하며, 버튼을 눌러 각 예제 화면을 실행할 수 있습니다.
+
+| 화면 | 실습 내용 |
+|------|----------|
 | `TextLoginForm` | 텍스트 입력, RichTextBox 출력, 간단한 로그인 검증 |
 | `NumberGuessingForm` | 난수 생성, 입력값 비교, 남은 기회 표시 |
 | `CalculatorForm` | 숫자 버튼과 사칙연산 이벤트 처리 |
 | `TodoListForm` | Todo 추가/수정/삭제, 텍스트 파일 저장/불러오기 |
 
-## Practiced Concepts
+## 3. 학습한 내용
 
 - Windows Forms 화면 구성
 - 버튼 클릭 이벤트와 키보드 입력 이벤트
@@ -23,18 +28,21 @@ C# Windows Forms의 기본 UI 구성과 이벤트 처리 방식을 연습하기 
 - 여러 Form을 런처 화면에서 여는 구조
 - 간단한 상태값 관리와 입력 검증
 
-## Environment
+## 4. 사용 기술
 
-- Visual Studio 2022
-- .NET Framework 4.7.2
-- C# Windows Forms
+| 구분 | 기술 |
+|------|------|
+| Language | C# |
+| UI | WinForms (.NET Framework 4.7.2) |
+| 개발 환경 | Visual Studio 2022 |
 
-## Run
+## 5. 실행 방법
 
-1. Visual Studio에서 `WinForms-GUI-Portfolio.sln`을 엽니다.
-2. 시작 프로젝트가 `WinForms-GUI-Portfolio`인지 확인합니다.
-3. 실행하면 런처 화면이 열리고, 각 버튼으로 예제 화면을 실행할 수 있습니다.
+1. Visual Studio에서 `WinForms-GUI-Portfolio.sln` 열기
+2. 시작 프로젝트가 `WinForms-GUI-Portfolio`인지 확인
+3. 실행하면 런처 화면이 열리고, 각 버튼으로 예제 화면 실행 가능
 
-## Portfolio Point
+## 6. 배운 점
 
-이 프로젝트는 WinForms 기초 화면을 여러 개로 나누어 구현한 연습 결과물입니다. `equipment-management-winforms`처럼 DB가 붙은 관리 앱으로 넘어가기 전에, 화면 이벤트와 컨트롤 사용법을 익힌 단계로 설명하면 자연스럽습니다.
+WinForms 기초 화면 구성과 이벤트 처리 방식을 여러 작은 예제로 나누어 익혔습니다.  
+이후 `equipment-management-winforms`처럼 DB가 연동된 관리 앱으로 넘어가기 전 단계로 활용했습니다.
