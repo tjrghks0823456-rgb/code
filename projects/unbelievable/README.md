@@ -1,107 +1,141 @@
-# 🧠 언블리버블 (SH.SON_UNBELIEVABLE)
+# unbelievable-digital-wellbeing
 
-> **디지털 콘텐츠 소비 편향 진단 및 행동 교정용 맞춤형 디톡스 포털 (MVP)**
->
-> 본 프로젝트는 사용자가 인지하지 못한 채 알고리즘 추천 피드에 노출되어 발생한 미디어 소비 편향성을 시각화하고, 사전 인지 결과와의 비교 분석을 통해 메타인지 인식을 환기하며, 작은 행동 변화로 미디어 주도성을 회복하도록 돕는 웹 서비스입니다.
+> Python · FastAPI · Next.js 기반 YouTube 시청 기록 분석 및 디지털 디톡스 추천 서비스
 
----
+## 1. 프로젝트 개요
 
-## 🌟 핵심 기능 (Core Features)
+사용자가 YouTube Takeout으로 내려받은 시청 기록 데이터를 업로드하면, 미디어 소비 편향성을 6가지 지표로 분석하고 가벼운 디지털 디톡스 미션을 추천하는 웹 서비스입니다.
 
-1. **무의식 노출 필터링**:
-   - 무의식적 스크롤로 인한 5초 미만의 짧은 관람 데이터를 제외하여, 실제 의식적인 정보 소비 상태 중심의 정량 진단 결과를 산출합니다.
+알고리즘 추천 피드에 반복적으로 노출되면서 사용자가 인지하지 못한 채 형성된 시청 편향을 수치로 보여주고, 자가진단 결과와 실제 데이터 분석 결과를 비교해 메타인지 격차를 시각화합니다.
 
-2. **메타인지 격차 (Meta-gap) 대조**:
-   - 사용자가 사전 수행한 **자가진단 결과(예측)**와 실제 시청 데이터를 분석하여 도출된 **실제 데이터 분석 결과(사후)**를 6축 레이더 차트에 오버레이하여 두 지표 간의 격차(메타인지 갭)를 인지할 수 있도록 제공합니다.
-   - **[MVP 한계]** 자가진단 8축(D/P/W/N/S/M/F/L)을 6축으로 변환할 때, `EBS(감정 균형)`과 `SBS(출처 균형)`은 자가진단 항목에 직접 대응하는 지표가 없으므로 MVP 기본값 **50점**을 사용합니다. 따라서 해당 두 축의 자가진단 예측값은 실제 인식을 반영하지 않으며, 향후 Supabase 연동 시 별도 문항 추가로 개선할 수 있습니다.
+팀 프로젝트로 진행했으며, FastAPI 백엔드와 Next.js 프론트엔드로 구성된 풀스택 MVP입니다.
 
-3. **DSAO 16유형 캐릭터 매핑 및 도감**:
-   - 분석 결과(UAS, TDS, SMS 및 롱폼 비율)를 기준으로 16가지 고유 DSAO 유형(예: `PNSF` - 추천 피드 반복형, `DNML` - 한우물 연구형)을 판정하고, 재미있으면서도 발표 가능한 설명 카드 형태로 보여줍니다.
-   - DSAO 16유형은 사용자의 성격이나 심리를 진단하는 것이 아니라, 시청 기록에서 관찰된 콘텐츠 소비 경향을 쉽게 이해할 수 있도록 캐릭터 카드로 시각화한 것입니다.
-   - 전체 16가지 알고리즘 유형을 카드로 비교할 수 있는 **유형 성향 도감 (`/types`)**을 제공합니다.
+## 2. 개발 배경
 
-4. **가볍고 자율적인 디톡스 루틴**:
-   - 사용자에게 완료 증빙이나 차단 강제성을 부여하는 무거운 형태를 배제하고, '재생 전 질문에 응답하기', '한 줄 소감 남기기' 등 일상에서 바로 실천 가능한 저부하(Low-effort) 행동 미션을 설계하여 자율적인 참여를 권장합니다.
+알고리즘 추천 피드의 편향성 문제에서 출발했습니다. 사용자가 실제로 어떤 콘텐츠를 얼마나 소비하는지 데이터로 보여주고, 스스로 인식한 소비 패턴과 얼마나 다른지 비교하는 서비스가 필요하다고 판단했습니다. 무거운 제한이나 강제보다 가볍고 자율적인 방식으로 행동 변화를 유도하는 것을 목표로 했습니다.
 
----
+## 3. 주요 기능
 
-## 🔌 프론트엔드 - 백엔드 API 연결 구조 (API Architecture)
+**분석 파이프라인**
+- Google Takeout JSON/HTML 다중 파싱 (watch-history.json, HTML 형식 모두 지원)
+- 5초 미만 짧은 관람 데이터 제외 (무의식 스크롤 필터링)
+- Shannon Entropy / HHI 공식 기반 6축 편향 지표 산출
+- 데이터 부족 상황 점수 보정 (available: false 처리)
 
-FastAPI 백엔드는 `/api/v1` prefix 라우터 환경에서 동작하며, 프론트엔드는 다음 백엔드 API 세트와 유기적으로 통신합니다. (프론트엔드에서는 공통 API 설정 `apiUrl()`을 적용해 통신합니다.)
+**DSAO 유형 분석**
+- 시청 기록 기반 16가지 DSAO 유형 분류 (성격 판단이 아닌 소비 경향 시각화)
+- 전체 유형 비교 도감 페이지 제공
 
-* **업로드 및 분석 흐름**:
-  1. `POST /api/v1/upload/takeout` : 시청 기록 파일 업로드 및 세션 그룹화 ➡️ `file_id` 획득
-  2. `POST /api/v1/analysis/run?file_id={file_id}` : Blended Sampling 및 정량 채점 파이프라인 가동 ➡️ `run_id` 획득
-  3. `GET /api/v1/dashboard/summary?run_id={run_id}` : 6축 데이터, 메타인지 격차 및 실제 DSAO 유형 획득 ➡️ 대시보드 시각화
-* **디톡스 및 미션 흐름**:
-  1. `POST /api/v1/detox/generate?run_id={run_id}` : 대시보드 진입 버튼 클릭 시 Gemini 또는 Mock 플랜 설계 ➡️ `plan_id` 획득
-  2. `GET /api/v1/detox/plan?plan_id={plan_id}` : 특정 plan_id의 대체 키워드 및 미션 목록 조회 (plan_id 생략 시 최신 플랜 반환)
-  3. `PATCH /api/v1/detox/mission/{log_id}` : 미션 자율 수행 상태 업데이트
+**메타인지 격차 시각화**
+- 자가진단 예측값 vs 실제 데이터 분석값 6축 레이더 차트 오버레이
 
----
+**디톡스 루틴 추천**
+- 강제성 없는 저부하 행동 미션 설계
+- 미션 완료 상태 업데이트 API
 
-## 🛠️ 실행 및 사용 방법 (How to Run)
+**데이터 품질 경고**
+- 시청 지속 시간 추정 시 경고 배너 출력 (P10_DURATION_ESTIMATED 등)
 
-프로젝트 루트에 위치한 배치 파일로 프론트엔드와 백엔드를 즉시 일괄 실행하거나, 개별 쉘에서 수동 가동할 수 있습니다.
+## 4. 시스템 구조
 
-### 1. 원클릭 원격 가동 (추천)
-* 프로젝트 루트의 `start_unbelievable.bat` 파일을 더블클릭합니다.
-* 자동으로 Python 가상환경(`venv`) 활성화, uvicorn 포트 8000 실행, Next.js 프론트엔드 포트 3000 구동 후 브라우저가 자동 기동됩니다.
+```
+[Next.js 프론트엔드 :3000]
+      ↕ HTTP (REST API)
+[FastAPI 백엔드 :8000]
+      ↕
+[SQLite DB]
+```
 
-### 2. 수동 기동
-* **백엔드 (FastAPI)**:
-  ```bash
-  cd backend
-  # 가상환경 활성화 (Windows 기준)
-  .\venv\Scripts\activate
-  uvicorn app.main:app --reload --port 8000
-  ```
-* **프론트엔드 (Next.js)**:
-  ```bash
-  cd frontend
-  npm run dev
-  ```
+**API 흐름:**
+1. `POST /api/v1/upload/takeout` → file_id 획득
+2. `POST /api/v1/analysis/run?file_id={id}` → run_id 획득
+3. `GET /api/v1/dashboard/summary?run_id={id}` → 6축 데이터, DSAO 유형
+4. `POST /api/v1/detox/generate?run_id={id}` → 디톡스 플랜 생성
 
----
+## 5. 기술 스택
 
-## 📊 현재 MVP의 구현 상태 (Implementation Status)
+| 구분 | 기술 |
+|------|------|
+| Language | Python, TypeScript |
+| Frontend | Next.js, React, TailwindCSS |
+| Backend | FastAPI (Python) |
+| Database | SQLite |
+| 분석 | Shannon Entropy, HHI, BeautifulSoup4 |
+| 개발 환경 | Python 3.x, Node.js |
 
-현재 프로토타입은 프론트엔드 화면 구성 중심의 단계에서 나아가, 실제 로직이 매끄럽게 연결되는 **MVP(최소 기능 제품)**로 고도화되었습니다.
+## 6. 폴더 구조
 
-### ✅ 실제 구현된 것 (Live Implementation)
-* **프론트-백 실제 데이터 연동**: 업로드 버튼 비활성화, 실시간 업로드 ➡️ 분석 실행 ➡️ 분석 완료 ID 수신 후 대시보드 리다이렉트 흐름이 실서버 요청 및 JSON 응답으로 구현되어 있습니다.
-* **Google Takeout JSON/HTML 다중 파싱**: 업로드된 파일이 JSON 포맷일 경우 watch-history.json을 파싱하며, HTML 형식의 경우 `BeautifulSoup4` 라이브러리를 lazy import하여 어그로 및 숏츠 URL(/shorts/) 등을 정밀 파싱하고 데이터베이스에 적재합니다.
-* **시청 지속 시간 추정 및 경고 전파**: Google Takeout의 태생적 한계(실제 시청 지속 시간이 누락됨)를 극복하기 위해 연속 시청 간의 시간 간격을 분석하여 체류 시간을 시뮬레이션(`duration_source="simulated"`, `is_duration_estimated=true`)합니다. 이에 따라 API 응답에 `P10_DURATION_ESTIMATED` 및 `P10_DURATION_MISSING` 등의 품질 경고 코드(warning_codes)를 부여하고 UI 최상단에 정보 안내 배너를 출력합니다.
-* **로컬 형태소 분석 fallback 및 세종이 사전 탑재**: KoNLPy/Okt 라이브러리 및 GCP Language API가 설치/인증되어 있지 않더라도, `category_dictionary.py`에 세종이 코드의 `CATEGORY_DICT`, `STOP_WORDS`, `UNSTABLE_WORDS`, `STIMULUS_WORDS` 사전 전문을 rule-based 엔진의 핵심 fallback 사전으로 직접 포함하여 무설치 환경에서도 한국어 카테고리/자극성 단어 감지 분류가 가능합니다.
-* **결정적 6축 계산 엔진**: Shannon Entropy와 HHI 공식을 활용하여 실제 데이터셋에 비례하는 `TDS`, `SBS`, `SMS` 지표를 수학적으로 산출합니다.
-* **데이터 부족 상황 점수 보정 (Data Deficiency Calibration)**:
-  - 데이터가 극단적으로 결손된 축(예: 채널명이 전부 Unknown인 경우 SBS, 검색 이력이 없는 경우 UAS 등)은 억지로 추정 점수를 매겨 성향 평균을 떨어뜨리지 않고 `available: false` 처리 및 `50.0` 중립값 호환 표기를 적용합니다.
-  - 가중 건강 점수 및 위험도 계산, 메타인지 격차 계산 시 해당 축을 제외 처리하여 수치 왜곡을 원천 방지합니다.
-* **대시보드 설명력 강화 및 기술 검증 패널 (Jury Panel)**:
-  - 프론트엔드 대시보드 지표 카드에 `계산 근거 보기` 토글을 배치하여 백엔드의 `score_components` 원본 수치를 직관적으로 표기합니다.
-  - 대시보드 하단에 종합 분석 신뢰도(`overall_confidence`), 샘플링 전략, 품질 플래그, 제외된 지표를 투명하게 공개하며 심사자를 위한 기술 엄밀성 검증 패널(Technical Specifications)을 내장하고 있습니다.
-* **DSAO 유형 도감 및 캐릭터 카드**: `actual_dsao` 판정 결과에 매핑되는 학술적 성향 도감 및 실시간 대조 카드 렌더링이 구현되어 있습니다. 기존 MBTI형 `balance_type`은 deprecated 처리되어 하위 호환성을 유지한 채 내부 매핑 참조용으로 함께 표기됩니다.
-* **자율형 미션 컴포넌트**: 완료 확인을 위해 미션 페이지 내부에서 객관식 문항(Choice)을 즉각 선택하거나 한 줄 소감(Text)을 기록하면 PATCH 요청이 전송되는 행동 유도가 동작합니다.
-* **MockDB 로컬 지속성**: 로컬 MockDB의 검색 매핑 처리 및 upsert 구현을 통해 Supabase 연결 유무와 상관없이 로컬 인메모리에서 세션 조회가 가능합니다.
+```
+unbelievable/
+├── README.md
+├── CHANGELOG.md
+├── start_unbelievable.bat     # 원클릭 실행 배치 파일
+├── backend/
+│   ├── app/                   # FastAPI 라우터 및 비즈니스 로직
+│   ├── requirements.txt
+│   └── test_*.py              # 분석 파이프라인 테스트
+├── frontend/
+│   ├── src/                   # Next.js 페이지 및 컴포넌트
+│   ├── .env.local.example
+│   └── package.json
+├── db/
+│   └── schema.sql
+└── docs/
+    ├── dashboard-explanation-and-detox.md
+    └── interest-classification-roadmap.md
+```
 
-### ⚠️ 시연 및 Fallback용 모의(Mock) 영역
-* **Gemini & NL API 키 Fallback**: 환경변수 설정 파일(`app/core/config.py`)에 구글 인증 API 키가 바인딩되지 않은 경우, 서버가 중단되는 대신 채점 지표와 최저점 카테고리를 계산하여 Gemini 및 NL 분석 응답 형식에 준하는 Mock 지침서와 미션 데이터셋을 실시간 생성하여 반환합니다.
-* **시청 지속 시간 추정 (중요 한계)**:
-  - Google Takeout 원천 파일에는 개별 영상의 실제 시청 지속 시간(실측 초 단위)이 포함되어 있지 않습니다.
-  - 재생 횟수 및 시청 간격(순차 재생 타임스탬프)에 의존하는 한계를 명시하고, “추정 시청 시간”과 같은 임의 추정을 배제하여 계산 정합성을 유지합니다.
-* **6축 점수 해석 제한**:
-  - Google Takeout 파일에 검색 기록이 포함되지 않으면 사용자 주도성(UAS)은 제한적으로 해석됩니다.
-  - 영상 제목이나 검색어가 충분하지 않으면 주제 다양성(TDS), 감정 균형(EBS), 관점 개방성(VOS)은 중립값으로 표시될 수 있습니다.
-  - 채널/출처 정보가 부족하면 출처 균형(SBS)은 참고용 지표로 표시됩니다.
-  - 이 서비스는 데이터가 부족한 경우 낮은 점수로 단정하지 않고, 해석 제한으로 구분합니다.
-* **사용자 계정 통합**: 현재 MVP 로컬 테스트를 위해 user_id는 Supabase PK 규격을 맞춘 전용 테스트 UUID(`00000000-0000-0000-0000-000000000001`)로 고정하여 임시 바인딩 처리되어 있습니다.
-* **localStorage 자가진단 저장**: 자가진단 결과는 브라우저의 `localStorage`에 저장됩니다. 브라우저 캐시 초기화나 다른 기기에서는 자가진단 데이터가 유지되지 않습니다.
+## 7. 핵심 구현 흐름
 
----
+1. 사용자가 YouTube Takeout 파일을 업로드
+2. JSON 또는 HTML 형식을 자동 감지하여 파싱
+3. 5초 미만 짧은 시청 데이터 제외
+4. 연속 시청 간 시간 간격으로 체류 시간 추정 (duration_source: simulated)
+5. Shannon Entropy/HHI로 6축 편향 지표 계산
+6. 지표 기반 DSAO 유형 16개 중 1개 판정
+7. 자가진단 결과와 레이더 차트로 비교 시각화
+8. 디톡스 미션 플랜 생성
 
-## 🚀 향후 개선 예정 (Future Roadmap)
+## 8. MVP의 한계 및 솔직한 기술
 
-* **Supabase 실데이터 저장소 이전**: 로컬 `localStorage`에 스텁으로 저장 중인 자가진단 정보를 Supabase `profiles.survey_scores` 컬럼 테이블에 원격 Insert/Fetch하는 API 연결
-* **YouTube Data API 보완적 활용**: YouTube Data API로 영상의 총 재생 길이(duration)를 수집하여 숏폼/롱폼 분류 기준을 실제 영상 길이 기반으로 개선. 단, 실제 시청 초 단위는 API로 제공되지 않으므로 별도 측정 수단 없이는 정확한 시청 지속 시간 분석에 한계가 있음
-* **사용자 세션 관리**: 테스트 UUID 고정 구조에서 Supabase Auth 회원가입 및 로그인을 통한 개인별 영구 대시보드 이력 모니터링 활성화
+- 자가진단 8축 중 EBS, SBS는 직접 대응하는 지표가 없어 MVP 기본값 50점 적용
+- Google Takeout에 실제 시청 지속 시간이 포함되지 않아 시간 간격으로 추정
+- Supabase 연동은 계획 단계이며 현재는 로컬 SQLite 사용
 
+## 9. 트러블슈팅
+
+**Google Takeout 형식 이중 처리**
+- 문제: JSON과 HTML 두 가지 형식이 존재
+- 해결: 파일 확장자 감지 후 각각 파서 분기, BeautifulSoup4 lazy import
+
+**데이터 부족 축 처리**
+- 문제: 채널명이 전부 Unknown인 경우 SBS 지표 계산 불가
+- 해결: `available: false` 처리 후 해당 축을 가중 평균에서 제외
+
+## 10. 배운 점
+
+- FastAPI와 Next.js를 연동하는 풀스택 API 설계 흐름
+- 실제 데이터(YouTube Takeout)의 품질 문제를 코드로 처리하는 방법
+- Shannon Entropy를 활용한 다양성 지표 수치화
+- 팀 프로젝트에서 CHANGELOG와 문서화의 중요성
+
+## 11. 실행 방법
+
+**원클릭 실행 (Windows)**
+```
+start_unbelievable.bat 더블클릭
+```
+
+**수동 실행**
+```bash
+# 백엔드
+cd backend
+.\venv\Scripts\activate
+uvicorn app.main:app --reload --port 8000
+
+# 프론트엔드
+cd frontend
+npm run dev
+```
+
+> 환경 변수: `frontend/.env.local.example`을 참고해 `.env.local` 파일 생성
