@@ -1,53 +1,55 @@
-# Code Portfolio
+# code
 
-반도체 장비 제어, AI, 데이터 분석, GUI, 시스템 통신, 웹 백엔드/프론트엔드 프로젝트를 정리한 포트폴리오 저장소입니다.
+> **C# / WPF 기반 반도체·디스플레이 장비 PC 제어 소프트웨어 개발자를 목표로 공부하며 진행한 프로젝트 모음**
 
-이 저장소는 과목명을 첫 기준으로 두기보다, GitHub에서 바로 확인하기 좋은 **프로젝트 중심 구조**를 사용합니다. 과목 정보는 각 프로젝트 README와 `coursework/`에 보조 정보로 남깁니다.
+---
 
-## Structure
+## 저장소 구조
 
-```text
+```
 code/
-├─ projects/       # 완성 프로젝트와 포트폴리오로 보여줄 앱/서비스 자료
-├─ coursework/     # 과목별 실습, 예제, 빈 분류 자리
-├─ shared/         # 여러 프로젝트에서 공통으로 쓸 자료
-├─ docs/           # 저장소 운영/구조 문서
-└─ README.md
+├── projects/          🚀 포트폴리오 수준 프로젝트 (5개)
+│   ├── semiconductor-etch-hmi-system   → etch-equipment-hmi/
+│   ├── etch-equipment-control-simulator → semitool-hmi/
+│   ├── smart-logistics-plc-system      → flask-csharp-integration/
+│   ├── unbelievable-digital-wellbeing  → unbelievable/
+│   └── emotion-based-music-recommender → emotion-music-recommendation/
+│
+├── projects/ (학습/과제)
+│   ├── winforms-gui-portfolio/          WinForms 기초 GUI 연습
+│   ├── course-registration-system/     C# 수강신청 과제
+│   ├── equipment-management-winforms/  MySQL 장비 관리 실습
+│   └── digital-detox/                  기획 플로우차트 자료
+│
+└── docs/              📄 저장소 분류표 · 보안 점검 · 체크리스트
 ```
 
-## Projects
+---
 
-| Project | Summary | Main Stack | Related Area |
-| --- | --- | --- | --- |
-| [course-registration-system](projects/course-registration-system/) | 학생, 교수, 과목 모델을 사용한 수강신청 시스템 | C# | Programming Basics |
-| [emotion-music-recommendation](projects/emotion-music-recommendation/) | 감정 기반 음악 추천 Flask 앱과 발표 자료 | Python, Flask, MySQL | AI Programming |
-| [unbelievable](projects/unbelievable/) | 시청 기록 기반 콘텐츠 소비 경향 분석, DSAO 유형, 자율 디톡스 미션을 제공하는 웹 MVP | Python, FastAPI, Next.js, TypeScript | AI/Data/Web |
-| [digital-detox](projects/digital-detox/) | 디지털 콘텐츠 사용 습관 개선 흐름을 정리한 서비스 기획·플로우차트 자료 | Service Design, Flowchart | Digital Wellbeing |
-| [semitool-hmi](projects/semitool-hmi/) | 반도체 장비 HMI, EtherCAT 제어, 공정 시나리오 통합 프로젝트 | C#, WinForms, EtherCAT | Equipment Control |
-| [sbb](projects/sbb/) | 질문/답변, 센서 데이터, 장비 모델, 알람 관리를 다루는 Spring Boot 웹 예제 | Java, Spring Boot, JPA, Thymeleaf, H2 | Web Backend |
-| [flask-csharp-integration](projects/flask-csharp-integration/) | Flask 백엔드와 C# 클라이언트를 연동한 모니터링 시스템 | Python, Flask, C# | System Communication |
-| [equipment-management-winforms](projects/equipment-management-winforms/) | MySQL 기반 장비 등록/삭제, 대여/반납, 고장 처리, 이력 조회, 관리자 일정 관리 WinForms 앱 | C#, WinForms, MySQL | GUI |
-| [색 변화 버튼](<projects/색 변화 버튼/>) | .NET 8 WPF에서 버튼 이벤트와 상태별 색상 변경을 연습한 GUI 앱 | C#, WPF, .NET 8 | GUI |
-| [winforms-gui-portfolio](projects/winforms-gui-portfolio/) | 로그인, 숫자 맞추기, 계산기, Todo로 WinForms 이벤트/UI 패턴을 연습한 런처형 앱 | C#, WinForms | GUI |
+## Main Portfolio Projects
 
-## Coursework
+| 프로젝트 | 기술 | 설명 |
+|----------|------|------|
+| [semiconductor-etch-hmi-system](./projects/etch-equipment-hmi/) | C#, WPF, PLC ADS, Flask, ML | 식각 장비 3계층 HMI 시스템 |
+| [etch-equipment-control-simulator](./projects/semitool-hmi/) | C#, WinForms, EtherCAT DLL | EtherCAT 장비 제어 HMI |
+| [smart-logistics-plc-system](./projects/flask-csharp-integration/) | C#, WinForms, Flask, REST API | 실시간 센서 모니터링 시스템 |
+| [unbelievable-digital-wellbeing](./projects/unbelievable/) | Python, FastAPI, Next.js | YouTube 분석 디지털 웰빙 서비스 |
+| [emotion-based-music-recommender](./projects/emotion-music-recommendation/) | Flask, GPT, Spotify, MySQL | 감정 분석 음악 추천 서비스 |
 
-| Folder | Purpose |
-| --- | --- |
-| [programming-basics](coursework/programming-basics/) | 프로그래밍 기초 실습 분류 |
-| [ai-programming](coursework/ai-programming/) | AI 프로그래밍 실습 분류 |
-| [equipment-control](coursework/equipment-control/) | 장비 제어 실습 분류 |
-| [data-analysis](coursework/data-analysis/) | 데이터 분석 실습 분류 |
-| [system-communication](coursework/system-communication/) | 시스템 통신 실습과 TCP 예제 |
-| [gui-apps](coursework/gui-apps/) | GUI 화면 실습 분류 |
-| [cloud-operations](coursework/cloud-operations/) | 클라우드 운영 실습 분류 |
-| [quality-control](coursework/quality-control/) | 품질관리 실습 분류 |
-| [semiconductor-process](coursework/semiconductor-process/) | 반도체 공정 이론/실습 분류 |
+---
 
-## Repository Rules
+## 관심 분야
 
-- 완성도가 있는 앱은 `projects/` 아래에 둡니다.
-- 과목 실습이나 작은 예제는 `coursework/` 아래에 둡니다.
-- 과목명은 프로젝트 폴더명보다 README의 메타 정보로 남깁니다.
-- `bin/`, `obj/`, `.vs/`, 개인 설정 파일, 실행 파일, 로그 파일은 새로 커밋하지 않습니다.
-- 장비 DLL, DB zip, 발표 자료처럼 재배포 여부가 애매한 바이너리는 가능하면 README로 위치만 설명하고 원본은 로컬에 보관합니다.
+- Equipment Control Software (C# / WPF)
+- HMI 화면 구성 및 장비 상태 관리
+- PLC / EtherCAT / Serial / TCP 통신 연동
+- DB 기반 Recipe 관리 및 Alarm/Log 처리
+- Sensor Monitoring 및 Data Analysis
+
+---
+
+## 문서
+
+- [저장소 분류표](./docs/github-repository-classification.md)
+- [보안 점검 결과](./docs/security-cleanup-report.md)
+- [GitHub 직접 처리 체크리스트](./docs/github-cleanup-final-checklist.md)
