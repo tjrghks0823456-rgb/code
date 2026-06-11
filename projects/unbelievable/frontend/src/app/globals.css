@@ -103,3 +103,56 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Glassmorphism premium panels with neon glow effects */
+.glass-neon-teal {
+  background: rgba(255, 255, 255, 0.76) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(20, 184, 166, 0.16) !important;
+  box-shadow: 0 8px 32px 0 rgba(20, 184, 166, 0.04), 0 0 16px 0 rgba(20, 184, 166, 0.08) !important;
+}
+
+.glass-neon-rose {
+  background: rgba(255, 255, 255, 0.76) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(244, 63, 94, 0.16) !important;
+  box-shadow: 0 8px 32px 0 rgba(244, 63, 94, 0.04), 0 0 16px 0 rgba(244, 63, 94, 0.08) !important;
+}
+
+.glass-neon-amber {
+  background: rgba(255, 255, 255, 0.76) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(245, 158, 11, 0.16) !important;
+  box-shadow: 0 8px 32px 0 rgba(245, 158, 11, 0.04), 0 0 16px 0 rgba(245, 158, 11, 0.08) !important;
+}
+
+.glass-neon-slate {
+  background: rgba(255, 255, 255, 0.76) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.03), 0 0 12px 0 rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Accordion transition styles */
+.transition-max-height {
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+}
+
+/* Premium active tab highlight effect */
+.tab-glow-teal {
+  box-shadow: 0 0 12px 2px rgba(20, 184, 166, 0.24);
+}
+
+.tab-glow-rose {
+  box-shadow: 0 0 12px 2px rgba(244, 63, 94, 0.24);
+}
+
+.tab-glow-slate {
+  box-shadow: 0 0 12px 2px rgba(15, 23, 42, 0.16);
+}
+
+

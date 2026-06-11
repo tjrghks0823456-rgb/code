@@ -124,6 +124,10 @@ class DatabaseClient:
 
     def save_data(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Saves a row of data into Supabase (upsert) or falls back to local MockDB."""
+        import time
+        start_time = time.perf_counter()
+        logger.info(f"[Storage] save_data start table={table}")
+        
         # Auto-pruning extra keys not in database schema to prevent PostgREST columns-not-found errors
         TABLE_COLUMNS = {
             "profiles": ["id", "email", "nickname", "birth_year", "survey_scores", "survey_result", "raw_survey", "created_at"],
@@ -148,22 +152,82 @@ class DatabaseClient:
             logger.info(f"[Storage] Saved {table} to MockDB (In-memory).")
             result = mock_db.insert(table, data)
             result["__storage"] = "MockDB"
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.info(f"[Storage] save_data done table={table} storage=MockDB elapsed_ms={elapsed_ms}")
             return result
         try:
             res = self.client.table(table).upsert(pruned_data).execute()
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             if hasattr(res, "data") and res.data:
                 logger.info(f"[Storage] Successfully saved {table} to Supabase Cloud.")
                 result = res.data[0]
                 result["__storage"] = "Supabase"
+                logger.info(f"[Storage] save_data done table={table} storage=Supabase elapsed_ms={elapsed_ms}")
                 return result
             logger.info(f"[Storage] Saved {table} to Supabase Cloud (no returned data).")
             data["__storage"] = "Supabase"
+            logger.info(f"[Storage] save_data done table={table} storage=Supabase elapsed_ms={elapsed_ms}")
             return data
         except Exception as e:
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             logger.error(f"[Storage] SUPABASE WRITE FAILED on {table}: {e}. Falling back to local MockDB!")
             result = mock_db.insert(table, data)
             result["__storage"] = "MockDB-Fallback"
+            logger.info(f"[Storage] save_data failed table={table} fallback=MockDB elapsed_ms={elapsed_ms}")
             return result
+
+    def save_many_data(self, table: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Saves multiple rows of data into Supabase (bulk upsert) or falls back to local MockDB."""
+        import time
+        start_time = time.perf_counter()
+        logger.info(f"[Storage] save_many_data start table={table} count={len(rows)}")
+        
+        TABLE_COLUMNS = {
+            "profiles": ["id", "email", "nickname", "birth_year", "survey_scores", "survey_result", "raw_survey", "created_at"],
+            "raw_file": ["id", "user_id", "storage_path", "upload_status", "excluded_ad_count", "skipped_sources_with_reason", "ad_skip_summary", "data_coverage", "created_at"],
+            "norm_event": ["id", "file_id", "event_time", "time_delta_sec", "video_duration_sec", "text_base", "platform", "action_type", "source_surface", "source_type", "content_format", "intent_level", "raw_time", "video_id", "channel_name", "channel_url", "title_url", "source_confidence", "is_duration_estimated", "estimated_duration_sec", "raw_item"],
+            "session_text": ["id", "file_id", "aggregated_text", "token_count", "event_count", "start_time", "end_time"],
+            "nlp_result": ["id", "session_id", "categories_json", "sentiment_score", "sentiment_magnitude", "language_code", "nlp_provider", "local_category", "category_confidence", "category_candidates", "category_source", "keywords_json", "created_at"],
+            "score_run": ["run_id", "user_id", "file_id", "bias_risk_score", "weighted_health", "mbti_type", "exception_codes", "sampling_metadata", "data_quality_flags", "information_bias_risk", "shorts_stimulation_risk", "final_detox_risk", "shorts_analysis", "analyzed_at"],
+            "score_axis": ["axis_id", "run_id", "axis_code", "axis_value", "axis_grade", "created_at"],
+            "detox_plan": ["plan_id", "run_id", "user_id", "reverse_queries", "mission_json", "created_at"],
+            "mission_log": ["log_id", "plan_id", "mission_item_id", "completed_yn", "completed_at"],
+            "audit_log": ["id", "event_type", "target_id", "status_code", "latency_ms", "provider", "error_code", "created_at"],
+            "content_classification_feedback": ["id", "user_id", "event_id", "content_text", "predicted_category_l1", "predicted_category_l2", "corrected_category_l1", "corrected_category_l2", "confidence", "feedback_reason", "created_at"]
+        }
+        
+        pruned_rows = []
+        for row in rows:
+            if table in TABLE_COLUMNS:
+                valid_cols = set(TABLE_COLUMNS[table])
+                pruned_rows.append({k: v for k, v in row.items() if k in valid_cols})
+            else:
+                pruned_rows.append(row)
+                
+        if not pruned_rows:
+            return []
+            
+        if self.is_mock or not self.client:
+            logger.info(f"[Storage] Saved {len(rows)} rows to MockDB (In-memory) via save_many_data.")
+            for row in rows:
+                mock_db.insert(table, row)
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.info(f"[Storage] save_many_data done table={table} storage=MockDB elapsed_ms={elapsed_ms}")
+            return rows
+        try:
+            res = self.client.table(table).upsert(pruned_rows).execute()
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.info(f"[Storage] save_many_data done table={table} storage=Supabase elapsed_ms={elapsed_ms}")
+            if hasattr(res, "data") and res.data:
+                return res.data
+            return rows
+        except Exception as e:
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.error(f"[Storage] SUPABASE WRITE FAILED on many {table} ({len(rows)} rows): {e}. Falling back to local MockDB!")
+            for row in rows:
+                mock_db.insert(table, row)
+            logger.info(f"[Storage] save_many_data failed table={table} fallback=MockDB elapsed_ms={elapsed_ms}")
+            return rows
 
     def fetch_data(self, table: str, query_filter: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """Fetches rows of data from Supabase or falls back to local MockDB."""

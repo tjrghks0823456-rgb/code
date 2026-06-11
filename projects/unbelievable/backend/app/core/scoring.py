@@ -262,12 +262,31 @@ def calculate_scores_v2(
             1.0,
             sum(topic_distribution.values()) / MIN_DATA_REQUIREMENTS["topic_count"],
         )
-        
+
+    # Check etc/uncategorized ratio for penalty
+    uncategorized_ratio = 0.0
+    if use_local_fallback:
+        local_total = sum(local_category_distribution.values())
+        if local_total > 0:
+            etc_count = sum(local_category_distribution.get(k, 0) for k in ["기타", "기타/미분류", "미분류"])
+            uncategorized_ratio = etc_count / local_total
+    else:
+        nlp_total = sum(topic_distribution.values())
+        if nlp_total > 0:
+            etc_count = sum(topic_distribution.get(k, 0) for k in ["기타", "기타/미분류", "미분류"])
+            uncategorized_ratio = etc_count / nlp_total
+
     tds_warnings = []
     if use_local_fallback:
         tds_warnings.append("NLP sample limited; using local keyword topic diversity fallback")
     elif len(topic_distribution) <= 1:
         tds_warnings.append("topic sample limited")
+
+    if uncategorized_ratio >= 0.7:
+        tds_warnings.append("기타/미분류 카테고리 비중이 높아 주제 다양성 점수는 참고용으로 해석해야 합니다.")
+    if uncategorized_ratio >= 0.8:
+        tds_confidence = 0.0
+        tds_warnings.append("기타/미분류 카테고리 비율이 극도로 높아 분석 신뢰도가 저하되었습니다.")
         
     tds_status = {
         "nlp_category_entropy": "limited" if use_local_fallback else "used",
@@ -278,6 +297,9 @@ def calculate_scores_v2(
         "local_keyword_category_entropy": round(local_score, 1),
         "max_topic_categories_applied": True,
         "nlp_sample_insufficient_confidence_reduced": bool(use_local_fallback),
+        "tds_confidence": tds_confidence,
+        "topic_diversity_confidence": tds_confidence,
+        "uncategorized_ratio": round(uncategorized_ratio, 3),
         "status": tds_status
     }
     details["TDS"] = _detail(
@@ -286,6 +308,8 @@ def calculate_scores_v2(
         "Shannon entropy normalized by K=15 possible topic categories",
         tds_warnings,
     )
+    details["TDS"]["tds_confidence"] = tds_confidence
+    details["TDS"]["topic_diversity_confidence"] = tds_confidence
     details["TDS"]["score_components"] = tds_components
 
     # 4. EBS (Emotion Balance Score)

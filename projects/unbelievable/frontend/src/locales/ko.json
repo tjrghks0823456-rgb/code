@@ -35,6 +35,10 @@
     "nlp_fallback_used": {
       "title": "Rule-based 로컬 형태소 분석 fallback 사용",
       "desc": "Google Cloud Language API 인증 또는 한도 오류가 발생하여, 세종이 한글 형태소 분석 사전 및 로컬 규칙 엔진 기반으로 대체 분석을 수행했습니다."
+    },
+    "event_limit_applied": {
+      "title": "무료 MVP 빠른 분석 적용됨",
+      "desc": "빠른 시연 및 서버 부하 경감을 위해 최근 시청 기록 100건 + 검색 기록 100건으로 분석 범위를 제한했습니다. 더 긴 기간의 전체 기록 분석은 향후 고급 분석 모드(로드맵)에서 지원될 예정입니다."
     }
   },
   "AXIS_AVAILABLE_DESCS": {

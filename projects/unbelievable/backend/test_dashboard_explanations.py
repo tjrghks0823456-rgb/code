@@ -175,6 +175,11 @@ def validate_scenario(name, history):
     print(f"SUCCESS: Scenario {name} passed all checks!")
 
 def main():
+    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
     print("=== STARTING SCENARIOS EXPLANATION & DETOX TEST ===")
     for name, history in scenarios_data.items():
         validate_scenario(name, history)

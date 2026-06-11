@@ -14,11 +14,15 @@ import { loadSelfSurveyResult } from "../../utils/surveyStorage";
 export default function TypesPage() {
   const router = useRouter();
   const [myType, setMyType] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
 
   useEffect(() => {
     const survey = loadSelfSurveyResult();
     if (survey?.resultCode) {
       setMyType(survey.resultCode);
+    }
+    if (typeof window !== "undefined") {
+      setRunId(localStorage.getItem("latest_run_id"));
     }
   }, []);
 
@@ -33,9 +37,16 @@ export default function TypesPage() {
             title="16가지 미디어 성향 유형"
             description="코드보다 캐릭터와 한 줄 설명이 먼저 보이도록 정리했습니다. 같은 구조의 카드로 비교하기 쉽게 맞췄습니다."
           />
-          <Button type="button" tone="secondary" icon={<ArrowLeft size={18} />} onClick={() => router.back()}>
-            이전 화면
-          </Button>
+          <div className="flex gap-2.5">
+            {runId && (
+              <Button type="button" tone="primary" onClick={() => router.push(`/dashboard?run_id=${runId}`)}>
+                대시보드로 복귀
+              </Button>
+            )}
+            <Button type="button" tone="secondary" icon={<ArrowLeft size={18} />} onClick={() => router.back()}>
+              이전 화면
+            </Button>
+          </div>
         </section>
 
         <Card className="p-6 md:p-8">

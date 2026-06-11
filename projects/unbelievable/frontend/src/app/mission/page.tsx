@@ -185,7 +185,19 @@ function MissionContent() {
             title="알고리즘 환기 미션"
             description="완료율을 채우는 숙제가 아니라, 추천 흐름에 새 창을 여는 가벼운 루틴입니다."
           />
-          <Button type="button" tone="secondary" icon={<ArrowLeft size={18} />} onClick={() => router.push("/dashboard")}>
+          <Button
+            type="button"
+            tone="secondary"
+            icon={<ArrowLeft size={18} />}
+            onClick={() => {
+              const cachedRunId = typeof window !== "undefined" ? localStorage.getItem("latest_run_id") : null;
+              if (cachedRunId) {
+                router.push(`/dashboard?run_id=${cachedRunId}`);
+              } else {
+                router.push("/dashboard");
+              }
+            }}
+          >
             대시보드로
           </Button>
         </section>
@@ -215,15 +227,25 @@ function MissionContent() {
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">검색어 {index + 1}</p>
                   <h3 className="mt-2 text-base font-black text-slate-950">{item.query_text}</h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{item.why_this_helps}</p>
-                  <Button
-                    type="button"
-                    tone="secondary"
-                    className="mt-4 w-full"
-                    icon={<Copy size={16} />}
-                    onClick={() => copyToClipboard(item.query_text, index)}
-                  >
-                    {copiedIndex === index ? "복사 완료" : "검색어 복사"}
-                  </Button>
+                  <div className="mt-4 flex gap-2">
+                    <Button
+                      type="button"
+                      tone="secondary"
+                      className="flex-1 text-[11px]"
+                      icon={<Copy size={15} />}
+                      onClick={() => copyToClipboard(item.query_text, index)}
+                    >
+                      {copiedIndex === index ? "복사 완료" : "검색어 복사"}
+                    </Button>
+                    <a
+                      href={`https://www.youtube.com/results?search_query=${encodeURIComponent(item.query_text)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-black transition shadow-sm"
+                    >
+                      유튜브 검색 ↗
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>

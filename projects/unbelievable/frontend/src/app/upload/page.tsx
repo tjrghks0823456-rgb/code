@@ -113,12 +113,37 @@ function detectYoutubeFiles(files: File[]): DetectedYoutubeFile[] {
     });
 }
 
+const checkHealth = async (): Promise<boolean> => {
+  try {
+    const res = await fetch(apiUrl("/"), { method: "GET" });
+    return res.ok;
+  } catch (err) {
+    return false;
+  }
+};
+
+const STEP_MESSAGES: Record<string, string> = {
+  uploading: "파일을 서버로 업로드하는 중입니다.",
+  parsing: "YouTube 기록을 정리하는 중입니다.",
+  saving: "분석용 데이터를 저장하는 중입니다.",
+  analyzing: "6축 분석 점수를 계산하는 중입니다.",
+  redirecting: "대시보드로 이동하는 중입니다.",
+  error: "처리가 지연되었거나 서버 응답이 없습니다."
+};
+
 const prepItems = ["파일 준비", "개인정보 안내 확인", "시청 기록 선택", "분석 준비 완료"];
 
 export default function UploadPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [agreed, setAgreed] = useState(false);
+  const [cachedRunId, setCachedRunId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      setCachedRunId(localStorage.getItem("latest_run_id"));
+    }
+  }, []);
 
   // Custom multi-option state
   const [detectedFiles, setDetectedFiles] = useState<DetectedYoutubeFile[]>([]);
@@ -130,6 +155,7 @@ export default function UploadPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadSummary, setUploadSummary] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState<"idle" | "uploading" | "parsing" | "saving" | "analyzing" | "redirecting" | "error">("idle");
 
   // Ref callback for webkitdirectory setup to avoid React TS type errors
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -273,7 +299,11 @@ export default function UploadPage() {
     if (!zipFile && uploadableFiles.length === 0) return;
 
     setUploading(true);
+    setCurrentStep("uploading");
     setErrorMsg(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
 
     try {
       // 1. Upload Folder or ZIP via FormData
@@ -297,23 +327,47 @@ export default function UploadPage() {
       const uploadRes = await fetch(apiUrl(`/api/v1/upload/takeout?user_id=${DEFAULT_USER_ID}`), {
         method: "POST",
         body: formData,
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!uploadRes.ok) {
         const errorData = await uploadRes.json().catch(() => null);
         throw new Error(errorData?.detail || `업로드 분석 요청에 실패했습니다. (HTTP ${uploadRes.status})`);
       }
 
+      setCurrentStep("parsing");
       const uploadData = await uploadRes.json();
+
+      setCurrentStep("saving");
       if (!uploadData.file_id) {
         throw new Error("서버로부터 파일 ID를 전달받지 못했습니다.");
       }
 
+      await new Promise((resolve) => setTimeout(resolve, 500)); // Brief pause for visual smoothness
       setUploadSummary(uploadData);
-      setUploading(false);
+      setCurrentStep("idle");
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error("API connection failed:", err);
-      setErrorMsg(err.message || "서버 연결에 실패했습니다.");
+      setCurrentStep("error");
+
+      let friendlyMsg = "업로드 처리가 지연되었거나 서버 응답이 없습니다.";
+      if (err.name === "AbortError") {
+        const isHealthy = await checkHealth();
+        if (isHealthy) {
+          friendlyMsg = "서버 연결은 정상이나 업로드 정제 응답이 60초 이상 지연되었습니다. 백엔드 처리 로그 또는 Supabase 저장 병목을 확인해주세요.";
+        } else {
+          friendlyMsg = "백엔드 API 서버 연결에 실패했습니다. 서버가 기동 중인지(포트 8000) 확인해주세요.";
+        }
+      } else if (err.message.includes("Failed to fetch") || err.message.includes("fetch")) {
+        friendlyMsg = "백엔드 API 서버 연결에 실패했습니다. 서버가 기동 중인지(포트 8000) 확인해주세요.";
+      } else {
+        friendlyMsg = `${err.message || "알 수 없는 오류가 발생했습니다."} (서버 응답을 확인해보세요)`;
+      }
+      setErrorMsg(friendlyMsg);
+    } finally {
       setUploading(false);
     }
   };
@@ -322,19 +376,27 @@ export default function UploadPage() {
     if (!uploadSummary?.file_id) return;
 
     setAnalyzing(true);
+    setCurrentStep("analyzing");
     setErrorMsg(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
 
     try {
       // 2. Trigger Analysis Calculation
       const analysisRes = await fetch(apiUrl(`/api/v1/analysis/run?file_id=${uploadSummary.file_id}&user_id=${DEFAULT_USER_ID}`), {
         method: "POST",
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!analysisRes.ok) {
         const errorData = await analysisRes.json().catch(() => null);
         throw new Error(errorData?.detail || `정량 편향 분석 실행 실패 (HTTP ${analysisRes.status})`);
       }
 
+      setCurrentStep("redirecting");
       const analysisData = await analysisRes.json();
       const runId = analysisData.run_id;
 
@@ -342,11 +404,28 @@ export default function UploadPage() {
         throw new Error("분석 실행 ID(run_id) 수신 실패");
       }
 
-      setAnalyzing(false);
+      await new Promise((resolve) => setTimeout(resolve, 500));
       router.push(`/dashboard?run_id=${runId}`);
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error("Analysis execution failed:", err);
-      setErrorMsg(err.message || "분석 실행에 실패했습니다.");
+      setCurrentStep("error");
+
+      let friendlyMsg = "분석 계산이 지연되었거나 서버 응답이 없습니다.";
+      if (err.name === "AbortError") {
+        const isHealthy = await checkHealth();
+        if (isHealthy) {
+          friendlyMsg = "업로드는 완료되었지만 분석 계산 단계가 지연되었습니다.";
+        } else {
+          friendlyMsg = "백엔드 API 서버 연결에 실패했습니다. 서버가 기동 중인지(포트 8000) 확인해주세요.";
+        }
+      } else if (err.message.includes("Failed to fetch") || err.message.includes("fetch")) {
+        friendlyMsg = "백엔드 API 서버 연결에 실패했습니다. 서버가 기동 중인지(포트 8000) 확인해주세요.";
+      } else {
+        friendlyMsg = `${err.message || "알 수 없는 오류가 발생했습니다."} (서버 응답을 확인해보세요)`;
+      }
+      setErrorMsg(friendlyMsg);
+    } finally {
       setAnalyzing(false);
     }
   };
@@ -362,6 +441,11 @@ export default function UploadPage() {
           title="이제 실제 기록과 비교해볼 차례예요"
           description="자가진단 결과와 실제 시청 기록이 얼마나 다른지 확인해볼게요."
         />
+
+        <div className="mt-4 rounded-2xl border border-teal-150 bg-teal-50/60 px-4 py-3 text-xs font-semibold text-teal-800 leading-relaxed shadow-sm">
+          💡 자가진단 없이도 실제 기록 분석을 바로 진행할 수 있습니다. 
+          자가진단을 함께 완료하시면, 실제 기록과 비교한 메타인지 격차 리포트를 추가로 볼 수 있습니다.
+        </div>
 
         <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           {prepItems.map((item, index) => (
@@ -380,6 +464,27 @@ export default function UploadPage() {
         <Card className="mt-6 p-6 md:p-8">
           {step === 1 && (
             <div className="space-y-6">
+              {cachedRunId && (
+                <div className="relative overflow-hidden rounded-3xl border border-slate-900 bg-slate-950 p-5 text-white shadow-xl transition-all hover:scale-[1.01] duration-300">
+                  <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-teal-500/10 blur-2xl" />
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-400">Previous Analysis Detected</p>
+                      <h3 className="text-base font-black tracking-tight mt-1 text-slate-100">이전에 완료한 분석 결과가 존재합니다</h3>
+                      <p className="text-xs text-slate-400 font-medium mt-1">
+                        새로 파일을 올리지 않고 이전 대시보드로 즉시 복구할 수 있어요.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-10 items-center justify-center rounded-2xl bg-teal-450 px-4 py-2 text-xs font-black text-slate-950 hover:bg-teal-350 transition shadow-lg shrink-0"
+                      onClick={() => router.push(`/dashboard?run_id=${cachedRunId}`)}
+                    >
+                      이전 결과로 돌아가기
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="rounded-3xl border border-teal-100 bg-teal-50 p-5">
                 <div className="flex items-start gap-3">
                   <ShieldCheck className="mt-0.5 text-teal-700" size={24} />
@@ -595,13 +700,17 @@ export default function UploadPage() {
                     <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">
                       파일 선택이 완료되었습니다. 이제 시청 기록을 정리하고 자가진단 결과와 비교해 대시보드 리포트를 생성합니다.
                     </p>
+                    <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-800 font-semibold leading-relaxed max-w-md mx-auto text-left shadow-sm">
+                      ⚡ <strong>무료 MVP 빠른 분석 모드가 적용됩니다.</strong><br />
+                      시연 안정성과 빠른 피드백을 위해 <strong>최근 시청 기록과 검색 기록을 각각 최대 100건까지</strong> 분석합니다. (전체 장기 기록 분석은 향후 고급 분석 모드에서 제공 예정)
+                    </div>
 
                     <div className="mt-5 pt-4 border-t border-slate-200/65 text-left max-w-sm mx-auto space-y-2.5">
                       <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
                         <CheckCircle2 size={14} className="text-emerald-600" /> 개인정보 보안 및 수집 동의 완료
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-800 font-black">
-                        <CheckCircle2 size={14} className="text-emerald-600" /> {zipFile ? `ZIP 파일 대기 완료 (${zipFile.name})` : `YouTube 분석 파일 감지 완료 (${uploadableFiles.length}개)`}
+                        <CheckCircle2 size={14} className="text-emerald-600" /> {zipFile ? `ZIP 파일 대기 완료 (${zipFile.name})` : `YouTube 분석 대상 파일 감지 완료 (${uploadableFiles.length}개)`}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
                         <CheckCircle2 size={14} className="text-emerald-600" /> 짧은 노출 추정 필터 적용 대기 중
@@ -609,20 +718,38 @@ export default function UploadPage() {
                     </div>
                   </div>
 
+                  {currentStep !== "idle" && currentStep !== "error" && (
+                    <div className="rounded-3xl border border-teal-100 bg-teal-50/50 p-4 flex gap-3 items-center justify-center animate-pulse">
+                      <span className="h-5 w-5 animate-spin rounded-full border-2 border-teal-600 border-t-transparent shrink-0" />
+                      <span className="text-sm font-bold text-teal-800">
+                        {STEP_MESSAGES[currentStep]}
+                      </span>
+                    </div>
+                  )}
+
                   {errorMsg && (
                     <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold leading-6 text-rose-700">
                       분석 중 오류가 발생했습니다. API 서버({apiUrl("/")}) 연결 상태를 확인해주세요.
                       <br />
-                      <span className="text-xs">{errorMsg}</span>
+                      <span className="text-xs font-mono">{errorMsg}</span>
                     </div>
                   )}
 
                   <div className="flex flex-col gap-3 sm:flex-row">
-                    <Button type="button" tone="secondary" icon={<ArrowLeft size={18} />} onClick={() => setStep(2)}>
+                    <Button type="button" tone="secondary" icon={<ArrowLeft size={18} />} disabled={uploading} onClick={() => setStep(2)}>
                       이전
                     </Button>
-                    <Button type="submit" className="sm:flex-1" disabled={uploading} icon={<Play size={18} />}>
-                      {uploading ? "업로드 및 데이터 정제 중..." : "기록 분석 시작하기"}
+                    <Button type="submit" className="sm:flex-1" disabled={uploading} icon={uploading ? null : <Play size={18} />}>
+                      {uploading ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          <span>전처리 중...</span>
+                        </div>
+                      ) : errorMsg ? (
+                        "다시 시도하기"
+                      ) : (
+                        "기록 분석 시작하기"
+                      )}
                     </Button>
                   </div>
                 </form>
@@ -648,6 +775,30 @@ export default function UploadPage() {
                       업로드된 Google Takeout 분석이 성공적으로 마무리되었습니다.
                       관심사 분석에 왜곡을 일으킬 수 있는 음악 데이터를 제외하고 시청 유형별로 분류를 마쳤습니다.
                     </p>
+ 
+                    {/* 데이터 정제 요약 박스 */}
+                    <div className="mt-5 rounded-2xl bg-white/5 border border-white/10 p-4 space-y-2 text-xs font-semibold text-slate-200">
+                      <div className="flex justify-between border-b border-white/10 pb-1.5 mb-1.5">
+                        <span className="font-bold text-slate-400">데이터 정제 요약</span>
+                        <span className="text-teal-400 font-black">MVP 빠른 분석 적용</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>감지된 Takeout 파일</span>
+                        <span className="font-black text-white">{zipFile ? "ZIP 파일 1개" : `${uploadableFiles.length}개`}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>원본 이벤트 수</span>
+                        <span className="font-black text-white">{uploadSummary.original_total_count?.toLocaleString() || 0}건</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>빠른 분석 대상</span>
+                        <span className="font-black text-white">시청 {uploadSummary.processed_watch_count || 0}건 + 검색 {uploadSummary.processed_search_count || 0}건</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>실제 저장 이벤트</span>
+                        <span className="font-black text-white">{uploadSummary.total_saved?.toLocaleString() || 0}건</span>
+                      </div>
+                    </div>
 
                     {/* Stats Grid */}
                     <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -736,6 +887,19 @@ export default function UploadPage() {
                       </span>
                     </div>
 
+                    {/* Event Limit applied notice */}
+                    {uploadSummary.event_limit_applied && (
+                      <div className="mt-3 flex items-center justify-between rounded-2xl bg-[#0d9488]/15 border border-[#0d9488]/30 px-4 py-2.5">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-teal-400">
+                          <CheckCircle2 size={13} />
+                          분석 모드
+                        </span>
+                        <span className="text-xs font-black text-teal-300">
+                          무료 MVP 빠른 분석 (시청/검색 각 최근 100건)
+                        </span>
+                      </div>
+                    )}
+
                     {/* LocalStorage Survey Connection badge */}
                     {loadSelfSurveyResult() && (
                       <div className="mt-3 flex items-center justify-between rounded-2xl bg-teal-500/10 border border-teal-500/20 px-4 py-2.5">
@@ -779,6 +943,15 @@ export default function UploadPage() {
                     </div>
                   )}
 
+                  {currentStep !== "idle" && currentStep !== "error" && (
+                    <div className="rounded-3xl border border-teal-100 bg-teal-50/50 p-4 flex gap-3 items-center justify-center animate-pulse">
+                      <span className="h-5 w-5 animate-spin rounded-full border-2 border-teal-600 border-t-transparent shrink-0" />
+                      <span className="text-sm font-bold text-teal-800">
+                        {STEP_MESSAGES[currentStep]}
+                      </span>
+                    </div>
+                  )}
+
                   {errorMsg && (
                     <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold leading-6 text-rose-700 animate-shake">
                       분석 중 오류가 발생했습니다. API 서버({apiUrl("/")}) 연결 상태를 확인해주세요.
@@ -811,8 +984,10 @@ export default function UploadPage() {
                       {analyzing ? (
                         <div className="flex items-center justify-center gap-2">
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          <span>AI 미디어 디톡스 리포트 생성 중... (약 5초 소요)</span>
+                          <span>점수 계산 중...</span>
                         </div>
+                      ) : errorMsg ? (
+                        "리포트 발행 다시 시도하기"
                       ) : (
                         "AI 미디어 리포트 발행하기"
                       )}

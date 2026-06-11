@@ -38,12 +38,12 @@ INTEREST_RULES = [
     {"category": "정치/사회", "subcategory": "방송뉴스", "keywords": ["tv조선", "tv chosun", "jtbc 뉴스", "ytn", "연합뉴스"], "source_group": "방송 뉴스"},
     {"category": "정치/사회", "subcategory": "국회/정당/선거", "keywords": ["국회", "정당", "선거", "여론조사", "대통령", "서울시장", "시장 후보"]},
     {"category": "정치/사회", "subcategory": "사회이슈/사건", "keywords": ["사회", "시사", "사건", "논란", "법원", "검찰", "뉴스", "국토부", "국토부장관", "철근 누락", "부실시공"]},
-    {"category": "정치/사회", "subcategory": "국제정치", "keywords": ["국제정치", "미국", "중국", "일본", "러시아", "전쟁"]},
+    {"category": "정치/사회", "subcategory": "국제정치", "keywords": ["국제정치", "미중", "러우", "한일관계", "외교", "영토분쟁", "시진핑", "푸틴", "바이든", "트럼프", "패권", "지정학", "안보", "국제정세"]},
     {"category": "IT/테크", "subcategory": "AI", "keywords": ["ai", "gemini", "chatgpt", "openai", "llm", "머신러닝", "인공지능", "딥러닝", "자연어", "nlp", "강화학습", "형태소", "언어 모델", "음성 인식", "컴퓨터 비전", "vision", "neural"]},
     {"category": "IT/테크", "subcategory": "클라우드", "keywords": ["google cloud", "gcp", "aws", "azure", "클라우드"]},
     {"category": "IT/테크", "subcategory": "프로그래밍", "keywords": ["코딩", "프로그래밍", "개발자", "python", "javascript", "자바스크립트", "java", "자바", "react", "next.js", "fastapi", "django", "장고", "database", "데이터베이스", "db", "network", "네트워크", "운영체제", "os", "자료구조", "알고리즘", "algorithm", "컴파일러", "software", "소프트웨어", "git", "github", "서버", "system", "컴퓨터공학", "cs", "프로젝트 관리", "pm"]},
     {"category": "IT/테크", "subcategory": "노트북/PC", "keywords": ["노트북", "pc", "컴퓨터", "맥북", "그래픽카드", "그램", "lg전자", "core ultra", "ram", "ssd", "win11"]},
-    {"category": "IT/테크", "subcategory": "모바일/기기", "keywords": ["갤럭시", "아이폰", "android", "스마트폰", "태블릿"]},
+    {"category": "IT/테크", "subcategory": "모바일/기기", "keywords": ["갤럭시", "아이폰", "android", "스마트폰", "태블릿", "드론", "로봇", "drone", "robot", "웨어러블"]},
     {"category": "쇼핑/제품", "subcategory": "제품탐색", "keywords": ["제품", "언박싱"]},
     {"category": "쇼핑/제품", "subcategory": "구매/할인", "keywords": ["구매", "할인", "쿠폰", "세일", "핫딜", "특가", "공식몰"]},
     {"category": "쇼핑/제품", "subcategory": "패션/뷰티제품", "keywords": ["신발", "화장품", "패션", "향수", "틴트", "패치"]},
@@ -59,7 +59,7 @@ INTEREST_RULES = [
     {"category": "학습/자격증", "subcategory": "자격증", "keywords": ["자격증", "컴활", "한국사"]},
     {"category": "학습/자격증", "subcategory": "영어/어학", "keywords": ["영어", "토익", "토플", "일본어", "중국어", "회화"]},
     {"category": "학습/자격증", "subcategory": "교양/인문/과학", "keywords": ["다큐", "다큐멘터리", "역사", "우주", "과학", "인문학", "철학", "기원", "생명", "우주의"]},
-    {"category": "엔터테인먼트", "subcategory": "음악/아이돌", "keywords": ["음악", "노래", "뮤직", "아이돌", "밴드", "힙합", "락힙합", "록", "rock", "ost", "딘딘", "리센느", "지누션", "여돌", "스텔라이브", "정국", "뉴진스", "아이브", "세븐틴", "my whole world", "사랑이라 했던 말", "smile boy", "스마일보이", "into your summer", "flying high with u", "bumpa", "pokerface", "goose senbi", "허키", "asmr", "클래식", "힐링", "명상", "재즈", "pop", "classic", "발라드"]},
+    {"category": "엔터테인먼트", "subcategory": "음악/아이돌", "keywords": ["음악", "노래", "뮤직", "아이돌", "밴드", "힙합", "락힙합", "록", "rock", "ost", "딘딘", "리센느", "지누션", "여돌", "스텔라이브", "정국", "뉴진스", "아이브", "세븐틴", "대성", "빅뱅", "my whole world", "사랑이라 했던 말", "smile boy", "스마일보이", "into your summer", "flying high with u", "bumpa", "pokerface", "goose senbi", "허키", "asmr", "클래식", "힐링", "명상", "재즈", "pop", "classic", "발라드"]},
     {"category": "엔터테인먼트", "subcategory": "영화/드라마", "keywords": ["영화", "드라마", "예고편", "넷플릭스", "ott"]},
     {"category": "엔터테인먼트", "subcategory": "예능/인물", "keywords": ["예능", "인터뷰", "김호영", "박명수", "유재석", "유병재", "강동원", "정지훈", "이민우", "복냥즈", "차쥐뿔", "\ucc28\uc950\ubfcc", "고마워요 누나", "배우", "천만 배우", "수상소감", "웃긴", "침착맨", "라이브"]},
     {"category": "여행/맛집", "subcategory": "여행", "keywords": ["여행", "호텔", "항공", "숙소", "호캉스", "해외여행", "국내여행"]},
@@ -109,6 +109,26 @@ RAW_CATEGORY_MAP = {
     "reference": ("학습/자격증", "교양/인문/과학"),
     "shopping": ("쇼핑/제품", "제품탐색"),
     "science": ("학습/자격증", "교양/인문/과학"),
+}
+
+
+# YOUTUBE_CATEGORY_MAP constant and helper mappings
+YOUTUBE_CATEGORY_MAP = {
+    "1": ("엔터테인먼트", "영화/드라마"),
+    "2": ("라이프스타일", "생활"),
+    "10": ("엔터테인먼트", "음악/아이돌"),
+    "15": ("라이프스타일", "반려동물"),
+    "17": ("스포츠", "기타 스포츠"),
+    "19": ("여행/맛집", "여행"),
+    "20": ("게임", "기타 게임"),
+    "22": ("라이프스타일", "일상"),
+    "23": ("엔터테인먼트", "예능/인물"),
+    "24": ("엔터테인먼트", "예능/인물"),
+    "25": ("정치/사회", "방송뉴스"),
+    "26": ("라이프스타일", "생활"),
+    "27": ("학습/자격증", "교양/인문/과학"),
+    "28": ("IT/테크", "기타 IT"),
+    "29": ("정치/사회", "사회이슈/사건"),
 }
 
 
@@ -215,11 +235,29 @@ def _topic_from_raw_category(raw_category: str, evidence_text: str, raw_text: st
     )
 
 
-def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str = "") -> Dict[str, Any]:
+def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str = "", raw_item: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Classify a title/query into a service-friendly major/minor interest topic."""
     raw = _text(text)
     raw_cat = _text(raw_category)
     channel = _text(channel_name)
+    item = raw_item or {}
+
+    # 0. Check raw_item for explicit metadata category mapping first
+    cat_id = str(item.get("categoryId") or "").strip()
+    if cat_id in YOUTUBE_CATEGORY_MAP:
+        major, minor = YOUTUBE_CATEGORY_MAP[cat_id]
+        return _base_topic(major, minor, "high", raw, raw_cat, ["categoryId:" + cat_id])
+
+    topic_categories = item.get("topicCategories") or []
+    if isinstance(topic_categories, list) and topic_categories:
+        for topic_url in topic_categories:
+            topic_str = str(topic_url).lower()
+            topic_name = topic_str.split("/")[-1].replace("_", " ") if "/" in topic_str else topic_str
+            for rule in INTEREST_RULES:
+                keywords = rule.get("keywords", [])
+                matched = [keyword for keyword in keywords if _keyword_matches(topic_name, keyword)]
+                if matched:
+                    return _base_topic(rule["category"], rule["subcategory"], "high", raw, raw_cat, matched, matched_keywords=matched)
 
     # 1. Pre-processing: Extract bracket contents
     brackets_content = re.findall(r'\[([^\]]+)\]|\(([^)]+)\)', raw)
@@ -494,6 +532,7 @@ def build_search_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             query,
             raw_category=_event_raw_category(event),
             channel_name=event.get("channel_name", ""),
+            raw_item=event
         )
         _record_topic(topic, query, category_counter, subcategory_counter, subcategory_details)
 
@@ -532,6 +571,7 @@ def build_standard_video_interest_map(events: List[Dict[str, Any]]) -> Dict[str,
                 title,
                 raw_category=_event_raw_category(event),
                 channel_name=event.get("channel_name", ""),
+                raw_item=event
             )
             _record_topic(topic, title, category_counter, subcategory_counter, subcategory_details)
 
@@ -579,6 +619,7 @@ def build_shorts_interest_map(events: List[Dict[str, Any]]) -> Dict[str, Any]:
                 title,
                 raw_category=_event_raw_category(event),
                 channel_name=event.get("channel_name", ""),
+                raw_item=event
             )
             _record_topic(topic, title, category_counter, subcategory_counter, subcategory_details)
 

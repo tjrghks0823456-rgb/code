@@ -64,6 +64,9 @@ def _content_format(event: Dict[str, Any], action_type: str) -> str:
     explicit = _lower(event.get("content_format"))
     if explicit and explicit != "unknown":
         return explicit
+        
+    if event.get("is_shorts_candidate") is True:
+        return "shorts"
 
     title_url = _lower(
         event.get("title_url")
@@ -74,12 +77,21 @@ def _content_format(event: Dict[str, Any], action_type: str) -> str:
     text_base = _lower(event.get("text_base") or event.get("title_text") or event.get("title"))
     video_id = _clean_text(event.get("video_id"))
 
-    if "/shorts/" in title_url or "youtube.com/shorts" in title_url:
+    from app.core.content_filters import check_shorts_candidate, check_general_watch_candidate
+    is_shorts, _, _ = check_shorts_candidate(url=title_url, title=text_base, raw_item=event)
+    if is_shorts:
         return "shorts"
+
     if "/live/" in title_url or "youtube.com/live" in title_url or "실시간 스트리밍" in text_base:
         return "live"
+        
     if action_type == "view" and ("watch?v=" in title_url or video_id):
         return "standard_video"
+        
+    is_general, _ = check_general_watch_candidate(url=title_url, is_shorts_candidate=is_shorts, raw_item=event)
+    if is_general:
+        return "standard_video"
+        
     return "unknown"
 
 
@@ -161,6 +173,20 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         intent_level = "active_search" if action_type == "search" or source_type == "search_history" else "unknown"
     is_short = content_format == "shorts"
 
+    is_shorts_cand = event.get("is_shorts_candidate")
+    shorts_reason = event.get("shorts_detection_reason")
+    classification_conf = event.get("classification_confidence")
+    is_general_cand = event.get("is_general_watch_candidate")
+    takeout_based_est = event.get("takeout_based_estimation")
+    timestamp_parse_failed = event.get("timestamp_parse_failed", False)
+    
+    if is_shorts_cand is None:
+        from app.core.content_filters import check_shorts_candidate, check_general_watch_candidate
+        is_shorts_cand, shorts_reason, shorts_conf = check_shorts_candidate(url=title_url, title=text_base, raw_item=event)
+        is_general_cand, general_conf = check_general_watch_candidate(url=title_url, is_shorts_candidate=is_shorts_cand, raw_item=event)
+        classification_conf = shorts_conf if is_shorts_cand else general_conf
+        takeout_based_est = bool(is_general_cand and duration_sec is None)
+
     return {
         "id": event.get("id"),
         "event_time": event.get("event_time"),
@@ -176,6 +202,12 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         "duration_confidence_label": _lower(duration_label) or "unknown",
         "is_estimated_duration": actual_duration is None and estimated_duration is not None,
         "is_short": is_short,
+        "is_shorts_candidate": bool(is_shorts_cand),
+        "shorts_detection_reason": shorts_reason or "unknown",
+        "classification_confidence": classification_conf or "low",
+        "is_general_watch_candidate": bool(is_general_cand),
+        "takeout_based_estimation": bool(takeout_based_est),
+        "timestamp_parse_failed": bool(timestamp_parse_failed),
         "storage": _clean_text(event.get("__storage")),
     }, warnings
 

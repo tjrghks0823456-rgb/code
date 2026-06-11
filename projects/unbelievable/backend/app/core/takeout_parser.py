@@ -47,7 +47,27 @@ def parse_takeout_timestamp(timestamp_str: str) -> Tuple[Optional[str], List[str
     
     val = timestamp_str.strip()
     
-    # 1. ISO 8601 or Standard Space-delimited Parse (e.g. 2023-10-27T20:15:30.000Z or 2023-10-27 20:15:30)
+    # 1. Try dateparser dynamically if available (supports broad multilingual formats)
+    try:
+        import dateparser
+        parsed_dt = dateparser.parse(val)
+        if parsed_dt:
+            return parsed_dt.strftime("%Y-%m-%d %H:%M:%S"), []
+    except ImportError:
+        pass
+    except Exception as e:
+        warnings.append(f"dateparser_error: {str(e)}")
+
+    # 2. Try python-dateutil standard parser (already installed)
+    try:
+        import dateutil.parser
+        parsed_dt = dateutil.parser.parse(val)
+        if parsed_dt:
+            return parsed_dt.strftime("%Y-%m-%d %H:%M:%S"), []
+    except Exception as e:
+        warnings.append(f"dateutil_parser_error: {str(e)}")
+
+    # 3. ISO 8601 or Standard Space-delimited Parse (e.g. 2023-10-27T20:15:30.000Z or 2023-10-27 20:15:30)
     try:
         clean_time = val.replace("Z", "")
         iso_str = clean_time.replace(" ", "T")
@@ -59,7 +79,7 @@ def parse_takeout_timestamp(timestamp_str: str) -> Tuple[Optional[str], List[str
     except Exception:
         pass
 
-    # 2. Korean style (e.g. "2023. 10. 27. 오후 8:15:30 KST")
+    # 4. Korean style (e.g. "2023. 10. 27. 오후 8:15:30 KST")
     if "오후" in val or "오전" in val:
         try:
             parts = [p.strip() for p in val.split() if p.strip()]
@@ -80,7 +100,7 @@ def parse_takeout_timestamp(timestamp_str: str) -> Tuple[Optional[str], List[str
         except Exception as e:
             warnings.append(f"korean_timestamp_parse_failed: {str(e)}")
 
-    # 3. English style (e.g. "Oct 27, 2023, 8:15:30 PM UTC")
+    # 5. English style (e.g. "Oct 27, 2023, 8:15:30 PM UTC")
     months = {
         "jan": "01", "feb": "02", "mar": "03", "apr": "04", "may": "05", "jun": "06",
         "jul": "07", "aug": "08", "sep": "09", "oct": "10", "nov": "11", "dec": "12"
@@ -162,6 +182,7 @@ def parse_single_item(raw_item: Dict[str, Any], file_kind: str = "watch", mock_e
     raw_time = raw_item.get("time") or raw_item.get("event_time") or ""
     event_time, time_warnings = parse_takeout_timestamp(raw_time)
     warnings.extend(time_warnings)
+    timestamp_parse_failed = event_time is None
 
     # 5. source_surface / source_confidence (strictly as instructed)
     if action_type == "search":
@@ -193,6 +214,7 @@ def parse_single_item(raw_item: Dict[str, Any], file_kind: str = "watch", mock_e
         "action_type": action_type,
         "event_time": event_time,
         "raw_time": raw_time,
+        "timestamp_parse_failed": timestamp_parse_failed,
         "title_url": title_url or None,
         "video_id": video_id,
         "channel_name": channel_name,

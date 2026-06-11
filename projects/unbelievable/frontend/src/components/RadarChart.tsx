@@ -30,9 +30,10 @@ interface ScoreWarning {
 interface RadarChartProps {
   data: RadarDataPoint[];
   scoreWarnings?: ScoreWarning[];
+  hasSurvey?: boolean;
 }
 
-export default function RadarChart({ data, scoreWarnings = [] }: RadarChartProps) {
+export default function RadarChart({ data, scoreWarnings = [], hasSurvey = true }: RadarChartProps) {
   const warningByAxis = React.useMemo(() => {
     return scoreWarnings.reduce<Record<string, ScoreWarning>>((acc, warning) => {
       acc[warning.axis] = warning;
@@ -81,8 +82,12 @@ export default function RadarChart({ data, scoreWarnings = [] }: RadarChartProps
   return (
     <div className="relative h-[360px] w-full overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="absolute top-4 left-6">
-        <h3 className="font-heading text-lg font-black text-slate-950">자가진단과 실제 기록 비교</h3>
-        <p className="text-xs font-semibold text-slate-500">내 생각과 실제 기록의 차이를 6개 지표로 봅니다.</p>
+        <h3 className="font-heading text-lg font-black text-slate-950">
+          {hasSurvey ? "자가진단과 실제 기록 비교" : "실제 시청 분석 결과"}
+        </h3>
+        <p className="text-xs font-semibold text-slate-500">
+          {hasSurvey ? "내 생각과 실제 기록의 차이를 6개 지표로 봅니다." : "실제 시청 이력 기반의 6대 핵심 지표 분포입니다."}
+        </p>
       </div>
       
       <div className="w-full h-full pt-8">
@@ -101,13 +106,15 @@ export default function RadarChart({ data, scoreWarnings = [] }: RadarChartProps
             />
             
             {/* Subjective Survey (Blue Glow) */}
-            <Radar
-              name="자가진단 결과 (예측)"
-              dataKey="자가진단_결과"
-              stroke="#0f766e"
-              fill="#0f766e"
-              fillOpacity={0.18}
-            />
+            {hasSurvey && (
+              <Radar
+                name="자가진단 결과 (예측)"
+                dataKey="자가진단_결과"
+                stroke="#0f766e"
+                fill="#0f766e"
+                fillOpacity={0.18}
+              />
+            )}
             
             {/* Objective Actual (Purple Glow) */}
             <Radar

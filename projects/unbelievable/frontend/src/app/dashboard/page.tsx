@@ -737,6 +737,13 @@ function DashboardContent() {
   const [detoxError, setDetoxError] = useState<string | null>(null);
   const [expandedAxis, setExpandedAxis] = useState<string | null>(null);
   const [expandedComponents, setExpandedComponents] = useState<Record<string, boolean>>({});
+  const [showDqWarnings, setShowDqWarnings] = useState(false);
+  const [activeExplanationKey, setActiveExplanationKey] = useState<string | null>(null);
+  const [activeMapTab, setActiveMapTab] = useState<"search" | "video" | "shorts">("video");
+  const [showTechnicalSpecs, setShowTechnicalSpecs] = useState(false);
+  const [showDsaoDetails, setShowDsaoDetails] = useState(false);
+  const [showShortsDetails, setShowShortsDetails] = useState(false);
+  const [showAiSummaryDetails, setShowAiSummaryDetails] = useState(false);
 
   const toggleComponent = (key: string) => {
     setExpandedComponents((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -746,15 +753,26 @@ function DashboardContent() {
     const survey = loadSelfSurveyResult();
     setSelfSurvey(survey);
 
-    if (!runId) {
+    // 1. Resolve run_id from URL or localStorage cache
+    let effectiveRunId = runId;
+    if (!effectiveRunId && typeof window !== "undefined") {
+      effectiveRunId = localStorage.getItem("latest_run_id");
+    }
+
+    if (!effectiveRunId) {
       setApiError("분석 ID가 없습니다. 시청 기록 분석을 먼저 완료해주세요.");
       setLoading(false);
       return;
     }
 
+    // 2. Cache the successful run_id to localStorage
+    if (runId && typeof window !== "undefined") {
+      localStorage.setItem("latest_run_id", runId);
+    }
+
     const fetchSummary = async () => {
       try {
-        const res = await fetch(apiUrl(`/api/v1/dashboard/summary?run_id=${runId}&user_id=${DEFAULT_USER_ID}`));
+        const res = await fetch(apiUrl(`/api/v1/dashboard/summary?run_id=${effectiveRunId}&user_id=${DEFAULT_USER_ID}`));
         if (!res.ok) {
           throw new Error(`대시보드 조회 실패 (HTTP ${res.status})`);
         }
@@ -960,8 +978,15 @@ function DashboardContent() {
     <PageShell active="dashboard">
       <div className="space-y-10">
         {processedData.meta_gap_available === false && (
-          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800">
-            ⚠️ 자가진단 데이터가 없어 메타인지 격차 분석은 참고용으로 비활성화되었습니다.
+          <div className="rounded-3xl border border-teal-100 bg-teal-50 px-5 py-4 text-xs font-semibold text-teal-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+            <span>💡 내가 생각한 미디어 소비 습관과 실제 추천 알고리즘의 차이가 궁금하신가요? 자가진단 설문을 진행하시면 격차 분석 리포트를 보실 수 있습니다.</span>
+            <button
+              type="button"
+              onClick={() => router.push("/survey")}
+              className="inline-flex items-center justify-center rounded-xl bg-teal-600 px-3 py-1.5 text-[11px] font-black text-white hover:bg-teal-750 transition shadow-sm shrink-0"
+            >
+              자가진단 하러가기
+            </button>
           </div>
         )}
 
@@ -977,6 +1002,76 @@ function DashboardContent() {
           const dq = processedData.data_quality || {};
           const flags = processedData.data_quality_flags || [];
           const exceptionCodes = processedData.exception_codes || [];
+          const dqs = processedData.data_quality_summary || processedData.analysis_debug || {};
+          const hasWatchHistory = dqs.total_watch_events > 0;
+          const standardVideoCount = standardVideoInterestMap?.total_video_count ?? 0;
+
+          const uncategorizedRatio = dqs.uncategorized_ratio ?? dqs.category_missing_ratio ?? (dqs.total_watch_events ? dqs.category_missing_events / dqs.total_watch_events : 0);
+          if (hasWatchHistory && uncategorizedRatio >= 0.7) {
+            warningsList.push({
+              title: "카테고리 정보 부족 및 추정 분류",
+              desc: "일부 콘텐츠의 카테고리 정보가 부족하여 로컬 키워드 기반으로 추정했습니다. ‘기타/미분류’ 비율이 높을 경우 주제 다양성 점수는 참고용으로 해석해야 합니다.",
+              isConfidenceLow: true
+            });
+          } else if (hasWatchHistory && (standardVideoCount === 0 || (dqs.category_missing_events && dqs.category_missing_events / dqs.total_watch_events >= 0.7))) {
+            warningsList.push({
+              title: "추정 기반 일반 시청 분석",
+              desc: "시청 기록은 확인되었지만, 카테고리/영상 길이 정보가 부족하여 Takeout 기반 추정 분류로 표시합니다.",
+              isConfidenceLow: true
+            });
+          }
+
+          const timestampFailedRatio = dqs.timestamp_parse_failed_ratio ?? (dqs.total_watch_events ? dqs.timestamp_parse_failed_count / dqs.total_watch_events : 0);
+          if (hasWatchHistory && timestampFailedRatio >= 0.20) {
+            warningsList.push({
+              title: "타임스탬프 해석 제한 안내",
+              desc: "일부 날짜 형식을 해석하지 못해 시간대별 분석 정확도가 낮아질 수 있습니다.",
+              isConfidenceLow: true
+            });
+          }
+
+          if (dqs.duration_method_idle_capped_count > 0) {
+            warningsList.push({
+              title: "체류 시간 긴 공백 보정(Idle Capping) 적용",
+              desc: "긴 공백 시간은 자리 비움 가능성으로 보고 체류 시간 계산에서 보정했습니다.",
+              isConfidenceLow: false
+            });
+          }
+
+          if (hasWatchHistory && (dqs.shorts_url_events === 0) && (dqs.shorts_inferred_events > 0)) {
+            warningsList.push({
+              title: "메타데이터 기반 숏츠 추정 적용",
+              desc: "이번 업로드에서 URL만으로 확정 가능한 숏츠 기록은 적지만, 제목/메타데이터 기반으로 숏츠 후보를 함께 추정했습니다.",
+              isConfidenceLow: false
+            });
+          } else if (hasWatchHistory && (dqs.shorts_inferred_events === 0)) {
+            warningsList.push({
+              title: "숏츠 후보 식별 불가",
+              desc: "이번 업로드 데이터에서는 숏츠 후보를 식별하기 어렵습니다. YouTube Takeout은 숏츠도 일반 watch URL로 저장할 수 있어 실제 소비가 없다는 의미는 아닙니다.",
+              isConfidenceLow: true
+            });
+          }
+
+          if (!hasWatchHistory && dqs.total_watch_events !== undefined) {
+            warningsList.push({
+              title: "시청 기록 누락",
+              desc: "이번 업로드에서 시청 기록을 찾지 못했습니다.",
+              isConfidenceLow: true
+            });
+          }
+
+          const hasEventLimit = 
+            flags.includes("event_limit_applied") || 
+            processedData.sampling_metadata?.event_limit_applied || 
+            processedData.data_coverage?.event_limit_applied;
+
+          if (hasEventLimit) {
+            warningsList.push({
+              title: "무료 MVP 빠른 분석 모드 적용",
+              desc: "이번 리포트는 무료 MVP 빠른 분석 모드로 생성되어 최근 기록 일부(시청/검색 최대 각 100건)를 기준으로 계산되었습니다. 더 긴 기간의 전체 기록 분석은 향후 고급 분석 모드에서 확장 가능합니다.",
+              isConfidenceLow: false
+            });
+          }
 
           if (flags.includes("timestamp_fallback_used")) {
             warningsList.push({
@@ -1021,30 +1116,41 @@ function DashboardContent() {
           if (warningsList.length === 0) return null;
 
           return (
-            <div className="rounded-3xl border border-teal-200/60 bg-teal-50/50 p-5 space-y-3.5">
-              <div className="flex items-center gap-2 text-teal-850 font-extrabold text-sm">
-                <AlertTriangle size={18} className="text-teal-600 shrink-0" />
-                <span>💡 [분석 참고 안내] 미디어 분석 데이터 품질 안내</span>
+            <div className="rounded-3xl border border-teal-200/60 bg-teal-50/50 p-5 transition-all duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2 text-teal-850 font-extrabold text-sm">
+                  <AlertTriangle size={18} className="text-teal-600 shrink-0" />
+                  <span>💡 [분석 참고 안내] 미디어 분석 데이터 품질 안내 (총 {warningsList.length}건)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDqWarnings(!showDqWarnings)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-teal-600 px-3.5 py-1.5 text-xs font-black text-white hover:bg-teal-750 transition shadow-sm shrink-0"
+                >
+                  <span>{showDqWarnings ? "숨기기 ▲" : "자세히 보기 ▼"}</span>
+                </button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {warningsList.map((item, idx) => (
-                  <div key={idx} className="bg-white/80 rounded-2xl p-4 border border-slate-100 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-black text-slate-800">{item.title}</span>
-                        {item.isConfidenceLow && (
-                          <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-600 border border-rose-100">
-                            참고용 (낮은 신뢰도)
-                          </span>
-                        )}
+              {showDqWarnings && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 animate-fadeIn">
+                  {warningsList.map((item, idx) => (
+                    <div key={idx} className="bg-white/85 rounded-2xl p-4 border border-slate-100 flex flex-col justify-between hover:shadow-sm transition-shadow">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-black text-slate-800">{item.title}</span>
+                          {item.isConfidenceLow && (
+                            <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-600 border border-rose-100 shrink-0">
+                              참고용 (낮은 신뢰도)
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-2 text-[11px] font-semibold text-slate-500 leading-normal">
+                          {item.desc}
+                        </p>
                       </div>
-                      <p className="mt-2 text-[11px] font-semibold text-slate-500 leading-normal">
-                        {item.desc}
-                      </p>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -1080,54 +1186,85 @@ function DashboardContent() {
 
         {/* Detailed Explanations & Evidence Card Grid */}
         {processedData.explanations && (
-          <Card className="p-6 md:p-8 space-y-6">
+          <Card className="glass-neon-slate p-6 md:p-8 space-y-6">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">detailed evidence & explanations</p>
               <h2 className="mt-2 text-2xl font-black text-slate-950">핵심 진단 점수별 상세 근거 및 안내</h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
-                각 분석 지표가 어떻게 계산되었는지 상세 이유와 분석 데이터 품질에 따른 주의사항, 그리고 개선 방향을 알려드립니다.
+                각 분석 지표가 어떻게 계산되었는지 상세 이유와 분석 데이터 품질에 따른 주의사항, 그리고 개선 방향을 알려드립니다. (각 카드를 클릭하면 상세 정보를 볼 수 있습니다.)
               </p>
             </div>
 
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {Object.entries(processedData.explanations).map(([key, exp]: [string, any]) => {
                 let badgeColor = "bg-slate-100 text-slate-800 border-slate-200";
-                if (key === "weighted_health_score") badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-200";
-                else if (key === "cognitive_misconception_index") badgeColor = "bg-amber-50 text-amber-800 border-amber-200";
-                else if (key === "dsao_actual_type") badgeColor = "bg-teal-50 text-teal-900 border-teal-200";
-                else if (key === "bias_risk_score") badgeColor = "bg-rose-50 text-rose-800 border-rose-200";
-                else if (key === "shorts_stimulation_risk") badgeColor = "bg-indigo-50 text-indigo-800 border-indigo-200";
-                else if (key === "data_quality_flags") badgeColor = "bg-sky-50 text-sky-900 border-sky-200";
+                let cardGlassClass = "glass-neon-slate";
+                if (key === "weighted_health_score") {
+                  badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-200";
+                  cardGlassClass = "glass-neon-teal";
+                } else if (key === "cognitive_misconception_index") {
+                  badgeColor = "bg-amber-50 text-amber-800 border-amber-200";
+                  cardGlassClass = "glass-neon-amber";
+                } else if (key === "dsao_actual_type") {
+                  badgeColor = "bg-teal-50 text-teal-900 border-teal-200";
+                  cardGlassClass = "glass-neon-teal";
+                } else if (key === "bias_risk_score") {
+                  badgeColor = "bg-rose-50 text-rose-800 border-rose-200";
+                  cardGlassClass = "glass-neon-rose";
+                } else if (key === "shorts_stimulation_risk") {
+                  badgeColor = "bg-indigo-50 text-indigo-800 border-indigo-200";
+                  cardGlassClass = "glass-neon-rose";
+                } else if (key === "data_quality_flags") {
+                  badgeColor = "bg-sky-50 text-sky-900 border-sky-200";
+                  cardGlassClass = "glass-neon-slate";
+                }
+
+                const isOpen = activeExplanationKey === key;
 
                 return (
-                  <div key={key} className="bg-[#fbfaf7] rounded-3xl border border-slate-200/60 p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition-shadow duration-200">
-                    <div>
+                  <div
+                    key={key}
+                    onClick={() => setActiveExplanationKey(isOpen ? null : key)}
+                    className={`${cardGlassClass} rounded-3xl p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:shadow-md hover:scale-[1.01] ${isOpen ? "ring-2 ring-teal-500/30" : ""}`}
+                  >
+                    <div className="space-y-3">
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-sm font-black text-slate-900">{exp.label}</span>
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-black border font-mono ${badgeColor}`}>
                           {exp.value}
                         </span>
                       </div>
-                      <p className="mt-3 text-xs font-semibold text-slate-500 leading-relaxed">
+                      <p className="text-xs font-semibold text-slate-500 leading-relaxed">
                         {exp.reason}
                       </p>
                     </div>
 
-                    <div className="space-y-2.5 border-t border-slate-200/60 pt-3 text-[11px] font-semibold text-slate-500">
-                      <div>
-                        <span className="text-slate-800 font-bold block">📊 측정 근거</span>
-                        <p className="mt-0.5 text-slate-500 leading-relaxed">{exp.evidence}</p>
-                      </div>
-                      {exp.caution && (
+                    <div className={`mt-3 border-t border-slate-200/60 pt-3 text-[11px] font-semibold text-slate-500 overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0 pointer-events-none mt-0 pt-0 border-t-0"}`}>
+                      <div className="space-y-2.5">
                         <div>
-                          <span className="text-amber-700 font-bold block">⚠️ 주의 사항</span>
-                          <p className="mt-0.5 text-slate-500 leading-relaxed">{exp.caution}</p>
+                          <span className="text-slate-800 font-bold block">📊 측정 근거</span>
+                          <p className="mt-0.5 text-slate-500 leading-relaxed">{exp.evidence}</p>
                         </div>
-                      )}
-                      <div>
-                        <span className="text-teal-700 font-bold block">💡 추천 개선 행동</span>
-                        <p className="mt-0.5 text-slate-500 leading-relaxed">{exp.improvement_hint}</p>
+                        {exp.caution && (
+                          <div>
+                            <span className="text-amber-700 font-bold block">⚠️ 주의 사항</span>
+                            <p className="mt-0.5 text-slate-500 leading-relaxed">{exp.caution}</p>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-teal-700 font-bold block">💡 추천 개선 행동</span>
+                          <p className="mt-0.5 text-slate-500 leading-relaxed">{exp.improvement_hint}</p>
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                      <span className="text-[10px] text-slate-400 font-bold">
+                        {isOpen ? "상세 정보 제공 중" : "상세 분석 확인 가능"}
+                      </span>
+                      <span className="text-[10px] font-black text-teal-600">
+                        {isOpen ? "닫기 ▲" : "열기 ▼"}
+                      </span>
                     </div>
                   </div>
                 );
@@ -1136,7 +1273,7 @@ function DashboardContent() {
           </Card>
         )}
 
-        <Card className="p-5">
+        <Card className="glass-neon-rose p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">bias signal</p>
@@ -1161,7 +1298,7 @@ function DashboardContent() {
           </div>
         </Card>
 
-        <Card className="p-6 md:p-8">
+        <Card className="glass-neon-rose p-6 md:p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">shorts analysis</p>
@@ -1170,103 +1307,116 @@ function DashboardContent() {
                 숏츠는 일반 관심사 영향 점수에 직접 섞지 않고, 짧은 영상의 연속 소비와 반복 주제 신호로 별도 해석합니다.
               </p>
             </div>
-            <div className="rounded-2xl bg-rose-50 px-4 py-3 text-right">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">stimulation risk</p>
-              <p className="mt-1 text-3xl font-black text-rose-700">{shortsRisk}점</p>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="rounded-2xl bg-rose-50 px-4 py-3 text-right">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">stimulation risk</p>
+                <p className="mt-1 text-3xl font-black text-rose-700">{shortsRisk}점</p>
+              </div>
+              {shortsCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowShortsDetails(!showShortsDetails)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-3.5 py-1.5 text-xs font-black text-white hover:bg-rose-700 transition shadow-sm self-center min-h-10"
+                >
+                  <span>{showShortsDetails ? "상세 정보 숨기기 ▲" : "상세 분석 보기 ▼"}</span>
+                </button>
+              )}
             </div>
           </div>
 
           {shortsCount > 0 ? (
-            <>
-              <div className="mt-6 grid gap-3 md:grid-cols-5">
-                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-                  <div className="flex items-center gap-2 text-rose-700">
-                    <Flame size={18} />
-                    <span className="text-xs font-black">루프 지표</span>
+            showShortsDetails && (
+              <div className="mt-6 space-y-5 animate-fadeIn">
+                <div className="grid gap-3 md:grid-cols-5">
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                    <div className="flex items-center gap-2 text-rose-700">
+                      <Flame size={18} />
+                      <span className="text-xs font-black">루프 지표</span>
+                    </div>
+                    <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.dopamine_loop_score || 0))}점</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      최대 {shortsAnalysis.max_loop_length || 0}개 연속 · 의미 루프 {shortsAnalysis.meaningful_loop_count || 0}개
+                    </p>
                   </div>
-                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.dopamine_loop_score || 0))}점</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                    최대 {shortsAnalysis.max_loop_length || 0}개 연속 · 의미 루프 {shortsAnalysis.meaningful_loop_count || 0}개
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-                  <div className="flex items-center gap-2 text-indigo-700">
-                    <Sparkles size={18} />
-                    <span className="text-xs font-black">수동 소비 추정</span>
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                    <div className="flex items-center gap-2 text-indigo-700">
+                      <Sparkles size={18} />
+                      <span className="text-xs font-black">수동 소비 추정</span>
+                    </div>
+                    <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.passive_feed_score || 0))}점</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      {shortsAnalysis.passive_feed_level || "low"} · 검색 {shortsAnalysis.active_search_count || 0}건 참고
+                    </p>
                   </div>
-                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.passive_feed_score || 0))}점</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                    {shortsAnalysis.passive_feed_level || "low"} · 검색 {shortsAnalysis.active_search_count || 0}건 참고
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-                  <div className="flex items-center gap-2 text-amber-700">
-                    <Repeat2 size={18} />
-                    <span className="text-xs font-black">반복 스크롤</span>
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                    <div className="flex items-center gap-2 text-amber-700">
+                      <Repeat2 size={18} />
+                      <span className="text-xs font-black">반복 스크롤</span>
+                    </div>
+                    <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.repeated_topic_score || 0))}점</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      {shortsAnalysis.scroll_repetition_level || "low"} · 반복 키워드 {shortsAnalysis.repeated_keyword_count || 0}개
+                    </p>
                   </div>
-                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.repeated_topic_score || 0))}점</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                    {shortsAnalysis.scroll_repetition_level || "low"} · 반복 키워드 {shortsAnalysis.repeated_keyword_count || 0}개
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-                  <div className="flex items-center gap-2 text-sky-700">
-                    <Clock3 size={18} />
-                    <span className="text-xs font-black">시간대 집중</span>
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                    <div className="flex items-center gap-2 text-sky-700">
+                      <Clock3 size={18} />
+                      <span className="text-xs font-black">시간대 집중</span>
+                    </div>
+                    <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.time_concentration_score || 0))}점</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      피크 {timeBucketLabels[shortsAnalysis.peak_shorts_time_bucket] || shortsAnalysis.peak_shorts_time_bucket || "불명"} · 심야 {shortsAnalysis.late_night_shorts_ratio || 0}%
+                    </p>
                   </div>
-                  <p className="mt-3 text-2xl font-black text-slate-950">{Math.round(Number(shortsAnalysis.time_concentration_score || 0))}점</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                    피크 {timeBucketLabels[shortsAnalysis.peak_shorts_time_bucket] || shortsAnalysis.peak_shorts_time_bucket || "불명"} · 심야 {shortsAnalysis.late_night_shorts_ratio || 0}%
-                  </p>
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+                    <p className="text-xs font-black text-slate-500">숏츠 비중</p>
+                    <p className="mt-3 text-2xl font-black text-slate-950">{shortsCount}개</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      전체 시청 대비 {Number(shortsAnalysis.shorts_ratio_percent ?? (shortsAnalysis.shorts_ratio || 0) * 100).toFixed(1)}%
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
-                  <p className="text-xs font-black text-slate-500">숏츠 비중</p>
-                  <p className="mt-3 text-2xl font-black text-slate-950">{shortsCount}개</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                    전체 시청 대비 {Number(shortsAnalysis.shorts_ratio_percent ?? (shortsAnalysis.shorts_ratio || 0) * 100).toFixed(1)}%
-                  </p>
-                </div>
-              </div>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-sm font-black text-slate-950">숏츠 반복 키워드</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {Array.isArray(shortsAnalysis.top_shorts_keywords) && shortsAnalysis.top_shorts_keywords.length > 0 ? (
-                      shortsAnalysis.top_shorts_keywords.map((item: any) => (
-                        <span key={`${item.keyword}-${item.count}`} className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700">
-                          {item.keyword} {item.count}회
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm font-bold text-slate-500">반복 키워드가 충분하지 않습니다.</span>
-                    )}
+                <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-black text-slate-950">숏츠 반복 키워드</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {Array.isArray(shortsAnalysis.top_shorts_keywords) && shortsAnalysis.top_shorts_keywords.length > 0 ? (
+                        shortsAnalysis.top_shorts_keywords.map((item: any) => (
+                          <span key={`${item.keyword}-${item.count}`} className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700">
+                            {item.keyword} {item.count}회
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm font-bold text-slate-500">반복 키워드가 충분하지 않습니다.</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-black text-slate-950">시간대별 숏츠</p>
+                    <div className="mt-3 grid grid-cols-4 gap-2">
+                      {Object.entries(shortsAnalysis.shorts_by_time_bucket || {}).map(([bucket, count]) => (
+                        <div key={bucket} className="rounded-xl bg-[#fbfaf7] px-3 py-2 text-center">
+                          <p className="text-[10px] font-black text-slate-400">{timeBucketLabels[bucket] || bucket}</p>
+                          <p className="mt-1 text-lg font-black text-slate-900">{Number(count || 0)}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-sm font-black text-slate-950">시간대별 숏츠</p>
-                  <div className="mt-3 grid grid-cols-4 gap-2">
-                    {Object.entries(shortsAnalysis.shorts_by_time_bucket || {}).map(([bucket, count]) => (
-                      <div key={bucket} className="rounded-xl bg-[#fbfaf7] px-3 py-2 text-center">
-                        <p className="text-[10px] font-black text-slate-400">{timeBucketLabels[bucket] || bucket}</p>
-                        <p className="mt-1 text-lg font-black text-slate-900">{Number(count || 0)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
 
-              {Array.isArray(shortsAnalysis.warnings) && shortsAnalysis.warnings.length > 0 && (
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">analysis notes</p>
-                  <div className="mt-2 space-y-1">
-                    {shortsAnalysis.warnings.slice(0, 3).map((warning: string) => (
-                      <p key={warning} className="text-xs font-bold leading-5 text-amber-800">{warning}</p>
-                    ))}
+                {Array.isArray(shortsAnalysis.warnings) && shortsAnalysis.warnings.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">analysis notes</p>
+                    <div className="mt-2 space-y-1">
+                      {shortsAnalysis.warnings.slice(0, 3).map((warning: string) => (
+                        <p key={warning} className="text-xs font-bold leading-5 text-amber-800">{warning}</p>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </>
+                )}
+              </div>
+            )
           ) : (
             <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-[#fbfaf7] px-4 py-6 text-sm font-bold leading-6 text-slate-500">
               {shortsAnalysis.shorts_detection_note || "이번 업로드에서 /shorts/ URL로 식별된 숏츠 이벤트가 0건입니다. 실제 숏츠 소비가 없다는 확정은 아니며, Takeout 저장 방식 또는 이전 run_id 여부를 확인해야 합니다."}
@@ -1275,7 +1425,7 @@ function DashboardContent() {
           )}
         </Card>
 
-        <Card className="p-6 md:p-8">
+        <Card className="glass-neon-teal p-6 md:p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">interest comparison</p>
@@ -1327,38 +1477,94 @@ function DashboardContent() {
           )}
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-black text-slate-950">AI 해석 요약</p>
-              <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
-                {interestAiSummary.mode === "gemini" ? "gemini" : "rule based"}
-              </span>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-black text-slate-950">AI 해석 요약</p>
+                <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+                  {interestAiSummary.mode === "gemini" ? "gemini" : "rule based"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiSummaryDetails(!showAiSummaryDetails)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-black text-slate-700 transition border border-slate-200"
+              >
+                <span>{showAiSummaryDetails ? "상세 정보 숨기기 ▲" : "상세 분석 보기 ▼"}</span>
+              </button>
             </div>
             <p className="mt-3 text-sm font-bold leading-6 text-slate-700">
               {interestAiSummary.summary || "관심사 해석 데이터가 부족합니다."}
             </p>
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
-                {interestAiSummary.search_intent_read || "검색 의도 데이터가 부족합니다."}
-              </p>
-              <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
-                {interestAiSummary.watch_exposure_read || "일반 영상 노출 데이터가 부족합니다."}
-              </p>
-              <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
-                {interestAiSummary.shorts_read || "숏츠 데이터가 부족합니다."}
-              </p>
-            </div>
-            <p className="mt-3 rounded-2xl bg-teal-50 px-3 py-2 text-xs font-black leading-5 text-teal-800">
-              {interestAiSummary.next_action_hint || "다음 시청 전 검색어를 먼저 정해 추천 흐름을 끊어보세요."}
-            </p>
+            {showAiSummaryDetails && (
+              <div className="animate-fadeIn mt-3 space-y-3">
+                <div className="grid gap-2 md:grid-cols-3">
+                  <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                    {interestAiSummary.search_intent_read || "검색 의도 데이터가 부족합니다."}
+                  </p>
+                  <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                    {interestAiSummary.watch_exposure_read || "일반 영상 노출 데이터가 부족합니다."}
+                  </p>
+                  <p className="rounded-2xl bg-[#fbfaf7] px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                    {interestAiSummary.shorts_read || "숏츠 데이터가 부족합니다."}
+                  </p>
+                </div>
+                <p className="mt-3 rounded-2xl bg-teal-50 px-3 py-2 text-xs font-black leading-5 text-teal-800">
+                  {interestAiSummary.next_action_hint || "다음 시청 전 검색어를 먼저 정해 추천 흐름을 끊어보세요."}
+                </p>
+              </div>
+            )}
           </div>
-          <div className="mt-4 grid gap-4">
-            {renderInterestMindMap("검색 기반 맵", searchInterestMap, "검색어로 인정 가능한 데이터가 부족합니다.", "search")}
-            {renderInterestMindMap("일반 시청 기반 맵", standardVideoInterestMap, "일반 영상 데이터가 부족합니다.", "video")}
-            {renderInterestMindMap("숏츠 반복 맵", shortsInterestMap, shortsInterestMap.shorts_detection_note || "숏츠 데이터는 /shorts/ URL 기준으로만 확인됩니다.", "shorts")}
+          <div className="mt-6 space-y-4">
+            {/* Premium Tab Switcher */}
+            <div className="rounded-2xl bg-slate-100/80 p-1 flex flex-wrap gap-1 border border-slate-200/50 max-w-lg mx-auto">
+              <button
+                type="button"
+                onClick={() => setActiveMapTab("search")}
+                className={[
+                  "flex-1 min-h-10 rounded-xl text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5",
+                  activeMapTab === "search"
+                    ? "bg-white text-emerald-800 shadow-sm border border-emerald-100 tab-glow-teal font-extrabold"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-white/40"
+                ].join(" ")}
+              >
+                <span>🔍 직접 검색 맵</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMapTab("video")}
+                className={[
+                  "flex-1 min-h-10 rounded-xl text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5",
+                  activeMapTab === "video"
+                    ? "bg-white text-cyan-800 shadow-sm border border-cyan-100 tab-glow-teal font-extrabold"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-white/40"
+                ].join(" ")}
+              >
+                <span>📺 일반 시청 맵</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMapTab("shorts")}
+                className={[
+                  "flex-1 min-h-10 rounded-xl text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5",
+                  activeMapTab === "shorts"
+                    ? "bg-white text-rose-800 shadow-sm border border-rose-100 tab-glow-rose font-extrabold"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-white/40"
+                ].join(" ")}
+              >
+                <span>🔥 숏츠 반복 맵</span>
+              </button>
+            </div>
+
+            {/* Render Active Mind Map with Fade In Animation */}
+            <div className="animate-fadeIn">
+              {activeMapTab === "search" && renderInterestMindMap("검색 기반 맵", searchInterestMap, "검색어로 인정 가능한 데이터가 부족합니다.", "search")}
+              {activeMapTab === "video" && renderInterestMindMap("일반 시청 기반 맵", standardVideoInterestMap, "일반 영상 데이터가 부족합니다.", "video")}
+              {activeMapTab === "shorts" && renderInterestMindMap("숏츠 반복 맵", shortsInterestMap, shortsInterestMap.shorts_detection_note || "숏츠 데이터는 /shorts/ URL 기준으로만 확인됩니다.", "shorts")}
+            </div>
           </div>
         </Card>
 
         <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <Card className="p-6">
+          <Card className="glass-neon-teal p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">ui snapshot</p>
@@ -1412,7 +1618,7 @@ function DashboardContent() {
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="glass-neon-slate p-6">
             <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">timeline</p>
@@ -1490,14 +1696,14 @@ function DashboardContent() {
 
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <div>
-            <RadarChart data={chartData} scoreWarnings={scoreWarnings} />
+            <RadarChart data={chartData} scoreWarnings={scoreWarnings} hasSurvey={!!selfSurveyData} />
             <p className="mt-2.5 text-[11px] text-slate-500 font-semibold leading-relaxed">
               ※ 비교 불가 지표는 차트 형태 유지를 위해 중립 위치(50점)에 표시되며, 실제 평균 점수 계산에는 포함되지 않습니다.
             </p>
           </div>
 
           <div className="space-y-4">
-            <Card className="p-5">
+            <Card className="glass-neon-slate p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-teal-700">search evidence</p>
@@ -1541,14 +1747,18 @@ function DashboardContent() {
           </div>
         </div>
 
-        {selfSurveyData ? (
-          <Card className="p-6 md:p-8">
-            <div className="mb-6">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">core comparison</p>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">자가진단 결과 vs 실제 분석 결과</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">내가 생각한 성향과 기록에서 드러난 성향을 비교합니다.</p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
+        <Card className="glass-neon-teal p-6 md:p-8">
+          <div className="mb-6">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">core comparison</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">
+              {selfSurveyData ? "자가진단 결과 vs 실제 분석 결과" : "실제 시청 분석 결과 및 성향 리포트"}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {selfSurveyData ? "내가 생각한 성향과 기록에서 드러난 성향을 비교합니다." : "YouTube 시청 기록 데이터를 바탕으로 분석된 나의 최종 미디어 소비 성향 유형입니다."}
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {selfSurveyData ? (
               <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-5">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">자가진단</p>
                 <h3 className="mt-2 text-2xl font-black text-slate-950">{selfCharacter.characterName}</h3>
@@ -1559,83 +1769,113 @@ function DashboardContent() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-5 space-y-4">
+            ) : (
+              <div className="rounded-3xl border border-dashed border-teal-200 bg-teal-50/20 p-6 flex flex-col justify-between shadow-sm">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">실제 시청 기록 (최종 DSAO 유형)</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <h3 className="text-2xl font-black text-slate-950">
-                      {processedData.actual_dsao?.name || actualCharacter.characterName}
-                    </h3>
-                    <span className="rounded bg-teal-50 px-2 py-0.5 text-[10px] font-black text-teal-700 font-mono border border-teal-100">
-                      신뢰도: {processedData.actual_dsao?.confidence || "보통"}
-                    </span>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-700 mb-4 font-black">
+                    <Sparkles size={20} />
                   </div>
-                  <p className="mt-1 text-sm font-black text-slate-600">
-                    {actualCode} · {processedData.actual_dsao?.short_summary || actualCharacter.title}
+                  <h3 className="text-lg font-black text-slate-950">내 생각과 실제 기록 비교하기</h3>
+                  <p className="mt-3 text-xs leading-relaxed text-slate-600 font-semibold">
+                    내가 스스로 생각한 미디어 소비 습관과 실제 추천 알고리즘 이력 간의 차이(메타인지 격차)를 분석해볼 수 있습니다.
                   </p>
                 </div>
-                
-                <p className="text-xs font-bold text-slate-600 leading-relaxed">
-                  {processedData.actual_dsao?.detailed_description || "유형 설명 로드 중입니다."}
-                </p>
-                
-                <div className="grid gap-3 sm:grid-cols-2 text-[11px] font-semibold">
-                  <div className="bg-white/80 rounded-xl p-3 border border-slate-100">
-                    <span className="text-xs font-black text-emerald-700">💪 주요 강점</span>
-                    <ul className="mt-1.5 space-y-1 text-slate-600 list-disc list-inside">
-                      {(processedData.actual_dsao?.strengths || []).map((s: string) => (
-                        <li key={s}>{s}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="bg-white/80 rounded-xl p-3 border border-slate-100">
-                    <span className="text-xs font-black text-rose-700">⚠️ 위험 요소</span>
-                    <ul className="mt-1.5 space-y-1 text-slate-600 list-disc list-inside">
-                      {(processedData.actual_dsao?.risks || []).map((r: string) => (
-                        <li key={r}>{r}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="bg-teal-50/50 rounded-xl p-3 border border-teal-100 text-xs font-semibold leading-relaxed text-teal-800">
-                  <strong className="block text-teal-900 font-black">🌱 맞춤 디톡스 추천 방향</strong>
-                  {processedData.actual_dsao?.recommended_detox_direction}
-                </div>
-
-                <div className="text-[11px] font-semibold text-slate-500 space-y-1 bg-white/50 p-3 rounded-xl border border-slate-100">
-                  <p>📊 <strong className="text-slate-600">분석 근거 (based_on):</strong></p>
-                  <p className="text-slate-500 text-[10px] leading-relaxed">{processedData.actual_dsao?.based_on}</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-400 items-center justify-between border-t border-slate-200/60 pt-3">
-                  <div className="flex gap-2">
-                    <span>유사 유형: {processedData.actual_dsao?.similar_types?.join(", ") || "없음"}</span>
-                    <span>·</span>
-                    <span>대비 유형: {processedData.actual_dsao?.opposite_type || "없음"}</span>
-                  </div>
-                  <span className="font-mono text-slate-300">mbti_compat: {processedData.internal_balance_type || "N/A"}</span>
+                <div className="mt-6">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/survey")}
+                    className="w-full inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-teal-650 px-5 py-2.5 text-sm font-bold text-white hover:bg-teal-750 transition"
+                  >
+                    자가진단 테스트 하러가기
+                  </button>
                 </div>
               </div>
-            </div>
-            <div className="mt-4 rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200 text-xs font-semibold text-slate-600">
-              ℹ️ {processedData.excluded_axes && processedData.excluded_axes.length > 0 ? (
-                "데이터가 부족한 일부 지표는 착각 지수 계산에서 제외되었습니다."
+            )}
+            
+            <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-5 space-y-4 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">실제 시청 기록 (최종 DSAO 유형)</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowDsaoDetails(!showDsaoDetails)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-teal-600 px-3.5 py-1.5 text-[10px] font-black text-white hover:bg-teal-750 transition shadow-sm"
+                  >
+                    <span>{showDsaoDetails ? "상세 정보 접기 ▲" : "상세 분석 보기 ▼"}</span>
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <h3 className="text-2xl font-black text-slate-950">
+                    {processedData.actual_dsao?.name || actualCharacter.characterName}
+                  </h3>
+                  <span className="rounded bg-teal-50 px-2 py-0.5 text-[10px] font-black text-teal-700 font-mono border border-teal-100">
+                    신뢰도: {processedData.actual_dsao?.confidence || "보통"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm font-black text-slate-600">
+                  {actualCode} · {processedData.actual_dsao?.short_summary || actualCharacter.title}
+                </p>
+              </div>
+
+              {showDsaoDetails ? (
+                <div className="space-y-4 pt-3 border-t border-slate-200/60 animate-fadeIn">
+                  <p className="text-xs font-bold text-slate-600 leading-relaxed">
+                    {processedData.actual_dsao?.detailed_description || "유형 설명 로드 중입니다."}
+                  </p>
+                  
+                  <div className="grid gap-3 sm:grid-cols-2 text-[11px] font-semibold">
+                    <div className="bg-white/80 rounded-xl p-3 border border-slate-100">
+                      <span className="text-xs font-black text-emerald-700">💪 주요 강점</span>
+                      <ul className="mt-1.5 space-y-1 text-slate-600 list-disc list-inside">
+                        {(processedData.actual_dsao?.strengths || []).map((s: string) => (
+                          <li key={s}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="bg-white/80 rounded-xl p-3 border border-slate-100">
+                      <span className="text-xs font-black text-rose-700">⚠️ 위험 요소</span>
+                      <ul className="mt-1.5 space-y-1 text-slate-600 list-disc list-inside">
+                        {(processedData.actual_dsao?.risks || []).map((r: string) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="bg-teal-50/50 rounded-xl p-3 border border-teal-100 text-xs font-semibold leading-relaxed text-teal-800">
+                    <strong className="block text-teal-900 font-black">🌱 맞춤 디톡스 추천 방향</strong>
+                    {processedData.actual_dsao?.recommended_detox_direction}
+                  </div>
+
+                  <div className="text-[11px] font-semibold text-slate-500 space-y-1 bg-white/50 p-3 rounded-xl border border-slate-100">
+                    <p>📊 <strong className="text-slate-600">분석 근거 (based_on):</strong></p>
+                    <p className="text-slate-500 text-[10px] leading-relaxed">{processedData.actual_dsao?.based_on}</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-400 items-center justify-between border-t border-slate-200/60 pt-3">
+                    <div className="flex gap-2">
+                      <span>유사 유형: {processedData.actual_dsao?.similar_types?.join(", ") || "없음"}</span>
+                      <span>·</span>
+                      <span>대비 유형: {processedData.actual_dsao?.opposite_type || "없음"}</span>
+                    </div>
+                    <span className="font-mono text-slate-300">mbti_compat: {processedData.internal_balance_type || "N/A"}</span>
+                  </div>
+                </div>
               ) : (
-                "6개 지표 전체를 기준으로 착각 지수를 계산했습니다."
+                <div className="pt-2 text-[11px] font-semibold text-slate-500 italic border-t border-slate-250 border-dashed">
+                  💡 상세 강점, 리스크 및 맞춤 디톡스 추천 정보는 우측 상단의 [상세 분석 보기] 버튼을 클릭하면 확인할 수 있습니다.
+                </div>
               )}
             </div>
-          </Card>
-        ) : (
-          <Card className="p-6 md:p-8 text-center text-slate-500 bg-[#fbfaf7] border border-slate-200 rounded-3xl">
-            <AlertTriangle className="mx-auto text-amber-500 mb-2" size={32} />
-            <h3 className="text-lg font-bold text-slate-800 font-black">자가진단 데이터 없음</h3>
-            <p className="text-xs mt-2 text-slate-500 leading-relaxed font-semibold">
-              비교해볼 수 있는 자가진단 성향 데이터가 존재하지 않습니다.<br />
-              대시보드 상단이나 이전 화면에서 자가진단 설문을 먼저 진행해 보세요.
-            </p>
-          </Card>
-        )}
+          </div>
+          <div className="mt-4 rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200 text-xs font-semibold text-slate-600">
+            ℹ️ {processedData.excluded_axes && processedData.excluded_axes.length > 0 ? (
+              "데이터가 부족한 일부 지표는 착각 지수 계산에서 제외되었습니다."
+            ) : (
+              "6개 지표 전체를 기준으로 착각 지수를 계산했습니다."
+            )}
+          </div>
+        </Card>
 
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <ResultCard
@@ -1644,7 +1884,7 @@ function DashboardContent() {
             summary={processedData.misconception?.message || actualCharacter.shortDescription}
           />
 
-          <Card className="p-6 md:p-8">
+          <Card className="glass-neon-teal p-6 md:p-8">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">insight summary</p>
             <h2 className="mt-2 text-2xl font-black text-slate-950">짧은 해석</h2>
             <div className="mt-5 space-y-3">
@@ -1795,151 +2035,169 @@ function DashboardContent() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 text-slate-900 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-purple-700">Data Reliability & Pipeline</p>
-          <h2 className="mt-2 text-2xl font-black text-slate-950">분석 신뢰도 및 데이터 품질</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            업로드된 YouTube Takeout 데이터의 분석 품질 상태와 표본 수집 정보입니다.
-          </p>
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 text-slate-900 shadow-sm transition-all duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-purple-700">Data Reliability & Pipeline</p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">분석 신뢰도 및 데이터 품질</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                업로드된 YouTube Takeout 데이터의 분석 품질 상태와 표본 수집 정보입니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTechnicalSpecs(!showTechnicalSpecs)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-purple-700 px-4 py-2 text-xs font-black text-white hover:bg-purple-800 transition shadow-sm shrink-0"
+            >
+              <span>{showTechnicalSpecs ? "상세 명세 숨기기 ▲" : "상세 명세 펼치기 ▼"}</span>
+            </button>
+          </div>
 
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              {/* Overall Confidence Card */}
-              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
-                <h3 className="text-sm font-black text-slate-950">종합 분석 신뢰도</h3>
-                <div className="mt-3 flex items-center gap-3">
-                  <span className={[
-                    "rounded-full px-3 py-1 text-xs font-black text-white",
-                    processedData.overall_confidence === "high" ? "bg-emerald-600" :
-                    processedData.overall_confidence === "medium" ? "bg-amber-500" : "bg-rose-600"
-                  ].join(" ")}>
-                    {formatConfidence(processedData.overall_confidence)}
-                  </span>
-                  <p className="text-xs font-semibold text-slate-600">
-                    {CONFIDENCE_DESCS[processedData.overall_confidence || "medium"]}
-                  </p>
-                </div>
-              </div>
-
-              {/* Sampling Information Card */}
-              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
-                <h3 className="text-sm font-black text-slate-950">세션 대표 샘플링 정보</h3>
-                <div className="mt-3 text-xs font-semibold text-slate-600">
-                  <p className="text-sm font-black text-purple-700 mb-3">
-                    전체 {processedData.sampling_metadata?.total_session_count || processedData.data_coverage?.total_session_count || 0}개 세션 중 대표 {processedData.sampling_metadata?.sampled_session_count || processedData.data_coverage?.sampled_session_count || 0}개 세션을 분석했습니다.
-                  </p>
-                  <p className="text-slate-500 mb-4 leading-relaxed">
-                    {processedData.sampling_metadata?.sampling_strategy === "all_sessions" 
-                      ? "전체 세션을 기반으로 분석을 수행했습니다." 
-                      : "최근/오래된/중간/긴 세션/검색 포함 세션을 혼합해 대표 샘플을 구성했습니다."}
-                  </p>
-                  <div className="space-y-2 text-[11px]">
-                    <div className="flex justify-between border-b border-slate-200 pb-2">
-                      <span className="text-slate-500">샘플링 추출 전략</span>
-                      <span className="font-bold text-slate-950">
-                        {processedData.sampling_metadata?.sampling_strategy === "all_sessions" ? "전체 분석 (All)" : "대표성 블렌딩 (Blended)"}
+          {showTechnicalSpecs && (
+            <div className="mt-6 space-y-6 animate-fadeIn">
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  {/* Overall Confidence Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                    <h3 className="text-sm font-black text-slate-950">종합 분석 신뢰도</h3>
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className={[
+                        "rounded-full px-3 py-1 text-xs font-black text-white",
+                        processedData.overall_confidence === "high" ? "bg-emerald-600" :
+                        processedData.overall_confidence === "medium" ? "bg-amber-500" : "bg-rose-600"
+                      ].join(" ")}>
+                        {formatConfidence(processedData.overall_confidence)}
                       </span>
+                      <p className="text-xs font-semibold text-slate-600">
+                        {CONFIDENCE_DESCS[processedData.overall_confidence || "medium"]}
+                      </p>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">NLP 입력 토큰량</span>
-                      <span className="font-bold text-slate-950 font-mono">
-                        {Number(processedData.sampling_metadata?.nlp_input_token_count || 0).toLocaleString()} 자
-                      </span>
+                  </div>
+
+                  {/* Sampling Information Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                    <h3 className="text-sm font-black text-slate-950">세션 대표 샘플링 정보</h3>
+                    <div className="mt-3 text-xs font-semibold text-slate-600">
+                      <p className="text-sm font-black text-purple-700 mb-3">
+                        전체 {processedData.sampling_metadata?.total_session_count || processedData.data_coverage?.total_session_count || 0}개 세션 중 대표 {processedData.sampling_metadata?.sampled_session_count || processedData.data_coverage?.sampled_session_count || 0}개 세션을 분석했습니다.
+                      </p>
+                      <p className="text-slate-500 mb-4 leading-relaxed">
+                        {processedData.sampling_metadata?.sampling_strategy === "all_sessions" 
+                          ? "전체 세션을 기반으로 분석을 수행했습니다." 
+                          : "최근/오래된/중간/긴 세션/검색 포함 세션을 혼합해 대표 샘플을 구성했습니다."}
+                      </p>
+                      <div className="space-y-2 text-[11px]">
+                        <div className="flex justify-between border-b border-slate-200 pb-2">
+                          <span className="text-slate-500">샘플링 추출 전략</span>
+                          <span className="font-bold text-slate-950">
+                            {processedData.sampling_metadata?.sampling_strategy === "all_sessions" ? "전체 분석 (All)" : "대표성 블렌딩 (Blended)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">NLP 입력 토큰량</span>
+                          <span className="font-bold text-slate-950 font-mono">
+                            {Number(processedData.sampling_metadata?.nlp_input_token_count || 0).toLocaleString()} 자
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Excluded Axes Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                    <h3 className="text-sm font-black text-slate-950">평가 제외 지표 (Excluded Axes)</h3>
+                    <div className="mt-3">
+                      {processedData.excluded_axes && processedData.excluded_axes.length > 0 ? (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-2">
+                            {processedData.excluded_axes.map((axis: string) => (
+                              <span key={axis} className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-700">
+                                {AXIS_LABELS[axis] || axis}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-2 space-y-1.5 text-xs text-slate-600">
+                            {processedData.excluded_axes.map((axis: string) => (
+                              <div key={axis} className="flex gap-2">
+                                <span className="text-rose-750 font-bold shrink-0">{AXIS_LABELS[axis] || axis}:</span>
+                                <span className="text-slate-500">{processedData.score_details?.[axis]?.reason || AXIS_UNAVAILABLE_REASON_LABELS[axis] || "데이터 부족으로 계산 제외"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-bold text-slate-500">없음 (모든 지표 정상 분석 완료)</span>
+                      )}
+                    </div>
+                    <p className="mt-3 text-[11px] font-semibold leading-relaxed text-slate-500">
+                      ※ 제외 지표는 데이터 누락 또는 불균형으로 인해 건강 점수(Health) 및 편향성 쏠림 점수의 평균 계산에서 자동 제외되었습니다.
+                    </p>
+                  </div>
+
+                  {/* Data Quality Flags Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
+                    <h3 className="text-sm font-black text-slate-950">데이터 품질 플래그 (Flags)</h3>
+                    <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {(() => {
+                        const flags = [...(processedData.data_quality_flags || [])];
+                        if (processedData.data_quality?.duration === "estimated" && !flags.includes("duration_estimated")) {
+                          flags.push("duration_estimated");
+                        }
+                        if (processedData.data_quality?.nlp_provider === "rule_based_fallback" && !flags.includes("nlp_fallback_used")) {
+                          flags.push("nlp_fallback_used");
+                        }
+                        if ((processedData.sampling_metadata?.event_limit_applied || processedData.data_coverage?.event_limit_applied) && !flags.includes("event_limit_applied")) {
+                          flags.push("event_limit_applied");
+                        }
+                        
+                        if (flags.length > 0) {
+                          return flags.map((flag: string) => {
+                            const label = QUALITY_FLAG_LABELS[flag] || { title: flag, desc: "데이터 전처리 과정에서 특이사항이 감지되었습니다." };
+                            return (
+                              <div key={flag} className="rounded-xl bg-white p-3 border border-slate-200/60">
+                                <p className="text-xs font-black text-amber-800">⚠️ {label.title}</p>
+                                <p className="mt-1 text-[11px] font-semibold text-slate-500 leading-4">{label.desc}</p>
+                              </div>
+                            );
+                          });
+                        }
+                        return <p className="text-xs font-semibold text-slate-500">데이터 수집상 특이사항이 없이 깨끗하게 파싱되었습니다.</p>;
+                      })()}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-4">
-              {/* Excluded Axes Card */}
-              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
-                <h3 className="text-sm font-black text-slate-950">평가 제외 지표 (Excluded Axes)</h3>
-                <div className="mt-3">
-                  {processedData.excluded_axes && processedData.excluded_axes.length > 0 ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        {processedData.excluded_axes.map((axis: string) => (
-                          <span key={axis} className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-700">
-                            {AXIS_LABELS[axis] || axis}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-2 space-y-1.5 text-xs text-slate-600">
-                        {processedData.excluded_axes.map((axis: string) => (
-                          <div key={axis} className="flex gap-2">
-                            <span className="text-rose-750 font-bold shrink-0">{AXIS_LABELS[axis] || axis}:</span>
-                            <span className="text-slate-500">{processedData.score_details?.[axis]?.reason || AXIS_UNAVAILABLE_REASON_LABELS[axis] || "데이터 부족으로 계산 제외"}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-bold text-slate-500">없음 (모든 지표 정상 분석 완료)</span>
-                  )}
-                </div>
-                <p className="mt-3 text-[11px] font-semibold leading-relaxed text-slate-500">
-                  ※ 제외 지표는 데이터 누락 또는 불균형으로 인해 건강 점수(Health) 및 편향성 쏠림 점수의 평균 계산에서 자동 제외되었습니다.
-                </p>
-              </div>
-
-              {/* Data Quality Flags Card */}
-              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-5">
-                <h3 className="text-sm font-black text-slate-950">데이터 품질 플래그 (Flags)</h3>
-                <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {(() => {
-                    const flags = [...(processedData.data_quality_flags || [])];
-                    if (processedData.data_quality?.duration === "estimated" && !flags.includes("duration_estimated")) {
-                      flags.push("duration_estimated");
-                    }
-                    if (processedData.data_quality?.nlp_provider === "rule_based_fallback" && !flags.includes("nlp_fallback_used")) {
-                      flags.push("nlp_fallback_used");
-                    }
-                    
-                    if (flags.length > 0) {
-                      return flags.map((flag: string) => {
-                        const label = QUALITY_FLAG_LABELS[flag] || { title: flag, desc: "데이터 전처리 과정에서 특이사항이 감지되었습니다." };
-                        return (
-                          <div key={flag} className="rounded-xl bg-white p-3 border border-slate-200/60">
-                            <p className="text-xs font-black text-amber-800">⚠️ {label.title}</p>
-                            <p className="mt-1 text-[11px] font-semibold text-slate-500 leading-4">{label.desc}</p>
-                          </div>
-                        );
-                      });
-                    }
-                    return <p className="text-xs font-semibold text-slate-500">데이터 수집상 특이사항이 없이 깨끗하게 파싱되었습니다.</p>;
-                  })()}
+              {/* Jury/Evaluator Tech Specs Explanation Panel */}
+              <div className="border-t border-slate-200 pt-6">
+                <h3 className="text-sm font-black uppercase tracking-[0.16em] text-purple-700 mb-3">
+                  [심사위원용] 백엔드 계산 엔진 및 분석 엄밀성 검증 (Technical Specifications)
+                </h3>
+                <div className="grid gap-4 md:grid-cols-3 text-xs leading-relaxed text-slate-700">
+                  <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
+                    <p className="font-bold text-amber-800 mb-1.5">1. 데이터 결손 보정 (Data Deficiency Policy)</p>
+                    <p className="text-slate-600 font-medium">
+                      데이터가 극단적으로 부족하거나(예: 채널명 없음, 검색 기록 부재) 분석 신뢰 수준이 기준값 미만인 경우, 무리하게 추정 점수를 부여하여 분석 결과를 왜곡하지 않습니다. 해당 축은 <span className="text-slate-800">available=false</span> 처리되며, 평균 점수 및 메타인지 격차(Gap) 최종 계산식에서 원천 제외됩니다. (UI상에는 50.0 중립값으로 시각적 밸런스만 유지)
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
+                    <p className="font-bold text-amber-800 mb-1.5">2. 시청 시간 한계 대응 (Duration Limits)</p>
+                    <p className="text-slate-600 font-medium">
+                      Google Takeout YouTube 원본 데이터에는 각 영상의 실제 시청 지속 시간이 포함되어 있지 않습니다. 따라서 본 엔진은 재생 횟수 및 시청 간격(순차 재생 타임스탬프)에 의존하는 한계를 명시하고, “추정 시청 시간”과 같은 임의 추정을 배제하여 계산 정합성을 유지합니다.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
+                    <p className="font-bold text-amber-800 mb-1.5">3. 하위 컴포넌트 결합식 (Component Composition)</p>
+                    <p className="text-slate-600 font-medium">
+                      각 6축 평가는 단일 수식이 아닌 검색 비율, 직접 선택 경로, 구독/보관함 비율, 참여도 등 여러 세부 수치의 동적 조합으로 결정됩니다. 데이터가 부족한 컴포넌트는 가중치 재계산에서 자동 제외됩니다. &ldquo;계산 근거 보기&rdquo; 토글을 통해 백엔드가 반환한 세부 원본 수치와 기여도 및 보정 페널티 세부 요소를 가감 없이 투명하게 제공합니다.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Jury/Evaluator Tech Specs Explanation Panel */}
-          <div className="mt-8 border-t border-slate-200 pt-6">
-            <h3 className="text-sm font-black uppercase tracking-[0.16em] text-purple-700 mb-3">
-              [심사위원용] 백엔드 계산 엔진 및 분석 엄밀성 검증 (Technical Specifications)
-            </h3>
-            <div className="grid gap-4 md:grid-cols-3 text-xs leading-relaxed text-slate-700">
-              <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
-                <p className="font-bold text-amber-800 mb-1.5">1. 데이터 결손 보정 (Data Deficiency Policy)</p>
-                <p className="text-slate-600 font-medium">
-                  데이터가 극단적으로 부족하거나(예: 채널명 없음, 검색 기록 부재) 분석 신뢰 수준이 기준값 미만인 경우, 무리하게 추정 점수를 부여하여 분석 결과를 왜곡하지 않습니다. 해당 축은 <span className="text-slate-800">available=false</span> 처리되며, 평균 점수 및 메타인지 격차(Gap) 최종 계산식에서 원천 제외됩니다. (UI상에는 50.0 중립값으로 시각적 밸런스만 유지)
-                </p>
-              </div>
-              <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
-                <p className="font-bold text-amber-800 mb-1.5">2. 시청 시간 한계 대응 (Duration Limits)</p>
-                <p className="text-slate-600 font-medium">
-                  Google Takeout YouTube 원본 데이터에는 각 영상의 실제 시청 지속 시간이 포함되어 있지 않습니다. 따라서 본 엔진은 재생 횟수 및 시청 간격(순차 재생 타임스탬프)에 의존하는 한계를 명시하고, “추정 시청 시간”과 같은 임의 추정을 배제하여 계산 정합성을 유지합니다.
-                </p>
-              </div>
-              <div className="rounded-2xl bg-[#fbfaf7] p-4 border border-slate-200">
-                <p className="font-bold text-amber-800 mb-1.5">3. 하위 컴포넌트 결합식 (Component Composition)</p>
-                <p className="text-slate-600 font-medium">
-                  각 6축 평가는 단일 수식이 아닌 검색 비율, 직접 선택 경로, 구독/보관함 비율, 참여도 등 여러 세부 수치의 동적 조합으로 결정됩니다. 데이터가 부족한 컴포넌트는 가중치 재계산에서 자동 제외됩니다. &ldquo;계산 근거 보기&rdquo; 토글을 통해 백엔드가 반환한 세부 원본 수치와 기여도 및 보정 페널티 세부 요소를 가감 없이 투명하게 제공합니다.
-                </p>
-              </div>
-            </div>
-          </div>
+          )}
         </section>
       </div>
     </PageShell>

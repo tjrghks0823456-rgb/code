@@ -325,8 +325,95 @@ def is_google_ad_event(raw_item: Dict[str, Any], file_path: str = "", raw_text: 
     return bool(reason), reason or ""
 
 
+def check_shorts_candidate(
+    url: str = "", 
+    title: str = "", 
+    description: str = "", 
+    raw_text: str = "", 
+    duration_seconds: Optional[float] = None, 
+    raw_item: Optional[Dict[str, Any]] = None
+) -> Tuple[bool, str, str]:
+    """
+    Check if the event is a candidate for shorts.
+    Returns: (is_shorts_candidate, detection_reason, confidence)
+    """
+    item = raw_item or {}
+    
+    # URL extraction
+    url_str = (url or item.get("title_url") or item.get("titleUrl") or item.get("url") or item.get("URL") or "").lower()
+    
+    # Title extraction
+    title_str = (title or item.get("title_text") or item.get("text_base") or item.get("title") or "").lower()
+    
+    # Description / meta text extraction
+    desc_str = (description or item.get("description") or "").lower()
+    
+    # Raw details / raw text extraction
+    details_list = _flatten_strings(item.get("details") or item.get("detail") or [])
+    details_str = " ".join(details_list).lower()
+    
+    raw_text_str = (raw_text or item.get("raw_text") or item.get("raw_takeout_text") or "").lower()
+    
+    full_text = f"{title_str} {desc_str} {details_str} {raw_text_str}"
+    
+    has_shorts_url = "/shorts/" in url_str or "youtube.com/shorts" in url_str
+    
+    # Text hints
+    hints = ["#shorts", "shorts", "쇼츠", "숏츠"]
+    has_title_hint = any(hint in title_str for hint in hints)
+    has_meta_hint = any(hint in full_text for hint in hints)
+    
+    # Check reasons
+    if has_shorts_url:
+        return True, "url", "high"
+    
+    if has_title_hint:
+        return True, "title_hint", "high" if "#shorts" in title_str else "medium"
+        
+    if has_meta_hint:
+        return True, "metadata_hint", "medium"
+        
+    if duration_seconds is not None and duration_seconds <= 60:
+        return True, "duration_hint", "medium"
+        
+    return False, "unknown", "low"
+
+
+def check_general_watch_candidate(
+    url: str = "", 
+    is_shorts_candidate: bool = False,
+    raw_item: Optional[Dict[str, Any]] = None
+) -> Tuple[bool, str]:
+    """
+    Check if the event is a candidate for general standard video.
+    Returns: (is_general_watch_candidate, confidence)
+    """
+    item = raw_item or {}
+    url_str = (url or item.get("title_url") or item.get("titleUrl") or item.get("url") or item.get("URL") or "").lower()
+    
+    is_watch_url = "watch?v=" in url_str or "youtu.be" in url_str or "youtube.com/watch" in url_str
+    
+    # If it has a video link or action view, but not shorts
+    if is_watch_url and not is_shorts_candidate:
+        return True, "high"
+        
+    # Also if action type is view and it has a video_id, it is a general watch candidate
+    video_id = item.get("video_id")
+    action_type = (item.get("action_type") or "").lower()
+    if action_type == "view" and video_id and not is_shorts_candidate:
+        return True, "high"
+        
+    return False, "low"
+
+
 def detect_content_format(url: str = "", title: str = "", raw_item: Optional[Dict[str, Any]] = None) -> str:
     item = raw_item or {}
+    
+    duration_sec = item.get("video_duration_sec") or item.get("estimated_duration_sec") or item.get("metadata_duration_sec")
+    is_shorts, _, _ = check_shorts_candidate(url=url, title=title, duration_seconds=duration_sec, raw_item=item)
+    if is_shorts:
+        return "shorts"
+        
     url_text = " ".join(
         _flatten_strings({
             "url": url,
@@ -344,8 +431,6 @@ def detect_content_format(url: str = "", title: str = "", raw_item: Optional[Dic
     ).lower()
     detail_text = " ".join(_flatten_strings(item.get("details") or item.get("detail") or [])).lower()
 
-    if "/shorts/" in url_text or "youtube.com/shorts" in url_text:
-        return "shorts"
     if (
         "/live/" in url_text
         or "youtube.com/live" in url_text
@@ -356,10 +441,11 @@ def detect_content_format(url: str = "", title: str = "", raw_item: Optional[Dic
         or _is_true_flag(item.get("is_live"))
     ):
         return "live"
-    if "youtube.com/watch" in url_text or "watch?v=" in url_text:
+        
+    is_general, _ = check_general_watch_candidate(url=url, is_shorts_candidate=is_shorts, raw_item=item)
+    if is_general:
         return "standard_video"
-    if _lower(item.get("action_type")) == "view" and item.get("video_id"):
-        return "standard_video"
+        
     return "unknown"
 
 
@@ -370,18 +456,11 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
     if _is_true_flag(record.get("is_ad_event")) or _is_true_flag(record.get("is_ad")):
         return str(record.get("ad_filter_reason") or "explicit_ad_flag")
 
-    details = {
-        "details": record.get("details"),
-        "detail": record.get("detail"),
-        "source": record.get("source"),
-        "activityControls": record.get("activityControls"),
-        "activity_controls": record.get("activity_controls"),
-    }
-    detail_text = " ".join(_flatten_strings(details)).lower()
-    for marker in AD_DETAIL_MARKERS:
-        if marker in detail_text:
-            return f"detail_marker:{marker}"
+    action_type = _lower(record.get("action_type"))
+    source_type = _lower(record.get("source_type"))
+    is_view = action_type == "view" or source_type == "watch_history"
 
+    # 1. URL domain check for both view and search (aggressively applied)
     url_text = " ".join(
         _flatten_strings({
             "title_url": record.get("title_url"),
@@ -396,6 +475,33 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
         if marker in url_text:
             return f"url_marker:{marker}"
 
+    # 2. Check explicitly scoped ad detail markers for views
+    details = {
+        "details": record.get("details"),
+        "detail": record.get("detail"),
+    }
+    detail_text = " ".join(_flatten_strings(details)).lower()
+    for marker in AD_DETAIL_MARKERS:
+        if marker in detail_text:
+            return f"detail_marker:{marker}"
+
+    # For view events, we stop here to avoid false positive text filtering (e.g. sale, coupon)
+    if is_view:
+        return None
+
+    # 3. For search/auxiliary events, perform broader text/search key ad detection
+    details_extended = {
+        "details": record.get("details"),
+        "detail": record.get("detail"),
+        "source": record.get("source"),
+        "activityControls": record.get("activityControls"),
+        "activity_controls": record.get("activity_controls"),
+    }
+    detail_text_ext = " ".join(_flatten_strings(details_extended)).lower()
+    for marker in AD_DETAIL_MARKERS:
+        if marker in detail_text_ext:
+            return f"detail_marker:{marker}"
+
     flattened = " ".join(_flatten_strings(record)).lower()
     for marker in AD_URL_MARKERS:
         if marker in flattened:
@@ -407,8 +513,6 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
         if marker in flattened:
             return f"text_marker:{marker}"
 
-    action_type = _lower(record.get("action_type"))
-    source_type = _lower(record.get("source_type"))
     if action_type == "search" or source_type == "search_history":
         search_text = (
             record.get("search_query")

@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
 type PageShellProps = {
@@ -7,15 +9,24 @@ type PageShellProps = {
   compact?: boolean;
 };
 
-const navItems = [
-  { href: "/", label: "홈", id: "home" },
-  { href: "/survey", label: "진단", id: "survey" },
-  { href: "/upload", label: "분석", id: "upload" },
-  { href: "/types", label: "유형", id: "types" },
-  { href: "/mission?demo=true", label: "미션", id: "mission" }
-];
-
 export default function PageShell({ children, active = "home", compact = false }: PageShellProps) {
+  const [runId, setRunId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRunId(localStorage.getItem("latest_run_id"));
+    }
+  }, []);
+
+  const navItems = [
+    { href: "/", label: "홈", id: "home" },
+    { href: "/survey", label: "진단", id: "survey" },
+    { href: "/upload", label: "분석", id: "upload" },
+    ...(runId ? [{ href: `/dashboard?run_id=${runId}`, label: "대시보드", id: "dashboard" }] : []),
+    { href: "/types", label: "유형", id: "types" },
+    { href: runId ? "/mission" : "/mission?demo=true", label: "미션", id: "mission" }
+  ];
+
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-slate-950">
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-[#f7f4ee]/90 backdrop-blur">

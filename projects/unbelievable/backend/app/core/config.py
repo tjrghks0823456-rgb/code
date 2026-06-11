@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # Data storage files
     STORAGE_DIR: str = os.getenv("STORAGE_DIR", "data")
     
+    # Event limits for Free MVP
+    MAX_WATCH_EVENTS: int = int(os.getenv("MAX_WATCH_EVENTS", "100"))
+    MAX_SEARCH_EVENTS: int = int(os.getenv("MAX_SEARCH_EVENTS", "100"))
+    MAX_EVENTS_PER_SOURCE: int = int(os.getenv("MAX_EVENTS_PER_SOURCE", "100"))
+    
     class Config:
         case_sensitive = True
         env_file = ".env"

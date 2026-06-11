@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Gauge, Map, RefreshCcw, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Gauge, Map, RefreshCcw, Search, ShieldCheck, Sparkles, Upload } from "lucide-react";
 import PageShell from "../components/PageShell";
 import { ButtonLink } from "../components/Button";
 import Card from "../components/Card";
@@ -49,14 +49,47 @@ export default function LandingPage() {
               최근 시청 기록과 자가진단을 비교해 내가 직접 찾은 관심사와 알고리즘이 보여준 관심사의 차이를 리포트로 정리합니다.
             </p>
 
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <ButtonLink href="/survey" icon={<ArrowRight size={18} />}>
-                내 알고리즘 진단하기
-              </ButtonLink>
-              <ButtonLink href="/types" tone="secondary" icon={<Sparkles size={18} />}>
-                유형 먼저 구경하기
-              </ButtonLink>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-6 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-700 mb-4 font-black">
+                    <Sparkles size={20} />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-950">자가진단으로 먼저 알아보기</h3>
+                  <p className="mt-1 text-[11px] font-bold text-slate-500">소요 시간: 약 3~5분</p>
+                  <p className="mt-3 text-xs leading-5 text-slate-600">
+                    내가 생각하는 미디어 소비 습관을 16문항으로 가볍게 확인하고 사전 성향 진단을 받아봅니다.
+                  </p>
+                </div>
+                <div className="mt-6">
+                  <ButtonLink href="/survey" icon={<ArrowRight size={18} />} className="w-full">
+                    자가진단 시작하기
+                  </ButtonLink>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-6 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950/10 text-slate-900 mb-4 font-black">
+                    <Upload size={20} />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-950">실제 기록으로 분석하기</h3>
+                  <p className="mt-1 text-[11px] font-bold text-slate-500">소요 방식: Google Takeout 업로드</p>
+                  <p className="mt-3 text-xs leading-5 text-slate-600">
+                    YouTube 시청/검색 기록을 업로드해 알고리즘 필터버블과 실제 소비 패턴을 객관적으로 분석합니다.
+                  </p>
+                </div>
+                <div className="mt-6">
+                  <ButtonLink href="/upload" icon={<ArrowRight size={18} />} tone="secondary" className="w-full">
+                    시청 기록 분석하기
+                  </ButtonLink>
+                </div>
+              </div>
             </div>
+
+            <p className="mt-6 text-xs font-semibold leading-relaxed text-slate-500">
+              💡 <strong>자가진단과 실제 기록 분석을 모두 완료하면</strong>, 내가 생각한 나와 실제 기록 사이의 메타인지 격차를 비교할 수 있는 메타인지 격차 리포트가 추가로 활성화됩니다.
+            </p>
 
             <div className="mt-8 flex flex-wrap gap-2">
               {interestChips.map((chip) => (

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, RotateCcw, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, RotateCcw, Upload, Home } from "lucide-react";
 import { useRouter } from "next/navigation";
 import PageShell from "../../components/PageShell";
 import { Button } from "../../components/Button";
@@ -116,7 +116,7 @@ export default function SurveyPage() {
     calculateResult();
   };
 
-  const calculateResult = async () => {
+  const calculateResult = () => {
     const D = (answers.q1 || 3) + (answers.q3 || 3);
     const P = (answers.q2 || 3) + (answers.q4 || 3);
     const W = (answers.q5 || 3) + (answers.q7 || 3);
@@ -139,30 +139,41 @@ export default function SurveyPage() {
     };
 
     saveSelfSurveyResult(surveyResult);
-    
+    setResult(surveyResult);
+    setCurrentPage(4);
+
+    // Sync to backend asynchronously in the background
+    void syncSurveyToBackend(surveyResult);
+  };
+
+  const syncSurveyToBackend = async (surveyResult: SelfSurveyResult) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 3000);
+
       const response = await fetch(apiUrl("/api/v1/survey/save"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        signal: controller.signal,
         body: JSON.stringify({
           user_id: DEFAULT_USER_ID,
-          survey_scores: { D, P, W, N, S, M, F, L },
-          result_code: resultCode,
-          result_name: character.title,
+          survey_scores: surveyResult.axisScores,
+          result_code: surveyResult.resultCode,
+          result_name: surveyResult.resultName,
           schema_version: "1.0.0",
         }),
       });
+
+      window.clearTimeout(timeoutId);
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (err) {
-      console.warn("Failed to sync survey to backend. Saved locally instead.", err);
+      console.warn("Survey backend sync failed. Local result is still available.", err);
     }
-
-    setResult(surveyResult);
-    setCurrentPage(4);
   };
 
   const handleRetake = () => {
@@ -210,12 +221,21 @@ export default function SurveyPage() {
             </Card>
           </div>
 
+          <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-5 text-center">
+            <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+              이 결과는 사용자가 스스로 응답한 자가진단 결과입니다. 실제 YouTube 기록을 업로드하면 실제 소비 패턴과 비교할 수 있습니다.
+            </p>
+          </div>
+
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="button" tone="secondary" icon={<RotateCcw size={18} />} onClick={handleRetake}>
               다시 진단하기
             </Button>
+            <Button type="button" tone="secondary" icon={<Home size={18} />} onClick={() => router.push("/")}>
+              홈으로 가기
+            </Button>
             <Button type="button" className="sm:flex-1" icon={<Upload size={18} />} onClick={() => router.push("/upload")}>
-              실제 소비 데이터 분석하기
+              실제 기록과 비교해보기
             </Button>
           </div>
         </div>

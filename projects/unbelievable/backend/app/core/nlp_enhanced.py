@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import shutil
+import platform
 import logging
 from collections import Counter
 from app.core.config import settings
@@ -13,14 +15,33 @@ from app.core.text_cleaning import clean_and_filter_keyword
 logger = logging.getLogger(__name__)
 
 _okt = None
+_okt_failed = False
 
 def get_okt():
-    global _okt
+    global _okt, _okt_failed
+    if _okt_failed:
+        return None
     if _okt is None:
         try:
-            import platform
             is_windows = platform.system() == "Windows"
             
+            # 0. Fast pre-check: If Java is not found, bypass KoNLPy to avoid heavy search delays
+            java_home = os.environ.get("JAVA_HOME", r"C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot")
+            java_found = False
+            
+            if java_home and os.path.exists(java_home):
+                java_bin = "java.exe" if is_windows else "java"
+                if os.path.exists(os.path.join(java_home, "bin", java_bin)):
+                    java_found = True
+            
+            if not java_found and shutil.which("java"):
+                java_found = True
+                
+            if not java_found:
+                logger.warning("Java runtime (JRE/JDK) not found via JAVA_HOME or PATH. Bypassing KoNLPy Okt to prevent startup latency.")
+                _okt_failed = True
+                return None
+
             if is_windows:
                 import ctypes
                 def get_short_path(long_path):
@@ -38,18 +59,13 @@ def get_okt():
                         new_paths.append(p)
                 sys.path = new_paths
                 
-                # Use environment variable JAVA_HOME first, fallback to default path
-                java_home = os.environ.get("JAVA_HOME", r"C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot")
-                if os.path.exists(java_home):
-                    short_java = get_short_path(java_home)
-                    os.environ["JAVA_HOME"] = short_java
-                    os.environ["PATH"] = (
-                        os.path.join(short_java, "bin") + os.pathsep +
-                        os.path.join(short_java, "bin", "server") + os.pathsep +
-                        os.environ.get("PATH", "")
-                    )
-                else:
-                    logger.warning(f"Java not found at expected path: {java_home}. Please check JAVA_HOME configuration.")
+                short_java = get_short_path(java_home)
+                os.environ["JAVA_HOME"] = short_java
+                os.environ["PATH"] = (
+                    os.path.join(short_java, "bin") + os.pathsep +
+                    os.path.join(short_java, "bin", "server") + os.pathsep +
+                    os.environ.get("PATH", "")
+                )
                 
                 old_cwd = os.getcwd()
                 win_temp = os.environ.get("USERPROFILE", os.environ.get("TEMP", "C:\\"))
@@ -62,6 +78,7 @@ def get_okt():
                 except (ImportError, RuntimeError) as e:
                     logger.warning(f"KoNLPy import or JVM initialization failed on Windows. Native fallbacks will be used. Error details: {str(e)}")
                     _okt = None
+                    _okt_failed = True
                 finally:
                     os.chdir(old_cwd)
             else:
@@ -71,9 +88,14 @@ def get_okt():
                 except (ImportError, RuntimeError) as e:
                     logger.warning(f"KoNLPy import or JVM initialization failed on Linux/Mac. Native fallbacks will be used. Error details: {str(e)}")
                     _okt = None
+                    _okt_failed = True
         except Exception as e:
             logger.error(f"Uncaught exception during Okt tagger setup: {str(e)}", exc_info=True)
             _okt = None
+            _okt_failed = True
+        
+        if _okt is None:
+            _okt_failed = True
     return _okt
 
 def extract_keywords_fallback(text, num_keywords=10):

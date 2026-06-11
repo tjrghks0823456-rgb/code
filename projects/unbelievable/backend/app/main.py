@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Router imports (placeholders to be created next)
-from app.routes import upload, analysis, detox, dashboard, survey
+from app.routes import upload, analysis, detox, dashboard, survey, tracker
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -27,6 +27,7 @@ app.include_router(analysis, prefix=settings.API_V1_STR, tags=["Analysis"])
 app.include_router(detox, prefix=settings.API_V1_STR, tags=["Detox"])
 app.include_router(dashboard, prefix=settings.API_V1_STR, tags=["Dashboard"])
 app.include_router(survey, prefix=settings.API_V1_STR, tags=["Survey"])
+app.include_router(tracker, prefix=settings.API_V1_STR, tags=["Tracker"])
 
 @app.get("/")
 def read_root():
