@@ -1,0 +1,19 @@
+# Visual Studio / MSBuild
+.vs/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Python / Flask
+__pycache__/
+*.pyc
+.idea/
+.venv/
+venv/
+*.log
+data/ai_training_snapshots.jsonl
+temp_cookies*
+temp_history*

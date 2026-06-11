@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.flask_server.log
+flask_server.log
+data/*.db
+data/*.db-journal
+.idea/
+*.log
+
+# Keep models/etch/*.joblib in repo; ignore pyc only

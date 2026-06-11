@@ -1,0 +1,16 @@
+﻿<Application x:Class="etch_ui.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:etch_ui"
+             xmlns:conv="clr-namespace:etch_ui.Converters"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/HmiTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <conv:BoolToLampBrushConverter x:Key="LampBrush"/>
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

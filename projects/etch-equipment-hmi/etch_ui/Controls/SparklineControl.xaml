@@ -1,0 +1,22 @@
+<UserControl x:Class="etch_ui.Controls.SparklineControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinHeight="72">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/etch_ui;component/Resources/HmiTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <TextBlock x:Name="TitleBlock" Grid.Row="0" Style="{StaticResource HmiCaption}" Margin="0,0,0,6"/>
+        <Border Grid.Row="1" Style="{StaticResource HmiChartPanel}">
+            <Canvas x:Name="PlotCanvas" SizeChanged="PlotCanvas_OnSizeChanged"/>
+        </Border>
+    </Grid>
+</UserControl>

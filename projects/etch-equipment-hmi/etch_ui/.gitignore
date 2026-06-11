@@ -1,0 +1,26 @@
+# Build
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Logs / upgrade
+UpgradeLog.htm
+*.log
+
+# Local DB (runtime)
+data/
+*.db
+
+# AI pipeline artifacts (JSONL·joblib는 로컬/Flask 배포)
+tools/ai/__pycache__/
+tools/ai/output/
+
+# OS
+Thumbs.db
+.DS_Store
