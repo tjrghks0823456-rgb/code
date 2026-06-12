@@ -1,8 +1,19 @@
 import json
-import httpx
 import sys
+import os
 
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+# Force deterministic local backends before importing the FastAPI app.
+os.environ["SUPABASE_URL"] = "https://your-project-ref.supabase.co"
+os.environ["SUPABASE_KEY"] = "your-supabase-secret-key"
+os.environ["YOUTUBE_API_KEY"] = "mock-youtube-api-key"
+os.environ["GOOGLE_LANGUAGE_API_KEY"] = "mock-nl-api-key"
+os.environ["GEMINI_API_KEY"] = "mock-gemini-api-key"
+
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+API_PREFIX = "/api/v1"
 
 # 1. Create dummy takeout data
 dummy_history = [
@@ -104,7 +115,7 @@ def run_tests():
     data = {"mock_estimation": "false"} # We test with mock_estimation = False
     
     print("\n[Step 1] Uploading Takeout history to /upload/takeout...")
-    res = httpx.post(f"{BASE_URL}/upload/takeout", files=files, data=data, timeout=60.0)
+    res = client.post(f"{API_PREFIX}/upload/takeout", files=files, data=data)
     if res.status_code != 200:
         print(f"FAIL: Upload failed with status {res.status_code}: {res.text}")
         sys.exit(1)
@@ -118,7 +129,7 @@ def run_tests():
     
     # 2. Trigger analysis
     print(f"\n[Step 2] Running analysis on file {file_id}...")
-    res = httpx.post(f"{BASE_URL}/analysis/run", params={"file_id": file_id}, timeout=120.0)
+    res = client.post(f"{API_PREFIX}/analysis/run", params={"file_id": file_id})
     if res.status_code != 200:
         print(f"FAIL: Analysis failed with status {res.status_code}: {res.text}")
         sys.exit(1)
@@ -180,7 +191,7 @@ def run_tests():
 
     # 3. Get dashboard summary
     print(f"\n[Step 3] Fetching dashboard summary for run {run_id}...")
-    res = httpx.get(f"{BASE_URL}/dashboard/summary", params={"run_id": run_id}, timeout=120.0)
+    res = client.get(f"{API_PREFIX}/dashboard/summary", params={"run_id": run_id})
     if res.status_code != 200:
         print(f"FAIL: Dashboard fetch failed with status {res.status_code}: {res.text}")
         sys.exit(1)

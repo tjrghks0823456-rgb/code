@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     
     # Data storage files
     STORAGE_DIR: str = os.getenv("STORAGE_DIR", "data")
+
+    # Comma-separated browser origins that can call the API.
+    # Keep local development explicit instead of using "*" with credentials.
+    CORS_ALLOW_ORIGINS: str = os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000"
+    )
     
     # Event limits for Free MVP
     MAX_WATCH_EVENTS: int = int(os.getenv("MAX_WATCH_EVENTS", "100"))
@@ -27,6 +34,12 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
         env_file = ".env"
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        """Return normalized CORS origins from a comma-separated env value."""
+        origins = [origin.strip() for origin in self.CORS_ALLOW_ORIGINS.split(",")]
+        return [origin for origin in origins if origin]
 
 settings = Settings()
 

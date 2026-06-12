@@ -1,8 +1,19 @@
 import json
-import httpx
 import sys
+import os
 
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+# Force deterministic local backends before importing the FastAPI app.
+os.environ["SUPABASE_URL"] = "https://your-project-ref.supabase.co"
+os.environ["SUPABASE_KEY"] = "your-supabase-secret-key"
+os.environ["YOUTUBE_API_KEY"] = "mock-youtube-api-key"
+os.environ["GOOGLE_LANGUAGE_API_KEY"] = "mock-nl-api-key"
+os.environ["GEMINI_API_KEY"] = "mock-gemini-api-key"
+
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+API_PREFIX = "/api/v1"
 
 # Define 7 user scenarios
 scenarios_data = {
@@ -91,7 +102,7 @@ def validate_scenario(name, history):
 
     # 1. Upload
     files = {"files": ("watch-history.json", json.dumps(history), "application/json")}
-    res = httpx.post(f"{BASE_URL}/upload/takeout", files=files, data={"mock_estimation": "false"}, timeout=60.0)
+    res = client.post(f"{API_PREFIX}/upload/takeout", files=files, data={"mock_estimation": "false"})
     if res.status_code != 200:
         print(f"FAIL: Upload failed: {res.text}")
         sys.exit(1)
@@ -99,7 +110,7 @@ def validate_scenario(name, history):
     file_id = res.json()["file_id"]
     
     # 2. Run analysis
-    res = httpx.post(f"{BASE_URL}/analysis/run", params={"file_id": file_id}, timeout=120.0)
+    res = client.post(f"{API_PREFIX}/analysis/run", params={"file_id": file_id})
     if res.status_code != 200:
         print(f"FAIL: Analysis run failed: {res.text}")
         sys.exit(1)
@@ -107,7 +118,7 @@ def validate_scenario(name, history):
     run_id = res.json()["run_id"]
     
     # 3. Fetch summary & check explanations & DSAO cards
-    res = httpx.get(f"{BASE_URL}/dashboard/summary", params={"run_id": run_id}, timeout=120.0)
+    res = client.get(f"{API_PREFIX}/dashboard/summary", params={"run_id": run_id})
     if res.status_code != 200:
         print(f"FAIL: Fetch summary failed: {res.text}")
         sys.exit(1)
@@ -149,7 +160,7 @@ def validate_scenario(name, history):
     assert "actual duration" not in summary_str, "Wording violation: 'actual duration' found in response!"
 
     # 4. Generate detox recommendations
-    res = httpx.post(f"{BASE_URL}/detox/generate", params={"run_id": run_id}, timeout=120.0)
+    res = client.post(f"{API_PREFIX}/detox/generate", params={"run_id": run_id})
     if res.status_code != 200:
         print(f"FAIL: Generate detox failed: {res.text}")
         sys.exit(1)
