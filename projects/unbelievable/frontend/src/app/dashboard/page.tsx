@@ -724,6 +724,45 @@ function InterestNetworkGraph({
   );
 }
 
+function DashboardDisclosure({
+  title,
+  eyebrow,
+  summary,
+  children,
+  defaultOpen = false
+}: {
+  title: string;
+  eyebrow?: string;
+  summary?: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details open={defaultOpen} className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+        <div>
+          {eyebrow && (
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">{eyebrow}</p>
+          )}
+          <h2 className="mt-1 text-xl font-black text-slate-950">{title}</h2>
+          {summary && (
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{summary}</p>
+          )}
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-600 group-open:hidden">
+          펼치기
+        </span>
+        <span className="hidden shrink-0 rounded-full bg-slate-950 px-3 py-1 text-[11px] font-black text-white group-open:inline-flex">
+          접기
+        </span>
+      </summary>
+      <div className="mt-5">
+        {children}
+      </div>
+    </details>
+  );
+}
+
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1171,6 +1210,45 @@ function DashboardContent() {
           </div>
         </section>
 
+        <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+          <div>
+            <RadarChart data={chartData} scoreWarnings={scoreWarnings} hasSurvey={!!selfSurveyData} />
+            <p className="mt-2.5 text-[11px] font-semibold leading-relaxed text-slate-500">
+              비교 불가 지표는 차트 형태 유지를 위해 중립 위치(50점)에 표시하며, 실제 평균 점수 계산에는 포함하지 않습니다.
+            </p>
+          </div>
+
+          <Card className="glass-neon-slate p-5">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">first glance</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">그래프 먼저 보는 분석 요약</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+              핵심 축의 차이를 먼저 확인하고, 세부 근거는 아래 접힘 섹션에서 필요한 항목만 열어볼 수 있게 정리했습니다.
+            </p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">bias risk</p>
+                <p className="mt-1 text-xl font-black text-slate-950">{riskScore}점</p>
+                <p className="text-xs font-bold text-slate-500">{getRiskLabel(riskScore)} 단계</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">interest gap</p>
+                <p className="mt-1 text-xl font-black text-slate-950">{interestMismatchScore}점</p>
+                <p className="text-xs font-bold text-slate-500">검색과 시청 차이</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">diversity</p>
+                <p className="mt-1 text-xl font-black text-slate-950">{diversity}점</p>
+                <p className="text-xs font-bold text-slate-500">시청 주제 다양성</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3">
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">detox risk</p>
+                <p className="mt-1 text-xl font-black text-slate-950">{finalDetoxRisk}점</p>
+                <p className="text-xs font-bold text-slate-500">편향+숏츠 루프</p>
+              </div>
+            </div>
+          </Card>
+        </section>
+
         <div className="grid gap-4 md:grid-cols-5">
           <ScoreCard label="관심사 쏠림" value={`${riskScore}점`} caption={`${getRiskLabel(riskScore)} 단계`} tone="bg-rose-500 text-white" />
           <ScoreCard 
@@ -1186,7 +1264,12 @@ function DashboardContent() {
 
         {/* Detailed Explanations & Evidence Card Grid */}
         {processedData.explanations && (
-          <Card className="glass-neon-slate p-6 md:p-8 space-y-6">
+          <DashboardDisclosure
+            eyebrow="details"
+            title="점수별 상세 근거"
+            summary="계산 근거와 주의사항은 처음부터 펼치지 않고, 필요한 항목만 열어서 확인합니다."
+          >
+            <Card className="glass-neon-slate p-6 md:p-8 space-y-6">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">detailed evidence & explanations</p>
               <h2 className="mt-2 text-2xl font-black text-slate-950">핵심 진단 점수별 상세 근거 및 안내</h2>
@@ -1270,7 +1353,8 @@ function DashboardContent() {
                 );
               })}
             </div>
-          </Card>
+            </Card>
+          </DashboardDisclosure>
         )}
 
         <Card className="glass-neon-rose p-5">
@@ -1694,14 +1778,11 @@ function DashboardContent() {
           </Card>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
-          <div>
-            <RadarChart data={chartData} scoreWarnings={scoreWarnings} hasSurvey={!!selfSurveyData} />
-            <p className="mt-2.5 text-[11px] text-slate-500 font-semibold leading-relaxed">
-              ※ 비교 불가 지표는 차트 형태 유지를 위해 중립 위치(50점)에 표시되며, 실제 평균 점수 계산에는 포함되지 않습니다.
-            </p>
-          </div>
-
+        <DashboardDisclosure
+          eyebrow="supporting evidence"
+          title="검색어 근거와 세부 요약"
+          summary="처음 화면에서는 그래프와 핵심 수치만 보고, 실제 검색어·광고 제외·요약 근거는 필요할 때 펼쳐서 확인합니다."
+        >
           <div className="space-y-4">
             <Card className="glass-neon-slate p-5">
               <div className="flex items-center justify-between gap-3">
@@ -1745,7 +1826,7 @@ function DashboardContent() {
               </p>
             </Card>
           </div>
-        </div>
+        </DashboardDisclosure>
 
         <Card className="glass-neon-teal p-6 md:p-8">
           <div className="mb-6">
