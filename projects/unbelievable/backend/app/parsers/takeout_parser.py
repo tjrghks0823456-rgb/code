@@ -359,7 +359,9 @@ def parse_youtube_search_html(html_content: str) -> List[dict]:
             "action_type": "search",
             "event_time": parsed_time_str,
             "raw_time": raw_ts,
+            "raw_timestamp": raw_ts,
             "timestamp_parse_failed": timestamp_parse_failed,
+            "timestamp_parse_status": "failed" if timestamp_parse_failed else "parsed",
             "video_id": None,
             "title_url": None,
             "channel_name": None,
@@ -468,7 +470,9 @@ def parse_youtube_html(html_content: str, file_kind: str) -> List[dict]:
             "action_type": action_type,
             "event_time": parsed_time_str,
             "raw_time": timestamp_str,
+            "raw_timestamp": timestamp_str,
             "timestamp_parse_failed": timestamp_parse_failed,
+            "timestamp_parse_status": "failed" if timestamp_parse_failed else "parsed",
             "video_id": video_id,
             "title_url": None if action_type == "search" else (a_tags[0].get("href", "") if len(a_tags) >= 1 else None),
             "channel_name": channel_name,
@@ -549,7 +553,9 @@ def parse_youtube_json(json_content: str, file_kind: str) -> List[dict]:
             "action_type": action_type,
             "event_time": parsed_time_str,
             "raw_time": item_time,
+            "raw_timestamp": item_time,
             "timestamp_parse_failed": timestamp_parse_failed,
+            "timestamp_parse_status": "failed" if timestamp_parse_failed else "parsed",
             "video_id": video_id,
             "title_url": title_url,
             "channel_name": channel_name,
@@ -653,7 +659,11 @@ def parse_youtube_playlist(content: str, is_json: bool) -> List[dict]:
                 parsed_items.append({
                     "title_text": title,
                     "action_type": "playlist",
-                    "event_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "event_time": None,
+                    "raw_time": "",
+                    "raw_timestamp": "",
+                    "timestamp_parse_failed": True,
+                    "timestamp_parse_status": "missing",
                     "title_url": url,
                     "video_id": video_id
                 })
@@ -666,19 +676,30 @@ def parse_youtube_playlist(content: str, is_json: bool) -> List[dict]:
 
 def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
     parsed_items = []
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-    def append_item(title: str, url: Optional[str] = None, channel_name: Optional[str] = None, event_time: Optional[str] = None):
+    def append_item(
+        title: str,
+        url: Optional[str] = None,
+        channel_name: Optional[str] = None,
+        event_time: Optional[str] = None,
+        raw_time: Optional[str] = None,
+    ):
         clean_title = (title or "").strip()
         clean_url = (url or "").strip()
+        clean_raw_time = (raw_time or "").strip()
         if not clean_title and clean_url:
             clean_title = clean_url
         if not clean_title:
             return
+        timestamp_parse_failed = event_time is None
         parsed_item = {
             "title_text": clean_title[:500],
             "action_type": action_type,
-            "event_time": event_time or now_str,
+            "event_time": event_time,
+            "raw_time": clean_raw_time,
+            "raw_timestamp": clean_raw_time,
+            "timestamp_parse_failed": timestamp_parse_failed,
+            "timestamp_parse_status": "missing" if not clean_raw_time else ("failed" if timestamp_parse_failed else "parsed"),
             "title_url": clean_url or None,
             "video_id": extract_video_id(clean_url),
             "channel_name": channel_name or clean_title,
@@ -731,8 +752,8 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
             )
             event_time = None
             if raw_time:
-                event_time = raw_time.replace("Z", "").replace("T", " ").split(".")[0]
-            append_item(title, url, channel_name, event_time)
+                event_time = parse_takeout_html_timestamp(raw_time)
+            append_item(title, url, channel_name, event_time, raw_time)
     except Exception:
         pass
 
@@ -742,7 +763,7 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
     try:
         soup = BeautifulSoup(content, "html.parser")
         for link in soup.find_all("a")[:PARSER_LIMITS["max_html_links"]]:
-            append_item(link.get_text().strip(), link.get("href", ""))
+            append_item(link.get_text().strip(), link.get("href", ""), raw_time="")
     except Exception:
         pass
 
@@ -766,8 +787,8 @@ def parse_youtube_auxiliary(content: str, action_type: str) -> List[dict]:
                     "댓글 생성 타임스탬프", "실시간 채팅 생성 타임스탬프",
                     "재생목록 생성 타임스탬프", "재생목록 업데이트 타임스탬프", "재생목록 동영상 생성 타임스탬프"
                 ])
-                event_time = raw_time.replace("Z", "").replace("T", " ").split(".")[0] if raw_time else None
-                append_item(title, url, channel_name, event_time)
+                event_time = parse_takeout_html_timestamp(raw_time) if raw_time else None
+                append_item(title, url, channel_name, event_time, raw_time)
         else:
             csv_text.seek(0)
             for row in list(csv.reader(csv_text))[:PARSER_LIMITS["max_csv_rows"]]:

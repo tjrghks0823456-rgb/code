@@ -23,9 +23,12 @@ PARSER_LIMITS = {
 DURATION_LIMITS = {
     "shorts_default_sec": 45,
     "standard_default_sec": 300,
+    "default_estimated_watch_sec": 600,
     "search_default_sec": 15,
     "auxiliary_default_sec": 0,
     "min_watch_sec": 5,
     "max_timeline_gap_sec": 6 * 60 * 60,
+    "idle_gap_threshold_sec": 30 * 60,
+    "max_estimated_watch_sec_without_metadata": 30 * 60,
     "metadata_video_limit": 50,
 }

@@ -417,6 +417,9 @@ class DashboardService:
         duration_method_idle_capped_count = 0
         duration_method_default_estimate_count = 0
         duration_method_unknown_count = 0
+        metadata_category_used_count = 0
+        local_rule_category_used_count = 0
+        categorized_as_unknown_count = 0
 
         from app.core.interest_maps import classify_interest_topic
 
@@ -458,9 +461,14 @@ class DashboardService:
             # Category check
             raw_cat = e.get("raw_category") or e.get("category") or ""
             channel = e.get("channel_name") or ""
-            topic = classify_interest_topic(text, raw_category=raw_cat, channel_name=channel)
+            topic = classify_interest_topic(text, raw_category=raw_cat, channel_name=channel, raw_item=e)
             if topic.get("category") == "기타/미분류":
                 category_missing_events += 1
+                categorized_as_unknown_count += 1
+            elif str(topic.get("classification_source") or "").startswith("metadata_"):
+                metadata_category_used_count += 1
+            else:
+                local_rule_category_used_count += 1
 
             if e.get("takeout_based_estimation") is True:
                 has_takeout_estimation = True
@@ -508,8 +516,19 @@ class DashboardService:
 
         timestamp_parse_failed_ratio = round(timestamp_parse_failed_count / max(1, total_watch_events), 4)
         category_missing_ratio = round(category_missing_events / max(1, total_watch_events), 4)
+        runtime_warnings = ["ad_filter_conservative_mode"]
+        if timestamp_parse_failed_ratio >= 0.5:
+            runtime_warnings.extend(["timestamp_parse_low_confidence", "takeout_locale_maybe_unsupported"])
+        elif timestamp_parse_failed_ratio >= 0.2:
+            runtime_warnings.append("timestamp_parse_low_confidence")
+        if category_missing_ratio >= 0.8:
+            runtime_warnings.append("high_uncategorized_ratio")
+        if total_watch_events and (duration_method_idle_capped_count + duration_method_default_estimate_count) / max(1, total_watch_events) >= 0.3:
+            runtime_warnings.append("duration_estimation_low_confidence")
 
         data_quality_summary = {
+            "total_events": len(events),
+            "valid_watch_events": total_watch_events,
             "total_watch_events": total_watch_events,
             "watch_url_events": watch_url_events,
             "shorts_url_events": shorts_url_events,
@@ -519,16 +538,29 @@ class DashboardService:
             "unknown_classification_events": unknown_classification_events,
             "category_missing_events": category_missing_events,
             "category_missing_ratio": category_missing_ratio,
+            "uncategorized_count": category_missing_events,
             "uncategorized_ratio": category_missing_ratio,
+            "metadata_category_used_count": metadata_category_used_count,
+            "categorized_by_metadata_count": metadata_category_used_count,
+            "local_rule_category_used_count": local_rule_category_used_count,
+            "categorized_by_local_rule_count": local_rule_category_used_count,
+            "categorized_as_unknown_count": categorized_as_unknown_count,
             "takeout_based_estimation": has_takeout_estimation,
             "timestamp_parse_failed_count": timestamp_parse_failed_count,
             "timestamp_parse_failed_ratio": timestamp_parse_failed_ratio,
             "timestamp_parse_failed_percent": round(timestamp_parse_failed_ratio * 100, 1),
             "duration_method_metadata_count": duration_method_metadata_count,
+            "duration_metadata_count": duration_method_metadata_count,
             "duration_method_timeline_gap_count": duration_method_timeline_gap_count,
+            "duration_timeline_estimated_count": duration_method_timeline_gap_count,
             "duration_method_idle_capped_count": duration_method_idle_capped_count,
+            "idle_gap_capped_count": duration_method_idle_capped_count,
             "duration_method_default_estimate_count": duration_method_default_estimate_count,
-            "duration_method_unknown_count": duration_method_unknown_count
+            "duration_default_estimated_count": duration_method_default_estimate_count,
+            "duration_method_unknown_count": duration_method_unknown_count,
+            "ad_filter_policy": "conservative",
+            "analysis_confidence": "low" if ("timestamp_parse_low_confidence" in runtime_warnings or "high_uncategorized_ratio" in runtime_warnings) else ("medium" if "duration_estimation_low_confidence" in runtime_warnings else "high"),
+            "warnings": sorted(set(runtime_warnings)),
         }
 
         # Check uncategorized_ratio threshold
@@ -569,12 +601,26 @@ class DashboardService:
         if insights.get("search_interest_map"):
             insights["search_interest_map"]["excluded_ad_count"] = insights["excluded_ad_count"]
         data_quality_summary["excluded_ad_count"] = insights["excluded_ad_count"]
+        data_quality_summary["ad_filtered_count"] = insights["excluded_ad_count"]
         data_coverage = run.get("data_coverage") or {
             "excluded_ad_count": total_excluded_ad_count,
             "skipped_sources_with_reason": raw_file.get("skipped_sources_with_reason", {}),
             "ad_skip_summary": raw_file.get("ad_skip_summary", []),
         }
         raw_data_coverage = raw_file.get("data_coverage") or {}
+        upload_quality_summary = raw_data_coverage.get("data_quality_summary") or {}
+        if upload_quality_summary:
+            merged_warnings = sorted(set(
+                list(upload_quality_summary.get("warnings") or [])
+                + list(data_quality_summary.get("warnings") or [])
+            ))
+            data_quality_summary = {
+                **data_quality_summary,
+                **upload_quality_summary,
+                "warnings": merged_warnings,
+            }
+            data_quality_summary["excluded_ad_count"] = insights["excluded_ad_count"]
+            data_quality_summary["ad_filtered_count"] = insights["excluded_ad_count"]
         for k in [
             "parsed_source_counts",
             "analysis_source_counts",
@@ -582,6 +628,7 @@ class DashboardService:
             "duration_source_counts",
             "skipped_sources_with_reason",
             "ad_skip_summary",
+            "data_quality_summary",
         ]:
             value = data_coverage.get(k) or raw_data_coverage.get(k) or raw_file.get(k)
             if value is not None:
@@ -604,6 +651,7 @@ class DashboardService:
         data_coverage.setdefault("skipped_sources_with_reason", {})
         data_coverage.setdefault("ad_skip_summary", [])
         data_coverage.setdefault("warnings", [])
+        data_coverage["data_quality_summary"] = data_quality_summary
         risk_overall = build_overall_risk(run["bias_risk_score"], insights.get("shorts_analysis", {}))
 
         # Sejong & Data Quality Enhancements

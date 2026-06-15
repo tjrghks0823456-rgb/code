@@ -120,6 +120,122 @@ def count_content_formats(events: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
+def _read_duration_method(event: Dict[str, Any]) -> str:
+    raw_item = event.get("raw_item") if isinstance(event.get("raw_item"), dict) else {}
+    method = event.get("duration_estimation_method") or raw_item.get("duration_estimation_method")
+    if method:
+        return method
+
+    source = event.get("duration_source") or raw_item.get("duration_source") or ""
+    if source in {"youtube_api", "api", "timeline_capped_api"}:
+        return "metadata"
+    if source in {"timeline_gap", "idle_capped", "default_estimate"}:
+        return source
+    return "unknown"
+
+
+def build_data_quality_summary(events: List[Dict[str, Any]], excluded_ad_count: int = 0) -> Dict[str, Any]:
+    """Build additive quality metadata without changing the existing scoring contract."""
+    from app.core.interest_maps import classify_interest_topic
+
+    total_events = len(events or [])
+    watch_events = [
+        event for event in events or []
+        if event.get("action_type") == "view" or event.get("source_type") == "watch_history"
+    ]
+    valid_watch_events = len(watch_events)
+
+    timestamp_parse_failed_count = 0
+    metadata_category_used_count = 0
+    local_rule_category_used_count = 0
+    uncategorized_count = 0
+    duration_metadata_count = 0
+    duration_timeline_estimated_count = 0
+    duration_default_estimated_count = 0
+    idle_gap_capped_count = 0
+
+    for event in events or []:
+        raw_item = event.get("raw_item") if isinstance(event.get("raw_item"), dict) else {}
+        ts_failed = event.get("timestamp_parse_failed")
+        if ts_failed is None:
+            ts_failed = raw_item.get("timestamp_parse_failed")
+        if ts_failed is None:
+            ts_failed = event.get("event_time") is None
+        if ts_failed:
+            timestamp_parse_failed_count += 1
+
+        if event in watch_events:
+            text = event.get("text_base") or event.get("title_text") or event.get("title") or ""
+            raw_category = event.get("raw_category") or event.get("category") or ""
+            topic = classify_interest_topic(
+                text,
+                raw_category=raw_category,
+                channel_name=event.get("channel_name") or "",
+                raw_item=event,
+            )
+            source = topic.get("classification_source") or ""
+            if source.startswith("metadata_"):
+                metadata_category_used_count += 1
+            elif topic.get("category") == "기타/미분류":
+                uncategorized_count += 1
+            else:
+                local_rule_category_used_count += 1
+
+            method = _read_duration_method(event)
+            if method == "metadata":
+                duration_metadata_count += 1
+            elif method == "timeline_gap":
+                duration_timeline_estimated_count += 1
+            elif method == "idle_capped":
+                idle_gap_capped_count += 1
+            elif method == "default_estimate":
+                duration_default_estimated_count += 1
+
+    timestamp_parse_failed_ratio = round(timestamp_parse_failed_count / max(1, total_events), 4)
+    uncategorized_ratio = round(uncategorized_count / max(1, valid_watch_events), 4)
+
+    warnings = ["ad_filter_conservative_mode"]
+    if timestamp_parse_failed_ratio >= 0.5:
+        warnings.extend(["timestamp_parse_low_confidence", "takeout_locale_maybe_unsupported"])
+    elif timestamp_parse_failed_ratio >= 0.2:
+        warnings.append("timestamp_parse_low_confidence")
+    if uncategorized_ratio >= 0.8:
+        warnings.append("high_uncategorized_ratio")
+    if valid_watch_events and (idle_gap_capped_count + duration_default_estimated_count) / max(1, valid_watch_events) >= 0.3:
+        warnings.append("duration_estimation_low_confidence")
+
+    if "timestamp_parse_low_confidence" in warnings or "high_uncategorized_ratio" in warnings:
+        analysis_confidence = "low"
+    elif "duration_estimation_low_confidence" in warnings or timestamp_parse_failed_ratio >= 0.2 or uncategorized_ratio >= 0.7:
+        analysis_confidence = "medium"
+    else:
+        analysis_confidence = "high"
+
+    return {
+        "total_events": total_events,
+        "valid_watch_events": valid_watch_events,
+        "total_watch_events": valid_watch_events,
+        "timestamp_parse_failed_count": timestamp_parse_failed_count,
+        "timestamp_parse_failed_ratio": timestamp_parse_failed_ratio,
+        "ad_filtered_count": excluded_ad_count,
+        "excluded_ad_count": excluded_ad_count,
+        "ad_filter_policy": "conservative",
+        "uncategorized_count": uncategorized_count,
+        "uncategorized_ratio": uncategorized_ratio,
+        "metadata_category_used_count": metadata_category_used_count,
+        "categorized_by_metadata_count": metadata_category_used_count,
+        "local_rule_category_used_count": local_rule_category_used_count,
+        "categorized_by_local_rule_count": local_rule_category_used_count,
+        "categorized_as_unknown_count": uncategorized_count,
+        "idle_gap_capped_count": idle_gap_capped_count,
+        "duration_metadata_count": duration_metadata_count,
+        "duration_timeline_estimated_count": duration_timeline_estimated_count,
+        "duration_default_estimated_count": duration_default_estimated_count,
+        "analysis_confidence": analysis_confidence,
+        "warnings": sorted(set(warnings)),
+    }
+
+
 def apply_youtube_duration_metadata(events: List[Dict[str, Any]], mock_estimation_enabled: bool = False) -> Dict[str, int]:
     seen = set()
     video_ids = []
@@ -148,10 +264,23 @@ def apply_youtube_duration_metadata(events: List[Dict[str, Any]], mock_estimatio
         event["youtube_metadata_mock_used"] = bool(metadata.get("mock_used"))
         event["youtube_metadata_fallback_used"] = bool(metadata.get("fallback_used"))
 
+        # Copy category and tag metadata from YouTube API response to the event for categorization
+        if metadata.get("categoryId"):
+            event["categoryId"] = metadata["categoryId"]
+        if metadata.get("topicDetails"):
+            event["topicCategories"] = metadata["topicDetails"]
+        if metadata.get("tags"):
+            event["tags"] = metadata["tags"]
+
         duration_sec = metadata.get("duration_sec")
         if metadata.get("api_success") and duration_sec:
             event["metadata_duration_sec"] = duration_sec
             event["video_duration_sec"] = duration_sec
+            event["duration_estimation_method"] = "metadata"
+            event["estimated_duration_confidence"] = "high"
+            if isinstance(event.get("raw_item"), dict):
+                event["raw_item"]["duration_estimation_method"] = "metadata"
+                event["raw_item"]["estimated_duration_confidence"] = "high"
             if mock_estimation_enabled:
                 event["estimated_duration_sec"] = duration_sec
                 event["duration_confidence"] = "api"
@@ -168,27 +297,35 @@ def apply_youtube_duration_metadata(events: List[Dict[str, Any]], mock_estimatio
 
 
 def apply_timeline_duration_estimates(timed_events: List[tuple], mock_estimation_enabled: bool = False) -> None:
+    def mark_duration(event: Dict[str, Any], method: str, confidence: str) -> None:
+        event["duration_estimation_method"] = method
+        event["estimated_duration_confidence"] = confidence
+        if isinstance(event.get("raw_item"), dict):
+            event["raw_item"]["duration_estimation_method"] = method
+            event["raw_item"]["estimated_duration_confidence"] = confidence
+
     if not mock_estimation_enabled:
         for _, event in timed_events:
             event["timeline_gap_sec"] = None
-            event["estimated_duration_sec"] = None
-            event["duration_confidence"] = "unknown"
-            event["duration_source"] = "none"
-            event["duration_estimation_method"] = "unknown"
-            if "raw_item" in event and isinstance(event["raw_item"], dict):
-                event["raw_item"]["duration_estimation_method"] = "unknown"
+            if event.get("metadata_duration_sec"):
+                mark_duration(event, "metadata", "high")
+            else:
+                event["estimated_duration_sec"] = None
+                event["duration_confidence"] = "unknown"
+                event["duration_source"] = "none"
+                mark_duration(event, "unknown", "unknown")
         return
 
     max_gap_sec = DURATION_LIMITS["max_timeline_gap_sec"]
-    default_sec = DURATION_LIMITS["standard_default_sec"]
+    idle_threshold_sec = DURATION_LIMITS["idle_gap_threshold_sec"]
+    max_without_metadata_sec = DURATION_LIMITS["max_estimated_watch_sec_without_metadata"]
+    default_sec = DURATION_LIMITS["default_estimated_watch_sec"]
 
     timed_events.sort(key=lambda pair: pair[0])
     
     # Initialize all events with unknown method
     for _, event in timed_events:
-        event["duration_estimation_method"] = "unknown"
-        if "raw_item" in event and isinstance(event["raw_item"], dict):
-            event["raw_item"]["duration_estimation_method"] = "unknown"
+        mark_duration(event, "unknown", "unknown")
 
     for idx, (event_time, event) in enumerate(timed_events):
         if event["action_type"] != "view":
@@ -207,9 +344,7 @@ def apply_timeline_duration_estimates(timed_events: List[tuple], mock_estimation
 
         if metadata_duration:
             method = "metadata"
-            event["duration_estimation_method"] = method
-            if "raw_item" in event and isinstance(event["raw_item"], dict):
-                event["raw_item"]["duration_estimation_method"] = method
+            mark_duration(event, method, "high")
 
             if gap_sec is not None:
                 event["timeline_gap_sec"] = gap_sec
@@ -230,27 +365,28 @@ def apply_timeline_duration_estimates(timed_events: List[tuple], mock_estimation
         # No metadata duration, perform timeline estimation
         if gap_sec is not None:
             event["timeline_gap_sec"] = gap_sec
-            if gap_sec > 1800:
+            if gap_sec > idle_threshold_sec:
                 # 30 minutes exceed -> idle capped
-                event["estimated_duration_sec"] = 600  # DEFAULT_ESTIMATED_WATCH_SEC = 600
+                event["estimated_duration_sec"] = default_sec
                 event["duration_confidence"] = "estimated"
                 event["duration_source"] = "idle_capped"
                 method = "idle_capped"
+                confidence = "low"
             else:
                 # Under 30 minutes -> gap based (up to 1800 capped)
-                event["estimated_duration_sec"] = max(1, min(gap_sec, 1800))
+                event["estimated_duration_sec"] = max(1, min(gap_sec, max_without_metadata_sec))
                 event["duration_confidence"] = "estimated"
                 event["duration_source"] = "timeline_gap"
                 method = "timeline_gap"
+                confidence = "medium"
         else:
             event["estimated_duration_sec"] = default_sec
             event["duration_confidence"] = "estimated"
             event["duration_source"] = "default_estimate"
             method = "default_estimate"
+            confidence = "low"
 
-        event["duration_estimation_method"] = method
-        if "raw_item" in event and isinstance(event["raw_item"], dict):
-            event["raw_item"]["duration_estimation_method"] = method
+        mark_duration(event, method, confidence)
 
 
 def _apply_mvp_limits(analysis_events: List[Dict[str, Any]]) -> tuple:
@@ -395,8 +531,13 @@ class UploadService:
                 
             if timestamp_parse_failed:
                 fallback_used = True
-                
+
             is_view = parsed_res["action_type"] == "view"
+            raw_timestamp = parsed_res.get("raw_timestamp") or parsed_res.get("raw_time") or item.get("time") or ""
+            timestamp_parse_status = parsed_res.get("timestamp_parse_status") or ("failed" if timestamp_parse_failed else "parsed")
+            item["raw_timestamp"] = raw_timestamp
+            item["timestamp_parse_failed"] = timestamp_parse_failed
+            item["timestamp_parse_status"] = timestamp_parse_status
             
             url_for_class = parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl") or ""
             title_for_class = parsed_res["text_base"]
@@ -440,6 +581,7 @@ class UploadService:
                 "search_query": parsed_res.get("search_query") or item.get("search_query"),
                 "estimated_duration_sec": parsed_res["estimated_duration_sec"],
                 "duration_confidence": parsed_res["duration_confidence"],
+                "estimated_duration_confidence": parsed_res.get("estimated_duration_confidence", "unknown"),
                 "duration_source": "simulated" if is_view else parsed_res["duration_source"],
                 "is_duration_estimated": True if is_view else False,
                 "video_url": parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl"),
@@ -449,6 +591,8 @@ class UploadService:
                 "is_ad_event": bool(ad_reason),
                 "ad_filter_reason": ad_reason,
                 "raw_time": parsed_res.get("raw_time") or item.get("time") or "",
+                "raw_timestamp": raw_timestamp,
+                "timestamp_parse_status": timestamp_parse_status,
                 "is_shorts_candidate": is_shorts_cand,
                 "shorts_detection_reason": shorts_reason,
                 "classification_confidence": shorts_conf if is_shorts_cand else general_conf,
@@ -493,6 +637,7 @@ class UploadService:
         self.repository.save_norm_events(filtered_events)
 
         duration_unknown_used = any(e.get("time_delta_sec") is None and e.get("action_type") == "view" for e in filtered_events)
+        data_quality_summary = build_data_quality_summary(filtered_events, excluded_ad_count=len(excluded_ad_events))
         data_quality_flags = []
         if fallback_used:
             data_quality_flags.append("timestamp_fallback_used")
@@ -500,6 +645,8 @@ class UploadService:
             data_quality_flags.append("duration_unknown")
         if event_limit_applied:
             data_quality_flags.append("event_limit_applied")
+        data_quality_flags.extend(data_quality_summary.get("warnings", []))
+        data_quality_flags = sorted(set(data_quality_flags))
 
         raw_file_entry["upload_status"] = "SUCCESS"
         raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
@@ -514,6 +661,7 @@ class UploadService:
             "content_format_counts": content_format_counts,
             "duration_source_counts": duration_source_counts,
             "data_quality_flags": data_quality_flags,
+            "data_quality_summary": data_quality_summary,
             "event_limit_applied": event_limit_applied,
             "sampling_metadata": sampling_metadata
         }
@@ -549,6 +697,7 @@ class UploadService:
             "content_format_counts": content_format_counts,
             "shorts_analysis": shorts_analysis,
             "duration_source_counts": duration_source_counts,
+            "data_quality_summary": data_quality_summary,
             "data_quality": {
                 "duration": "estimated"
             },
@@ -655,6 +804,11 @@ class UploadService:
                 fallback_used = True
 
             is_view = parsed_res["action_type"] == "view"
+            raw_timestamp = parsed_res.get("raw_timestamp") or parsed_res.get("raw_time") or item.get("time") or ""
+            timestamp_parse_status = parsed_res.get("timestamp_parse_status") or ("failed" if timestamp_parse_failed else "parsed")
+            item["raw_timestamp"] = raw_timestamp
+            item["timestamp_parse_failed"] = timestamp_parse_failed
+            item["timestamp_parse_status"] = timestamp_parse_status
             
             url_for_class = parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl") or ""
             title_for_class = parsed_res["text_base"]
@@ -698,6 +852,7 @@ class UploadService:
                 "search_query": parsed_res.get("search_query") or item.get("search_query"),
                 "estimated_duration_sec": parsed_res["estimated_duration_sec"],
                 "duration_confidence": parsed_res["duration_confidence"],
+                "estimated_duration_confidence": parsed_res.get("estimated_duration_confidence", "unknown"),
                 "duration_source": "simulated" if is_view else parsed_res["duration_source"],
                 "is_duration_estimated": True if is_view else False,
                 "video_url": parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl"),
@@ -707,6 +862,8 @@ class UploadService:
                 "is_ad_event": bool(ad_reason),
                 "ad_filter_reason": ad_reason,
                 "raw_time": parsed_res.get("raw_time") or item.get("time") or "",
+                "raw_timestamp": raw_timestamp,
+                "timestamp_parse_status": timestamp_parse_status,
                 "is_shorts_candidate": is_shorts_cand,
                 "shorts_detection_reason": shorts_reason,
                 "classification_confidence": shorts_conf if is_shorts_cand else general_conf,
@@ -778,6 +935,7 @@ class UploadService:
             )
 
         duration_unknown_used = any(e.get("time_delta_sec") is None and e.get("action_type") == "view" for e in final_events)
+        data_quality_summary = build_data_quality_summary(final_events, excluded_ad_count=len(excluded_ad_events))
         data_quality_flags = []
         if fallback_used:
             data_quality_flags.append("timestamp_fallback_used")
@@ -785,6 +943,8 @@ class UploadService:
             data_quality_flags.append("duration_unknown")
         if event_limit_applied:
             data_quality_flags.append("event_limit_applied")
+        data_quality_flags.extend(data_quality_summary.get("warnings", []))
+        data_quality_flags = sorted(set(data_quality_flags))
 
         raw_file_entry["upload_status"] = "SUCCESS"
         raw_file_entry["excluded_ad_count"] = len(excluded_ad_events)
@@ -805,6 +965,7 @@ class UploadService:
             "content_format_counts": content_format_counts,
             "duration_source_counts": duration_source_counts,
             "data_quality_flags": data_quality_flags,
+            "data_quality_summary": data_quality_summary,
             "event_limit_applied": event_limit_applied,
             "sampling_metadata": sampling_metadata,
         }
@@ -888,6 +1049,7 @@ class UploadService:
             "content_format_counts": content_format_counts,
             "shorts_analysis": shorts_analysis,
             "duration_source_counts": duration_source_counts,
+            "data_quality_summary": data_quality_summary,
             "data_quality": {
                 "duration": "estimated"
             },

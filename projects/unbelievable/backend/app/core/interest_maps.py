@@ -27,7 +27,7 @@ INTEREST_RULES = [
     {"category": "스포츠", "subcategory": "골프", "keywords": ["골프", "golf", "스윙", "필드", "라운딩"]},
     {"category": "스포츠", "subcategory": "테니스", "keywords": ["테니스", "tennis", "라켓", "백핸드"]},
     {"category": "스포츠", "subcategory": "레저/낚시", "keywords": ["낚시", "fishing", "대어", "캠핑", "camping", "글램핑", "차박", "등산", "hiking", "클라이밍", "climbing"]},
-    {"category": "스포츠", "subcategory": "e스포츠", "keywords": ["e스포츠", "esports", "lck", "롤드컵", "t1", "faker", "페이커", "젠지", "geng", "담원", "디플러스", "dk"], "entities": ["T1", "페이커"]},
+    {"category": "게임", "subcategory": "e스포츠", "keywords": ["e스포츠", "esports", "lck", "롤드컵", "t1", "faker", "페이커", "젠지", "geng", "담원", "디플러스", "dk"], "entities": ["T1", "페이커"]},
     {"category": "게임", "subcategory": "롤", "keywords": ["리그오브레전드", "league of legends", "롤토체스", "롤체", "tft", "teamfighttactics", "전략적팀전투", "롤 ", "lol", "제라스", "사일러스", "바드", "룰루"]},
     {"category": "게임", "subcategory": "FPS", "keywords": ["콜오브듀티", "call of duty", "발로란트", "valorant", "오버워치", "overwatch", "fps", "배틀그라운드", "pubg"]},
     {"category": "게임", "subcategory": "콘솔게임", "keywords": ["닌텐도", "플스", "playstation", "xbox", "스팀 게임"]},
@@ -192,6 +192,7 @@ def _base_topic(
     entities: List[str] = None,
     source_group: str = "",
     secondary_tags: List[str] = None,
+    classification_source: str = "local_rule",
 ) -> Dict[str, Any]:
     return {
         "category": category,
@@ -203,6 +204,7 @@ def _base_topic(
         "secondary_tags": _dedupe(secondary_tags or []),
         "raw_text": raw_text,
         "raw_category": raw_category,
+        "classification_source": classification_source,
     }
 
 
@@ -215,10 +217,34 @@ def _topic_from_raw_category(raw_category: str, evidence_text: str, raw_text: st
         political_markers = ["뉴스", "정치", "시사", "국회", "정당", "선거", "사회", "mbc", "tv조선", "ytn"]
         lifestyle_markers = ["일상", "브이로그", "vlog", "루틴", "생활", "요리", "육아"]
         if any(marker in evidence_text for marker in political_markers):
-            return _base_topic("정치/사회", "기타 정치사회", "medium", raw_text, raw_category, [raw_category])
+            return _base_topic(
+                "정치/사회",
+                "기타 정치사회",
+                "medium",
+                raw_text,
+                raw_category,
+                [raw_category],
+                classification_source="metadata_raw_category",
+            )
         if any(marker in evidence_text for marker in lifestyle_markers):
-            return _base_topic("라이프스타일", "일상", "medium", raw_text, raw_category, [raw_category])
-        return _base_topic("기타/미분류", "미분류", "low", raw_text, raw_category, [raw_category])
+            return _base_topic(
+                "라이프스타일",
+                "일상",
+                "medium",
+                raw_text,
+                raw_category,
+                [raw_category],
+                classification_source="metadata_raw_category",
+            )
+        return _base_topic(
+            "기타/미분류",
+            "미분류",
+            "low",
+            raw_text,
+            raw_category,
+            [raw_category],
+            classification_source="unknown",
+        )
 
     mapped = RAW_CATEGORY_MAP.get(raw_lower)
     if not mapped:
@@ -232,6 +258,7 @@ def _topic_from_raw_category(raw_category: str, evidence_text: str, raw_text: st
         raw_text,
         raw_category,
         [raw_category],
+        classification_source="metadata_raw_category",
     )
 
 
@@ -246,7 +273,15 @@ def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str
     cat_id = str(item.get("categoryId") or "").strip()
     if cat_id in YOUTUBE_CATEGORY_MAP:
         major, minor = YOUTUBE_CATEGORY_MAP[cat_id]
-        return _base_topic(major, minor, "high", raw, raw_cat, ["categoryId:" + cat_id])
+        return _base_topic(
+            major,
+            minor,
+            "high",
+            raw,
+            raw_cat,
+            ["categoryId:" + cat_id],
+            classification_source="metadata_category_id",
+        )
 
     topic_categories = item.get("topicCategories") or []
     if isinstance(topic_categories, list) and topic_categories:
@@ -257,7 +292,15 @@ def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str
                 keywords = rule.get("keywords", [])
                 matched = [keyword for keyword in keywords if _keyword_matches(topic_name, keyword)]
                 if matched:
-                    return _base_topic(rule["category"], rule["subcategory"], "high", raw, raw_cat, matched, matched_keywords=matched)
+                    return _base_topic(
+                        rule["category"],
+                        rule["subcategory"],
+                        "high",
+                        raw,
+                        raw_cat,
+                        matched_keywords=matched,
+                        classification_source="metadata_topic_category",
+                    )
 
     # 1. Pre-processing: Extract bracket contents
     brackets_content = re.findall(r'\[([^\]]+)\]|\(([^)]+)\)', raw)
@@ -282,7 +325,8 @@ def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str
     
     # Check broad keywords before style filtering
     BROAD_KEYWORDS = {"추천", "리뷰", "비교", "가격"}
-    original_evidence = " ".join(part for part in [clean_raw, channel.lower(), raw_cat.lower()] if part)
+    bracket_text = " ".join(bracket_words)
+    original_evidence = " ".join(part for part in [clean_raw, bracket_text, channel.lower(), raw_cat.lower()] if part)
     detected_broad = [kw for kw in BROAD_KEYWORDS if kw in original_evidence]
 
     evidence_text = original_evidence
@@ -338,6 +382,7 @@ def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str
             entities=entities,
             source_group=matched_rule.get("source_group", ""),
             secondary_tags=secondary_tags,
+            classification_source="local_rule",
         )
 
     # 4. YouTube Category Mapping Fallback
@@ -347,7 +392,15 @@ def classify_interest_topic(text: Any, raw_category: str = "", channel_name: str
         raw_topic["secondary_tags"] = _dedupe(raw_topic["secondary_tags"] + detected_styles + bracket_words + detected_broad)
         return raw_topic
 
-    return _base_topic("기타/미분류", "미분류", "low", raw, raw_cat, secondary_tags=detected_styles + bracket_words + detected_broad)
+    return _base_topic(
+        "기타/미분류",
+        "미분류",
+        "low",
+        raw,
+        raw_cat,
+        secondary_tags=detected_styles + bracket_words + detected_broad,
+        classification_source="unknown",
+    )
 
 
 def extract_search_query(event: Dict[str, Any], raw_text: str = "") -> Optional[str]:

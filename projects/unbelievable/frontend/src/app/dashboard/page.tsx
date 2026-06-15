@@ -419,7 +419,12 @@ function InterestNetworkGraph({
   const graphData = useMemo(() => buildInterestGraphData(label, map, tone), [label, map, tone]);
   const [nodes, setNodes] = useState<InterestGraphNode[]>([]);
   const [selectedNode, setSelectedNode] = useState<InterestGraphNode | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const nodesRef = useRef<InterestGraphNode[]>([]);
+
+  useEffect(() => {
+    setShowDetails(false);
+  }, [selectedNode]);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragNodeRef = useRef<number | null>(null);
   const width = 900;
@@ -579,6 +584,23 @@ function InterestNetworkGraph({
 
   const usedGroups = Array.from(new Set(nodes.filter((node) => node.depth > 0).map((node) => node.group)));
   const selectedMeta = selectedNode?.meta || {};
+  const allRawItems = useMemo(() => {
+    if (!selectedNode) return [];
+    if (selectedNode.depth === 2) {
+      return selectedMeta.raw_items || [];
+    }
+    if (selectedNode.depth === 1) {
+      const items: string[] = [];
+      const subs = selectedMeta.subcategories || [];
+      subs.forEach((sub: any) => {
+        if (Array.isArray(sub.raw_items)) {
+          items.push(...sub.raw_items);
+        }
+      });
+      return items;
+    }
+    return [];
+  }, [selectedNode, selectedMeta]);
   const coverage = map?.classification_coverage || {};
   const classifiedRatio = Math.round(Number(coverage.classified_ratio || 0));
   const unclassifiedCount = Number(coverage.unclassified_count || 0);
@@ -695,21 +717,43 @@ function InterestNetworkGraph({
           <div className="mt-3 rounded-2xl border border-slate-100 bg-[#fbfaf7] px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-black text-slate-900">{selectedMeta.name || selectedNode?.label?.replace("\n", " ") || "대표 관심사"}</p>
-              {selectedMeta.ratio !== undefined && (
-                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">
-                  {Math.round(Number(selectedMeta.ratio || 0))}%
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {allRawItems.length > 0 && (
+                  <button
+                    onClick={() => setShowDetails(!showDetails)}
+                    className="text-[10px] font-black text-teal-600 hover:text-teal-700 bg-white hover:bg-slate-50 border border-slate-100 rounded-full px-2 py-1 transition-colors duration-150 shadow-sm"
+                  >
+                    {showDetails ? "세부 내용 접기" : `세부 내용 확인하기 (${allRawItems.length}건)`}
+                  </button>
+                )}
+                {selectedMeta.ratio !== undefined && (
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 shadow-sm">
+                    {Math.round(Number(selectedMeta.ratio || 0))}%
+                  </span>
+                )}
+              </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
               {(selectedMeta.entities || []).slice(0, 4).map((entity: string) => (
                 <span key={entity} className="rounded-full bg-white px-2 py-1">{entity}</span>
               ))}
-              {(selectedMeta.raw_items || []).slice(0, 3).map((item: string) => (
+              {allRawItems.slice(0, 3).map((item: string) => (
                 <span key={item} className="rounded-full bg-white px-2 py-1">{shortLabel(item, 18)}</span>
               ))}
               {selectedMeta.confidence && <span className="rounded-full bg-white px-2 py-1">신뢰도: {formatConfidence(selectedMeta.confidence)}</span>}
             </div>
+            {showDetails && allRawItems.length > 0 && (
+              <div className="mt-3 max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 text-[11px] text-slate-700 shadow-inner scrollbar-thin">
+                <div className="flex flex-col gap-1.5">
+                  {allRawItems.map((item: string, idx: number) => (
+                    <div key={idx} className="flex items-start gap-1.5 border-b border-slate-50 pb-1 last:border-0 last:pb-0">
+                      <span className="font-bold text-slate-400 min-w-[16px] text-right">{idx + 1}.</span>
+                      <span className="flex-1 break-all text-left">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -1042,17 +1086,18 @@ function DashboardContent() {
           const flags = processedData.data_quality_flags || [];
           const exceptionCodes = processedData.exception_codes || [];
           const dqs = processedData.data_quality_summary || processedData.analysis_debug || {};
-          const hasWatchHistory = dqs.total_watch_events > 0;
+          const watchEventCount = dqs.valid_watch_events ?? dqs.total_watch_events ?? 0;
+          const hasWatchHistory = watchEventCount > 0;
           const standardVideoCount = standardVideoInterestMap?.total_video_count ?? 0;
 
-          const uncategorizedRatio = dqs.uncategorized_ratio ?? dqs.category_missing_ratio ?? (dqs.total_watch_events ? dqs.category_missing_events / dqs.total_watch_events : 0);
+          const uncategorizedRatio = dqs.uncategorized_ratio ?? dqs.category_missing_ratio ?? (watchEventCount ? dqs.category_missing_events / watchEventCount : 0);
           if (hasWatchHistory && uncategorizedRatio >= 0.7) {
             warningsList.push({
               title: "카테고리 정보 부족 및 추정 분류",
               desc: "일부 콘텐츠의 카테고리 정보가 부족하여 로컬 키워드 기반으로 추정했습니다. ‘기타/미분류’ 비율이 높을 경우 주제 다양성 점수는 참고용으로 해석해야 합니다.",
               isConfidenceLow: true
             });
-          } else if (hasWatchHistory && (standardVideoCount === 0 || (dqs.category_missing_events && dqs.category_missing_events / dqs.total_watch_events >= 0.7))) {
+          } else if (hasWatchHistory && (standardVideoCount === 0 || (dqs.category_missing_events && dqs.category_missing_events / watchEventCount >= 0.7))) {
             warningsList.push({
               title: "추정 기반 일반 시청 분석",
               desc: "시청 기록은 확인되었지만, 카테고리/영상 길이 정보가 부족하여 Takeout 기반 추정 분류로 표시합니다.",
@@ -1060,7 +1105,7 @@ function DashboardContent() {
             });
           }
 
-          const timestampFailedRatio = dqs.timestamp_parse_failed_ratio ?? (dqs.total_watch_events ? dqs.timestamp_parse_failed_count / dqs.total_watch_events : 0);
+          const timestampFailedRatio = dqs.timestamp_parse_failed_ratio ?? (dqs.total_events ? dqs.timestamp_parse_failed_count / dqs.total_events : 0);
           if (hasWatchHistory && timestampFailedRatio >= 0.20) {
             warningsList.push({
               title: "타임스탬프 해석 제한 안내",
@@ -1069,7 +1114,8 @@ function DashboardContent() {
             });
           }
 
-          if (dqs.duration_method_idle_capped_count > 0) {
+          const idleCappedCount = dqs.idle_gap_capped_count ?? dqs.duration_method_idle_capped_count ?? 0;
+          if (idleCappedCount > 0) {
             warningsList.push({
               title: "체류 시간 긴 공백 보정(Idle Capping) 적용",
               desc: "긴 공백 시간은 자리 비움 가능성으로 보고 체류 시간 계산에서 보정했습니다.",
@@ -1091,7 +1137,7 @@ function DashboardContent() {
             });
           }
 
-          if (!hasWatchHistory && dqs.total_watch_events !== undefined) {
+          if (!hasWatchHistory && (dqs.valid_watch_events !== undefined || dqs.total_watch_events !== undefined)) {
             warningsList.push({
               title: "시청 기록 누락",
               desc: "이번 업로드에서 시청 기록을 찾지 못했습니다.",
@@ -1114,8 +1160,8 @@ function DashboardContent() {
 
           if (flags.includes("timestamp_fallback_used")) {
             warningsList.push({
-              title: "타임스탬프 자동 보정 적용",
-              desc: "일부 시청 기록의 시간 순서가 온전하지 않아 타임스탬프 오류를 자동으로 보정하여 분석을 완료했습니다. 점수 계산의 선후관계 파악에 참고용으로 사용되었습니다.",
+              title: "타임스탬프 해석 실패 기록 분리",
+              desc: "일부 시청 기록의 날짜 형식을 해석하지 못해 해당 이벤트는 시간 기반 세션/체류 시간 계산에서 제한적으로만 참고했습니다.",
               isConfidenceLow: false
             });
           }

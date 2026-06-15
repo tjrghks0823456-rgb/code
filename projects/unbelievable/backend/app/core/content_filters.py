@@ -36,7 +36,6 @@ AD_URL_MARKERS = [
     "dclid=",
     "gbraid=",
     "wbraid=",
-    "cid=",
 ]
 
 AD_TEXT_MARKERS = [
@@ -449,6 +448,41 @@ def detect_content_format(url: str = "", title: str = "", raw_item: Optional[Dic
     return "unknown"
 
 
+def detect_ad_by_url(url: str) -> Optional[str]:
+    """Return a URL-based ad reason for clear ad/redirect domains only."""
+    url_text = _lower(url)
+    if not url_text:
+        return None
+    for marker in AD_URL_MARKERS:
+        if marker in url_text:
+            return f"url_marker:{marker}"
+    return None
+
+
+def detect_ad_by_text(text: str, action_type: str = "", metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Conservative text ad detector used only for search or explicit ad metadata."""
+    text_value = _lower(text)
+    metadata_text = " ".join(_flatten_strings(metadata or {})).lower()
+    has_explicit_ad_metadata = any(marker in metadata_text for marker in AD_DETAIL_MARKERS)
+    is_search = _lower(action_type) == "search"
+
+    if not text_value or (not is_search and not has_explicit_ad_metadata):
+        return None
+
+    for marker in AD_DETAIL_MARKERS:
+        if marker in metadata_text or marker in text_value:
+            return f"detail_marker:{marker}"
+    for marker in AD_TEXT_MARKERS:
+        if marker in text_value:
+            return f"text_marker:{marker}"
+    return None
+
+
+def should_exclude_as_ad(record: Dict[str, Any]) -> bool:
+    """Boolean wrapper for call sites/tests that only need the exclusion decision."""
+    return detect_ad_event_reason(record) is not None
+
+
 def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
     if not isinstance(record, dict):
         return None
@@ -471,9 +505,9 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
             "channelUrl": record.get("channelUrl"),
         })
     ).lower()
-    for marker in AD_URL_MARKERS:
-        if marker in url_text:
-            return f"url_marker:{marker}"
+    url_reason = detect_ad_by_url(url_text)
+    if url_reason:
+        return url_reason
 
     # 2. Check explicitly scoped ad detail markers for views
     details = {
@@ -503,15 +537,12 @@ def detect_ad_event_reason(record: Dict[str, Any]) -> Optional[str]:
             return f"detail_marker:{marker}"
 
     flattened = " ".join(_flatten_strings(record)).lower()
-    for marker in AD_URL_MARKERS:
-        if marker in flattened:
-            return f"url_marker:{marker}"
     for marker in AD_DETAIL_MARKERS:
         if marker in flattened:
             return f"detail_marker:{marker}"
-    for marker in AD_TEXT_MARKERS:
-        if marker in flattened:
-            return f"text_marker:{marker}"
+    text_reason = detect_ad_by_text(flattened, action_type=action_type, metadata=details_extended)
+    if text_reason:
+        return text_reason
 
     if action_type == "search" or source_type == "search_history":
         search_text = (

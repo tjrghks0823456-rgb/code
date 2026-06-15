@@ -197,11 +197,13 @@ def parse_single_item(raw_item: Dict[str, Any], file_kind: str = "watch", mock_e
     estimated_duration_sec = None
     duration_confidence = "unknown"
     duration_source = "none"
+    estimated_duration_confidence = "unknown"
 
     if mock_estimation_enabled and action_type == "view":
         is_short = "/shorts/" in title_url or "youtube.com/shorts" in title_url
         estimated_duration_sec = 30 if is_short else 600
         duration_confidence = "medium" if is_short else "low"
+        estimated_duration_confidence = duration_confidence
         duration_source = "mock_heuristic"
     elif action_type == "view":
         # When mock is disabled, we set duration_confidence to 'unknown' and wait for YouTube API / timeline logic.
@@ -214,7 +216,9 @@ def parse_single_item(raw_item: Dict[str, Any], file_kind: str = "watch", mock_e
         "action_type": action_type,
         "event_time": event_time,
         "raw_time": raw_time,
+        "raw_timestamp": raw_time,
         "timestamp_parse_failed": timestamp_parse_failed,
+        "timestamp_parse_status": "missing" if not raw_time else ("failed" if timestamp_parse_failed else "parsed"),
         "title_url": title_url or None,
         "video_id": video_id,
         "channel_name": channel_name,
@@ -223,6 +227,7 @@ def parse_single_item(raw_item: Dict[str, Any], file_kind: str = "watch", mock_e
         "time_delta_sec": time_delta_sec,
         "estimated_duration_sec": estimated_duration_sec,
         "duration_confidence": duration_confidence,
+        "estimated_duration_confidence": estimated_duration_confidence,
         "duration_source": duration_source,
         "mock_estimation_used": mock_estimation_enabled,
         "raw_item": raw_item
