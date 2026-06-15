@@ -12,6 +12,7 @@ from app.core.scoring import compute_6axis_score_details, classify_16_type
 from app.core.shorts_analysis import build_overall_risk
 from app.core.local_category_screening import estimate_local_category
 from app.repositories.analysis_repository import AnalysisRepository
+from app.services.upload_service import build_data_quality_summary
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,24 @@ class AnalysisService:
             "content_format_counts": raw_file.get("content_format_counts", {}),
             "duration_source_counts": raw_file.get("duration_source_counts", {}),
         }
+        raw_data_coverage = raw_file.get("data_coverage") or {}
+        upload_quality_summary = raw_data_coverage.get("data_quality_summary") or {}
+        analysis_quality_summary = build_data_quality_summary(
+            analysis_events,
+            excluded_ad_count=excluded_ad_count,
+        )
+        quality_warnings = sorted(set(
+            list(upload_quality_summary.get("warnings") or [])
+            + list(analysis_quality_summary.get("warnings") or [])
+        ))
+        data_quality_summary = {
+            **analysis_quality_summary,
+            **upload_quality_summary,
+            "excluded_ad_count": excluded_ad_count,
+            "ad_filtered_count": excluded_ad_count,
+            "warnings": quality_warnings,
+        }
+        data_coverage["data_quality_summary"] = data_quality_summary
         
         total_session_count = len(sessions)
         sampled_session_count = len(selected_sessions)
@@ -249,11 +268,13 @@ class AnalysisService:
         
         upload_flags = raw_file.get("data_quality_flags") or raw_file.get("data_coverage", {}).get("data_quality_flags") or []
         data_quality_flags = list(upload_flags)
+        data_quality_flags.extend(data_quality_summary.get("warnings", []))
         if len(nlp_results) < sampled_session_count:
             if len(nlp_results) == 0:
                 data_quality_flags.append("nlp_api_all_failed")
             else:
                 data_quality_flags.append("nlp_api_partial_failure")
+        data_quality_flags = sorted(set(data_quality_flags))
 
         sampling_metadata = {
             "total_session_count": total_session_count,
@@ -346,6 +367,7 @@ class AnalysisService:
             },
             "excluded_ad_count": excluded_ad_count,
             "data_coverage": data_coverage,
+            "data_quality_summary": data_quality_summary,
             "exception_codes": exception_codes,
             "analysis_warnings": analysis_warnings + score_quality_warnings,
             "total_session_count": total_session_count,
