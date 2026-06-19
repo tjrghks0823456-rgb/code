@@ -516,7 +516,20 @@ export default function UploadPage() {
                 </div>
               )}
 
-              <Button type="button" className="w-full" icon={<ArrowRight size={18} />} onClick={handleConsentNext}>
+              {!agreed && (
+                <p className="text-center text-xs font-bold leading-5 text-slate-500">
+                  개인정보 안내를 확인하고 동의하면 다음 단계로 이동할 수 있어요.
+                </p>
+              )}
+
+              <Button
+                type="button"
+                className="w-full"
+                tone={agreed ? "primary" : "secondary"}
+                icon={<ArrowRight size={18} />}
+                disabled={!agreed}
+                onClick={handleConsentNext}
+              >
                 시청 기록 선택하기
               </Button>
             </div>
