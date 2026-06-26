@@ -122,6 +122,26 @@ def assert_timeline_gap_capping():
     assert short_gap["estimated_duration_confidence"] == "medium"
 
 
+def assert_duration_flags_match_mock_mode():
+    non_mock_event = {
+        "action_type": "view",
+        "source_type": "watch_history",
+        "estimated_duration_sec": 600,
+        "duration_source": "simulated",
+        "duration_confidence": "estimated",
+        "is_duration_estimated": True,
+        "raw_item": {},
+    }
+    apply_timeline_duration_estimates(
+        [(datetime(2026, 6, 8, 8, 0, 0), non_mock_event)],
+        mock_estimation_enabled=False,
+    )
+    assert non_mock_event["estimated_duration_sec"] is None
+    assert non_mock_event["duration_source"] == "none"
+    assert non_mock_event["is_duration_estimated"] is False
+    assert non_mock_event["raw_item"]["is_duration_estimated"] is False
+
+
 def assert_data_quality_summary():
     events = []
     for idx in range(8):
@@ -159,6 +179,7 @@ def run_tests():
     assert_ad_filter_guards()
     assert_category_metadata_fallbacks()
     assert_timeline_gap_capping()
+    assert_duration_flags_match_mock_mode()
     assert_data_quality_summary()
     print("SUCCESS: Takeout quality guard tests passed.")
 

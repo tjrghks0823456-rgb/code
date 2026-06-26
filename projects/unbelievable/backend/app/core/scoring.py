@@ -169,7 +169,7 @@ def calculate_scores_v2(
             
     uas_status = {
         "search_ratio": "used" if search_ratio is not None else "missing",
-        "direct_selection_ratio": "missing",
+        "direct_selection_ratio": "used" if direct_selection_ratio is not None else "missing",
         "curation_ratio": "used" if features.get("curation_ratio") is not None else "missing",
         "participation_ratio": "used" if features.get("participation_ratio") is not None else "missing"
     }

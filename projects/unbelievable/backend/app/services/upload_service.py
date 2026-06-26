@@ -78,6 +78,42 @@ def infer_source_type(item: Dict[str, Any]) -> str:
     return "unknown"
 
 
+def set_duration_estimated(event: Dict[str, Any], is_estimated: bool) -> None:
+    """Keep top-level and raw duration flags aligned for scoring and dashboard use."""
+    event["is_duration_estimated"] = is_estimated
+    if isinstance(event.get("raw_item"), dict):
+        event["raw_item"]["is_duration_estimated"] = is_estimated
+
+
+def build_initial_duration_fields(parsed_res: Dict[str, Any], is_view: bool, mock_estimation: bool) -> Dict[str, Any]:
+    """Create the initial duration contract before metadata and timeline enrichment."""
+    if not is_view:
+        return {
+            "estimated_duration_sec": parsed_res["estimated_duration_sec"],
+            "duration_confidence": parsed_res["duration_confidence"],
+            "estimated_duration_confidence": parsed_res.get("estimated_duration_confidence", "unknown"),
+            "duration_source": parsed_res["duration_source"],
+            "is_duration_estimated": False,
+        }
+
+    if not mock_estimation:
+        return {
+            "estimated_duration_sec": None,
+            "duration_confidence": "unknown",
+            "estimated_duration_confidence": "unknown",
+            "duration_source": "none",
+            "is_duration_estimated": False,
+        }
+
+    return {
+        "estimated_duration_sec": parsed_res["estimated_duration_sec"],
+        "duration_confidence": parsed_res["duration_confidence"],
+        "estimated_duration_confidence": parsed_res.get("estimated_duration_confidence", "unknown"),
+        "duration_source": parsed_res["duration_source"],
+        "is_duration_estimated": parsed_res.get("estimated_duration_sec") is not None,
+    }
+
+
 def count_duration_sources(events: List[Dict[str, Any]]) -> Dict[str, int]:
     counts: Dict[str, int] = {}
     for event in events:
@@ -285,10 +321,12 @@ def apply_youtube_duration_metadata(events: List[Dict[str, Any]], mock_estimatio
                 event["estimated_duration_sec"] = duration_sec
                 event["duration_confidence"] = "api"
                 event["duration_source"] = "youtube_api"
+                set_duration_estimated(event, True)
             else:
                 event["estimated_duration_sec"] = None
                 event["duration_confidence"] = "unknown"
                 event["duration_source"] = "none"
+                set_duration_estimated(event, False)
         elif duration_sec:
             event["video_duration_sec"] = duration_sec
             event["mock_metadata_duration_sec"] = duration_sec
@@ -307,6 +345,7 @@ def apply_timeline_duration_estimates(timed_events: List[tuple], mock_estimation
     if not mock_estimation_enabled:
         for _, event in timed_events:
             event["timeline_gap_sec"] = None
+            set_duration_estimated(event, False)
             if event.get("metadata_duration_sec"):
                 mark_duration(event, "metadata", "high")
             else:
@@ -345,6 +384,7 @@ def apply_timeline_duration_estimates(timed_events: List[tuple], mock_estimation
         if metadata_duration:
             method = "metadata"
             mark_duration(event, method, "high")
+            set_duration_estimated(event, True)
 
             if gap_sec is not None:
                 event["timeline_gap_sec"] = gap_sec
@@ -387,6 +427,7 @@ def apply_timeline_duration_estimates(timed_events: List[tuple], mock_estimation
             confidence = "low"
 
         mark_duration(event, method, confidence)
+        set_duration_estimated(event, True)
 
 
 def _apply_mvp_limits(analysis_events: List[Dict[str, Any]]) -> tuple:
@@ -560,6 +601,8 @@ class UploadService:
             if is_general_cand and parsed_res.get("time_delta_sec") is None:
                 takeout_based_estimation = True
 
+            duration_fields = build_initial_duration_fields(parsed_res, is_view, mock_estimation)
+
             parsed_events.append({
                 "id": str(uuid.uuid4()),
                 "file_id": file_id,
@@ -579,11 +622,7 @@ class UploadService:
                 "content_format": parsed_res.get("content_format") or classify_content_format(parsed_res),
                 "intent_level": parsed_res.get("intent_level") or ("active_search" if parsed_res["action_type"] == "search" else "unknown"),
                 "search_query": parsed_res.get("search_query") or item.get("search_query"),
-                "estimated_duration_sec": parsed_res["estimated_duration_sec"],
-                "duration_confidence": parsed_res["duration_confidence"],
-                "estimated_duration_confidence": parsed_res.get("estimated_duration_confidence", "unknown"),
-                "duration_source": "simulated" if is_view else parsed_res["duration_source"],
-                "is_duration_estimated": True if is_view else False,
+                **duration_fields,
                 "video_url": parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl"),
                 "tags": item.get("tags") or [],
                 "topicCategories": item.get("topicCategories") or [],
@@ -831,6 +870,8 @@ class UploadService:
             if is_general_cand and parsed_res.get("time_delta_sec") is None:
                 takeout_based_estimation = True
 
+            duration_fields = build_initial_duration_fields(parsed_res, is_view, mock_estimation)
+
             parsed_events.append({
                 "id": str(uuid.uuid4()),
                 "file_id": file_id,
@@ -850,11 +891,7 @@ class UploadService:
                 "content_format": parsed_res.get("content_format") or classify_content_format(parsed_res),
                 "intent_level": item.get("intent_level") or ("active_search" if parsed_res["action_type"] == "search" else "unknown"),
                 "search_query": parsed_res.get("search_query") or item.get("search_query"),
-                "estimated_duration_sec": parsed_res["estimated_duration_sec"],
-                "duration_confidence": parsed_res["duration_confidence"],
-                "estimated_duration_confidence": parsed_res.get("estimated_duration_confidence", "unknown"),
-                "duration_source": "simulated" if is_view else parsed_res["duration_source"],
-                "is_duration_estimated": True if is_view else False,
+                **duration_fields,
                 "video_url": parsed_res["title_url"] or item.get("title_url") or item.get("url") or item.get("titleUrl"),
                 "tags": item.get("tags") or [],
                 "topicCategories": item.get("topicCategories") or [],

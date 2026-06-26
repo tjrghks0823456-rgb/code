@@ -200,7 +200,7 @@ def normalize_event(event: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         "duration_sec": duration_sec,
         "duration_confidence": _duration_confidence_value(duration_label),
         "duration_confidence_label": _lower(duration_label) or "unknown",
-        "is_estimated_duration": actual_duration is None and estimated_duration is not None,
+        "is_estimated_duration": bool(event.get("is_duration_estimated")) or (actual_duration is None and estimated_duration is not None),
         "is_short": is_short,
         "is_shorts_candidate": bool(is_shorts_cand),
         "shorts_detection_reason": shorts_reason or "unknown",
