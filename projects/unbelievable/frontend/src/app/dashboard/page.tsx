@@ -807,6 +807,80 @@ function DashboardDisclosure({
   );
 }
 
+// Keep the default dashboard focused on the user's result and next action.
+function QuickResultHero({
+  actualCode,
+  title,
+  summary,
+  riskScore,
+  userAgency,
+  diversity,
+  dataQuality,
+  missionHint,
+  generatingPlan,
+  onStartMission
+}: {
+  actualCode: string;
+  title: string;
+  summary: string;
+  riskScore: number;
+  userAgency: number;
+  diversity: number;
+  dataQuality: string;
+  missionHint: string;
+  generatingPlan: boolean;
+  onStartMission: () => void;
+}) {
+  const riskTone = riskScore >= 60 ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-800";
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-stretch">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-teal-700">요약 결과</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <span className="rounded-2xl bg-slate-950 px-4 py-2 text-2xl font-black text-white">{actualCode}</span>
+            <h1 className="text-2xl font-black tracking-normal text-slate-950 md:text-4xl">{title}</h1>
+          </div>
+          <p className="mt-4 max-w-2xl text-base font-semibold leading-7 text-slate-600">
+            {summary}
+          </p>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className={["rounded-2xl border px-4 py-3", riskTone].join(" ")}>
+              <p className="text-[11px] font-black uppercase tracking-[0.12em] opacity-70">핵심 위험</p>
+              <p className="mt-1 text-xl font-black">{riskScore}점</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3 text-slate-800">
+              <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">사용자 주도성</p>
+              <p className="mt-1 text-xl font-black">{userAgency}%</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] px-4 py-3 text-slate-800">
+              <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">관심 다양성</p>
+              <p className="mt-1 text-xl font-black">{diversity}점</p>
+            </div>
+          </div>
+
+          <div className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
+            데이터 신뢰도: {dataQuality}
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-between rounded-2xl border border-teal-100 bg-teal-50 p-5">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-teal-700">오늘 할 일</p>
+            <h2 className="mt-2 text-xl font-black text-slate-950">추천 피드에서 한 걸음 벗어나기</h2>
+            <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{missionHint}</p>
+          </div>
+          <Button type="button" className="mt-6 w-full" icon={<ArrowRight size={18} />} disabled={generatingPlan} onClick={onStartMission}>
+            {generatingPlan ? "미션 생성 중" : "미션 시작하기"}
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1054,8 +1128,11 @@ function DashboardContent() {
       description: shortsCount > 0
         ? `이번 데이터에서 숏츠 ${shortsCount}개가 감지되었습니다. 짧은 영상은 별도 흐름으로 보고 쉬는 구간을 만들어보세요.`
         : "이번 Takeout에서는 /shorts/ URL 기준 숏츠가 거의 감지되지 않았습니다. 일반 영상 분석은 그대로 유지됩니다."
-    }
+      }
   ];
+  const quickSummary = processedData.actual_dsao?.short_summary || actualCharacter.shortDescription || "YouTube 시청 기록을 바탕으로 현재 미디어 소비 경향을 요약했습니다.";
+  const quickMissionHint = interestAiSummary.next_action_hint || processedData.actual_dsao?.recommended_detox_direction || "오늘은 평소 추천 피드에서 자주 보지 않던 주제를 직접 검색해 보세요.";
+  const quickDataQuality = processedData.overall_confidence || processedData.data_quality?.duration || "보통";
 
   return (
     <PageShell active="dashboard">
@@ -1240,6 +1317,24 @@ function DashboardContent() {
           );
         })()}
 
+        <QuickResultHero
+          actualCode={actualCode}
+          title={processedData.actual_dsao?.name || actualCharacter.characterName}
+          summary={quickSummary}
+          riskScore={riskScore}
+          userAgency={userAgency}
+          diversity={diversity}
+          dataQuality={formatConfidence(quickDataQuality)}
+          missionHint={quickMissionHint}
+          generatingPlan={generatingPlan}
+          onStartMission={handleStartDetox}
+        />
+
+        <DashboardDisclosure
+          eyebrow="detailed report"
+          title="상세 분석 보기"
+          summary="차트, 축별 점수, 관심사 지도, 계산 근거는 기본 화면에서 접어 두고 필요할 때만 확인합니다."
+        >
         <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <SectionTitle
             eyebrow="analysis report"
@@ -2161,7 +2256,13 @@ function DashboardContent() {
             })}
           </div>
         </section>
+        </DashboardDisclosure>
 
+        <DashboardDisclosure
+          eyebrow="data reliability"
+          title="데이터 품질과 기술 정보"
+          summary="Takeout 한계, 제외된 지표, 파이프라인 정보는 검토가 필요할 때만 펼쳐 봅니다."
+        >
         <section className="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 text-slate-900 shadow-sm transition-all duration-300">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -2326,6 +2427,7 @@ function DashboardContent() {
             </div>
           )}
         </section>
+        </DashboardDisclosure>
       </div>
     </PageShell>
   );
