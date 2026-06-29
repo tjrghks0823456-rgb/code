@@ -48,7 +48,8 @@ class AnalysisService:
             selected_sessions = sessions
         else:
             strategy_name = "blended_oldest_newest_middle_longest_search"
-            sessions_sorted = sorted(sessions, key=lambda s: s.get("start_time", ""))
+            # Some Takeout-derived session rows may have null times; keep sorting stable.
+            sessions_sorted = sorted(sessions, key=lambda s: s.get("start_time") or "")
             total = len(sessions_sorted)
             
             selected_indices = set()
@@ -116,10 +117,14 @@ class AnalysisService:
 
             sess_start = session.get("start_time")
             sess_end = session.get("end_time")
-            session_events = [
-                e for e in analysis_events
-                if e.get("event_time") and sess_start <= e["event_time"] <= sess_end
-            ]
+            if sess_start and sess_end:
+                session_events = [
+                    e for e in analysis_events
+                    if e.get("event_time") and sess_start <= e["event_time"] <= sess_end
+                ]
+            else:
+                # Missing session bounds should not block text-only NLP analysis.
+                session_events = []
 
             session_payload = {
                 "session_text": truncated_text,
