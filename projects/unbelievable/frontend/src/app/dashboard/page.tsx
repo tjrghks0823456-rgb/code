@@ -19,6 +19,19 @@ type SearchKeyword = { keyword: string; count: number; category?: string };
 type InterestSubcategory = { name?: string; ratio?: number; value?: number; entities?: string[]; raw_items?: string[]; confidence?: string };
 type InterestCategory = { category?: string; name?: string; value?: number; ratio?: number; count?: number; subcategories?: InterestSubcategory[] };
 
+type ProgressSnapshot = {
+  runId: string;
+  createdAt: string;
+  dsaoCode: string;
+  dsaoName: string;
+  riskScore: number;
+  detoxRisk: number;
+  shortsRisk: number;
+  diversity: number;
+  userAgency: number;
+  interestMismatchScore: number;
+};
+
 interface ScoreComponent {
   name: string;
   label?: string;
@@ -244,6 +257,150 @@ function axisSummary(code?: string) {
     value.includes("M") ? "안정 정보" : "강한 자극",
     value.includes("L") ? "롱폼 몰입" : "숏폼 속도"
   ];
+}
+
+const PROGRESS_HISTORY_KEY = "unbelievable_progress_snapshots";
+
+function readProgressHistory(): ProgressSnapshot[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PROGRESS_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveProgressSnapshot(snapshot: ProgressSnapshot): ProgressSnapshot[] {
+  if (typeof window === "undefined") return [];
+  const existing = readProgressHistory().filter((item) => item.runId !== snapshot.runId);
+  const next = [...existing, snapshot]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-8);
+  localStorage.setItem(PROGRESS_HISTORY_KEY, JSON.stringify(next));
+  return next;
+}
+
+function deltaText(current: number, previous: number | undefined, lowerIsBetter = false) {
+  if (previous === undefined || Number.isNaN(previous)) {
+    return { label: "비교 대기", tone: "bg-slate-100 text-slate-600" };
+  }
+  const delta = Math.round(current - previous);
+  const improved = lowerIsBetter ? delta < 0 : delta > 0;
+  if (delta === 0) return { label: "변화 없음", tone: "bg-slate-100 text-slate-600" };
+  return {
+    label: `${delta > 0 ? "+" : ""}${delta}점`,
+    tone: improved ? "bg-teal-100 text-teal-800" : "bg-rose-100 text-rose-700",
+  };
+}
+
+function DetoxProgressComparison({
+  current,
+  previous,
+  generatingPlan,
+  onStartMission,
+}: {
+  current: ProgressSnapshot;
+  previous?: ProgressSnapshot;
+  generatingPlan: boolean;
+  onStartMission: () => void;
+}) {
+  const rows = [
+    { label: "정보 편향 위험도", key: "riskScore", lowerIsBetter: true },
+    { label: "최종 디톡스 위험", key: "detoxRisk", lowerIsBetter: true },
+    { label: "숏츠 반복 위험", key: "shortsRisk", lowerIsBetter: true },
+    { label: "관심사 다양성", key: "diversity", lowerIsBetter: false },
+    { label: "사용자 주도성", key: "userAgency", lowerIsBetter: false },
+    { label: "관심사 불일치", key: "interestMismatchScore", lowerIsBetter: true },
+  ] as const;
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">detox progress</p>
+          <h2 className="mt-2 text-2xl font-black text-slate-950">디톡스 미션 전후 변화</h2>
+          <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">
+            이전 분석과 현재 분석을 비교해 미션 이후 소비 패턴이 실제로 달라졌는지 확인합니다.
+            이전 분석이 없으면 현재 결과가 기준점으로 저장됩니다.
+          </p>
+        </div>
+        <Button type="button" icon={<ArrowRight size={18} />} disabled={generatingPlan} onClick={onStartMission}>
+          {generatingPlan ? "미션 생성 중" : "미션 시작"}
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-[#fbfaf7] p-4">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">이전 분석</p>
+          {previous ? (
+            <>
+              <p className="mt-2 text-lg font-black text-slate-950">{previous.dsaoCode} · {previous.dsaoName}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{new Date(previous.createdAt).toLocaleString("ko-KR")}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm font-bold leading-6 text-slate-500">비교할 이전 분석이 아직 없습니다.</p>
+          )}
+        </div>
+        <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-teal-700">현재 분석</p>
+          <p className="mt-2 text-lg font-black text-slate-950">{current.dsaoCode} · {current.dsaoName}</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">{new Date(current.createdAt).toLocaleString("ko-KR")}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((row) => {
+          const currentValue = current[row.key];
+          const previousValue = previous?.[row.key];
+          const delta = deltaText(currentValue, previousValue, row.lowerIsBetter);
+          return (
+            <div key={row.key} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-black text-slate-950">{row.label}</p>
+                <span className={["rounded-full px-2.5 py-1 text-[10px] font-black", delta.tone].join(" ")}>
+                  {delta.label}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm font-black">
+                <span className="rounded-xl bg-slate-100 px-3 py-2 text-center text-slate-500">
+                  {previousValue !== undefined ? `${Math.round(previousValue)}점` : "-"}
+                </span>
+                <ArrowRight size={15} className="text-slate-400" />
+                <span className="rounded-xl bg-slate-950 px-3 py-2 text-center text-white">{Math.round(currentValue)}점</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ProgressSnapshotRecorder({
+  snapshot,
+  onHistoryChange,
+}: {
+  snapshot: ProgressSnapshot;
+  onHistoryChange: (items: ProgressSnapshot[]) => void;
+}) {
+  useEffect(() => {
+    const nextHistory = saveProgressSnapshot(snapshot);
+    onHistoryChange(nextHistory);
+  }, [
+    snapshot.runId,
+    snapshot.createdAt,
+    snapshot.riskScore,
+    snapshot.detoxRisk,
+    snapshot.shortsRisk,
+    snapshot.diversity,
+    snapshot.userAgency,
+    snapshot.interestMismatchScore,
+    onHistoryChange,
+  ]);
+
+  return null;
 }
 
 const riskSignals = [
@@ -901,6 +1058,7 @@ function DashboardContent() {
   const [showDsaoDetails, setShowDsaoDetails] = useState(false);
   const [showShortsDetails, setShowShortsDetails] = useState(false);
   const [showAiSummaryDetails, setShowAiSummaryDetails] = useState(false);
+  const [progressHistory, setProgressHistory] = useState<ProgressSnapshot[]>([]);
 
   const toggleComponent = (key: string) => {
     setExpandedComponents((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1133,6 +1291,22 @@ function DashboardContent() {
   const quickSummary = processedData.actual_dsao?.short_summary || actualCharacter.shortDescription || "YouTube 시청 기록을 바탕으로 현재 미디어 소비 경향을 요약했습니다.";
   const quickMissionHint = interestAiSummary.next_action_hint || processedData.actual_dsao?.recommended_detox_direction || "오늘은 평소 추천 피드에서 자주 보지 않던 주제를 직접 검색해 보세요.";
   const quickDataQuality = processedData.overall_confidence || processedData.data_quality?.duration || "보통";
+  const effectiveRunId = runId || (typeof window !== "undefined" ? localStorage.getItem("latest_run_id") : null) || "current";
+  const currentProgressSnapshot: ProgressSnapshot = {
+    runId: effectiveRunId,
+    createdAt: processedData.created_at || processedData.createdAt || processedData.analyzed_at || "2026-07-13T00:00:00.000Z",
+    dsaoCode: actualCode,
+    dsaoName: processedData.actual_dsao?.name || actualCharacter.characterName,
+    riskScore,
+    detoxRisk: finalDetoxRisk,
+    shortsRisk,
+    diversity,
+    userAgency,
+    interestMismatchScore,
+  };
+  const previousProgressSnapshot = progressHistory
+    .filter((item) => item.runId !== currentProgressSnapshot.runId)
+    .slice(-1)[0];
 
   return (
     <PageShell active="dashboard">
@@ -1326,6 +1500,18 @@ function DashboardContent() {
           diversity={diversity}
           dataQuality={formatConfidence(quickDataQuality)}
           missionHint={quickMissionHint}
+          generatingPlan={generatingPlan}
+          onStartMission={handleStartDetox}
+        />
+
+        <ProgressSnapshotRecorder
+          snapshot={currentProgressSnapshot}
+          onHistoryChange={setProgressHistory}
+        />
+
+        <DetoxProgressComparison
+          current={currentProgressSnapshot}
+          previous={previousProgressSnapshot}
           generatingPlan={generatingPlan}
           onStartMission={handleStartDetox}
         />

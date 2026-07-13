@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, RotateCcw, Upload, Home } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Home, RotateCcw, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import PageShell from "../../components/PageShell";
 import { Button } from "../../components/Button";
@@ -19,55 +19,55 @@ interface Question {
 }
 
 const QUESTIONS: Question[] = [
-  { id: "q1", text: "보고 싶은 영상은 추천보다 직접 찾아보는 편인가요?", axis: "D" },
-  { id: "q2", text: "추천 피드를 따라가다 원래 보려던 것과 다른 영상을 오래 보나요?", axis: "P" },
-  { id: "q3", text: "관심 있는 채널이나 주제를 정해두고 검색해 들어가나요?", axis: "D" },
-  { id: "q4", text: "자동재생이나 다음 영상 흐름을 편하게 따라가는 편인가요?", axis: "P" },
-  { id: "q5", text: "평소 여러 분야의 콘텐츠를 골고루 둘러보나요?", axis: "W" },
-  { id: "q6", text: "한 번 관심이 생긴 주제는 관련 영상을 계속 이어서 보나요?", axis: "N" },
-  { id: "q7", text: "뉴스, 취미, 학습, 예능처럼 카테고리를 자주 넘나드나요?", axis: "W" },
-  { id: "q8", text: "특정 주제나 장르가 내 시청 기록에서 큰 비중을 차지하나요?", axis: "N" },
-  { id: "q9", text: "자극적인 제목이나 썸네일이 있으면 궁금해서 눌러보나요?", axis: "S" },
-  { id: "q10", text: "논쟁, 갈등, 분노를 다룬 콘텐츠를 자주 보게 되나요?", axis: "S" },
-  { id: "q11", text: "자극적인 콘텐츠보다 차분한 설명이나 정보성 영상을 선호하나요?", axis: "M" },
-  { id: "q12", text: "재미나 충격보다 신뢰도와 설명의 균형을 더 중요하게 보나요?", axis: "M" },
-  { id: "q13", text: "짧은 영상이나 쇼츠를 빠르게 넘겨보는 편인가요?", axis: "F" },
-  { id: "q14", text: "긴 영상보다 짧고 핵심만 있는 콘텐츠가 더 편한가요?", axis: "F" },
-  { id: "q15", text: "관심 있는 주제라면 20분 이상의 긴 영상도 끝까지 보나요?", axis: "L" },
-  { id: "q16", text: "하나의 주제를 깊게 이해하려고 긴 해설 영상이나 강의를 보나요?", axis: "L" }
+  { id: "q1", text: "보고 싶은 영상은 추천 목록보다 직접 검색해서 찾는 편이다.", axis: "D" },
+  { id: "q2", text: "추천 피드를 따라가다 보면 예상보다 오래 시청하는 편이다.", axis: "P" },
+  { id: "q3", text: "관심 있는 채널이나 주제를 정해두고 찾아보는 편이다.", axis: "D" },
+  { id: "q4", text: "자동재생이나 다음 영상 흐름을 자주 그대로 따라간다.", axis: "P" },
+  { id: "q5", text: "평소 여러 분야의 콘텐츠를 고르게 보는 편이다.", axis: "W" },
+  { id: "q6", text: "한번 관심이 생긴 주제의 영상을 계속 이어서 보는 편이다.", axis: "N" },
+  { id: "q7", text: "뉴스, 취미, 학습, 예능처럼 카테고리를 자주 바꿔 본다.", axis: "W" },
+  { id: "q8", text: "특정 주제가 시청 기록에서 큰 비중을 차지하는 편이다.", axis: "N" },
+  { id: "q9", text: "자극적인 제목이나 썸네일이 있으면 궁금해서 눌러본다.", axis: "S" },
+  { id: "q10", text: "논란, 갈등, 분노를 다룬 콘텐츠를 자주 보게 된다.", axis: "S" },
+  { id: "q11", text: "자극적인 콘텐츠보다 차분한 설명이나 정보 영상을 선호한다.", axis: "M" },
+  { id: "q12", text: "빠른 충격보다 신뢰할 수 있는 설명과 균형을 중요하게 본다.", axis: "M" },
+  { id: "q13", text: "짧은 영상이나 숏츠를 빠르게 넘겨보는 편이다.", axis: "F" },
+  { id: "q14", text: "긴 영상보다 짧고 핵심만 있는 콘텐츠가 더 편하다.", axis: "F" },
+  { id: "q15", text: "관심 있는 주제라면 20분 이상의 긴 영상도 끝까지 본다.", axis: "L" },
+  { id: "q16", text: "하나의 주제를 깊게 이해하려고 긴 해설 영상이나 강의를 본다.", axis: "L" },
 ];
 
 const MODULES = [
   {
     name: "탐색 방식",
     code: "D/P",
-    desc: "직접 검색하는지, 추천 흐름을 타는지 확인합니다."
+    desc: "직접 찾아보는 편인지, 추천 흐름을 따라가는 편인지 확인합니다.",
   },
   {
     name: "관심 범위",
     code: "W/N",
-    desc: "여러 주제를 넓게 보는지, 한 주제에 깊게 머무는지 확인합니다."
+    desc: "여러 주제를 넓게 보는지, 한 주제에 깊게 머무는지 확인합니다.",
   },
   {
-    name: "자극 성향",
+    name: "자극 반응",
     code: "S/M",
-    desc: "강한 자극에 끌리는지, 안정적인 정보 흐름을 선호하는지 확인합니다."
+    desc: "강한 자극에 끌리는지, 차분하고 안정적인 정보를 선호하는지 확인합니다.",
   },
   {
-    name: "시청 호흡",
+    name: "시청 깊이",
     code: "F/L",
-    desc: "짧은 숏폼 리듬인지, 긴 롱폼 몰입형인지 확인합니다."
-  }
+    desc: "짧은 영상 중심인지, 긴 영상에 몰입하는 편인지 확인합니다.",
+  },
 ];
 
-const scaleLabels = ["전혀 아니다", "아니다", "보통", "그렇다", "매우 그렇다"];
+const SCALE_LABELS = ["전혀 아님", "아님", "보통", "그렇다", "매우 그렇다"];
 
 function getAxisSummary(code: string) {
   return [
-    code.includes("D") ? "직접 탐색형" : "추천 탑승형",
+    code.includes("D") ? "직접 탐색형" : "추천 수용형",
     code.includes("W") ? "넓은 관심형" : "집중 관심형",
-    code.includes("M") ? "안정 선호형" : "자극 반응형",
-    code.includes("L") ? "롱폼 몰입형" : "숏폼 속도형"
+    code.includes("M") ? "안정 정보형" : "자극 반응형",
+    code.includes("L") ? "롱폼 몰입형" : "숏폼 속도형",
   ];
 }
 
@@ -100,7 +100,7 @@ export default function SurveyPage() {
 
   const handleNextPage = () => {
     if (!isPageComplete) {
-      setPageWarning(`이 단계의 문항 ${4 - currentPageAnsweredCount}개를 더 선택하면 다음으로 넘어갈 수 있어요.`);
+      setPageWarning(`현재 단계에서 ${4 - currentPageAnsweredCount}개 문항이 남았습니다.`);
       return;
     }
     setPageWarning(null);
@@ -109,7 +109,7 @@ export default function SurveyPage() {
 
   const handleResultClick = () => {
     if (!allQuestionsAnswered) {
-      setPageWarning("아직 답하지 않은 문항이 있어요. 현재 단계의 선택지를 모두 눌러주세요.");
+      setPageWarning("아직 응답하지 않은 문항이 있습니다. 현재 단계의 선택지를 모두 눌러주세요.");
       return;
     }
     setPageWarning(null);
@@ -135,14 +135,14 @@ export default function SurveyPage() {
       resultCode,
       resultName: character.title,
       createdAt: new Date().toISOString(),
-      schemaVersion: "1.0.0"
+      schemaVersion: "1.0.0",
     };
 
     saveSelfSurveyResult(surveyResult);
     setResult(surveyResult);
     setCurrentPage(4);
 
-    // Sync to backend asynchronously in the background
+    // Backend sync is intentionally non-blocking so the local result is never lost.
     void syncSurveyToBackend(surveyResult);
   };
 
@@ -208,13 +208,13 @@ export default function SurveyPage() {
               </ul>
             </Card>
             <Card>
-              <h3 className="text-lg font-black text-slate-950">주의점 3가지</h3>
+              <h3 className="text-lg font-black text-slate-950">주의할 점</h3>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
                 {character.cautions.slice(0, 3).map((item) => <li key={item}>- {item}</li>)}
               </ul>
             </Card>
             <Card>
-              <h3 className="text-lg font-black text-slate-950">추천 행동 3가지</h3>
+              <h3 className="text-lg font-black text-slate-950">다음 행동</h3>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
                 {character.recommendedAction.slice(0, 3).map((item) => <li key={item}>- {item}</li>)}
               </ul>
@@ -222,8 +222,8 @@ export default function SurveyPage() {
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-[#fbfaf7] p-5 text-center">
-            <p className="text-xs font-semibold text-slate-700 leading-relaxed">
-              이 결과는 사용자가 스스로 응답한 자가진단 결과입니다. 실제 YouTube 기록을 업로드하면 실제 소비 패턴과 비교할 수 있습니다.
+            <p className="text-xs font-semibold leading-relaxed text-slate-700">
+              이 결과는 사용자가 스스로 응답한 자가진단입니다. 실제 YouTube 기록을 업로드하면 현재 기록과 비교할 수 있습니다.
             </p>
           </div>
 
@@ -232,10 +232,10 @@ export default function SurveyPage() {
               다시 진단하기
             </Button>
             <Button type="button" tone="secondary" icon={<Home size={18} />} onClick={() => router.push("/")}>
-              홈으로 가기
+              홈으로
             </Button>
             <Button type="button" className="sm:flex-1" icon={<Upload size={18} />} onClick={() => router.push("/upload")}>
-              실제 기록과 비교해보기
+              실제 기록과 비교하기
             </Button>
           </div>
         </div>
@@ -250,8 +250,8 @@ export default function SurveyPage() {
       <div className="mx-auto max-w-3xl">
         <SectionTitle
           eyebrow={`step ${currentPage + 1} of 4`}
-          title="내 미디어 성향을 가볍게 확인해볼게요"
-          description="검사받는 느낌보다 나를 알아보는 테스트에 가깝게, 문항은 4개씩만 보여줍니다."
+          title="내 미디어 소비 성향을 먼저 가볍게 확인합니다"
+          description="한 번에 4문항씩만 보여줍니다. 선택하면 바로 저장되고, 모든 문항을 통과해야 다음 단계로 넘어갑니다."
         />
 
         <div className="mt-6 rounded-full border border-slate-200 bg-white p-1">
@@ -284,16 +284,17 @@ export default function SurveyPage() {
                       <button
                         key={score}
                         type="button"
+                        aria-pressed={selected}
                         onClick={() => handleAnswerSelect(question.id, score)}
                         className={[
-                          "min-h-14 rounded-2xl border px-1 text-center transition",
+                          "min-h-16 rounded-2xl border px-1 text-center transition focus:outline-none focus:ring-2 focus:ring-slate-900/15",
                           selected
-                            ? "border-slate-950 bg-slate-950 text-white"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                            ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50",
                         ].join(" ")}
                       >
                         <span className="block text-sm font-black">{score}</span>
-                        <span className="mt-1 hidden text-[10px] font-bold sm:block">{scaleLabels[score - 1]}</span>
+                        <span className="mt-1 hidden text-[10px] font-bold sm:block">{SCALE_LABELS[score - 1]}</span>
                       </button>
                     );
                   })}
@@ -304,7 +305,7 @@ export default function SurveyPage() {
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-black text-slate-600">
-              <span>현재 단계 선택 완료</span>
+              <span>현재 단계 응답 완료</span>
               <span>{currentPageAnsweredCount} / {pageQuestions.length}</span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
